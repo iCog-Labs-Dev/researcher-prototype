@@ -9,6 +9,9 @@ from datetime import datetime
 
 # Import logging
 from services.logging_config import get_logger
+# for send grid notification servcies 
+from services.notification_manager import notification_service
+
 
 logger = get_logger(__name__)
 
@@ -299,9 +302,6 @@ class AutonomousResearcher:
                     )
                     # Send notification (WebSocket + external channels via notification_manager)
                     try:
-                        # Import here to avoid circular imports at module load time
-                        from services.notification_manager import notification_service
-
                         # Notify that research for this topic has completed (1 new result)
                         try:
                             await notification_service.notify_research_complete(
