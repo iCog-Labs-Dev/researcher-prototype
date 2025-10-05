@@ -9,6 +9,15 @@ from typing import Dict, Set, Optional
 from fastapi import WebSocket, WebSocketDisconnect
 from datetime import datetime, timezone
 from dependencies import profile_manager
+import config
+
+# SendGrid - optional
+try:
+    from sendgrid import SendGridAPIClient
+    from sendgrid.helpers.mail import Mail
+    SENDGRID_AVAILABLE = True
+except Exception:
+    SENDGRID_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +121,47 @@ class NotificationService:
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
         }
+        # Always send in-app WebSocket notification if connected
         await connection_manager.send_to_user(user_id, message)
+
+        # Optionally send external email notification via SendGrid
+        try:
+            if config.SENDGRID_ENABLED and SENDGRID_AVAILABLE and config.SENDGRID_API_KEY:
+                # Fetch user profile to get email & preferences
+                profile = profile_manager.get_user(user_id)
+                email = None
+                prefs = None
+                if profile:
+                    email = profile.get("metadata", {}).get("email") or profile.get("email")
+                    prefs = profile.get("preferences")
+
+                # Respect user notification frequency preference if available
+                notify_email = False
+                if email:
+                    # Default: only send for moderate/high frequency
+                    if prefs and isinstance(prefs, dict):
+                        freq = prefs.get("interaction_preferences", {}).get("notification_frequency", "moderate")
+                    else:
+                        freq = "moderate"
+
+                    if freq in ("moderate", "high"):
+                        notify_email = True
+
+                if notify_email:
+                    subject = f"Research complete: {topic_name or topic_id}"
+                    plain_content = f"Your background research for '{topic_name or topic_id}' completed with {results_count} new results.\n\nVisit your dashboard to review the findings.\n\n- Researcher Prototype"
+                    html_content = f"<p>Your background research for '<strong>{topic_name or topic_id}</strong>' completed with <strong>{results_count}</strong> new results.</p><p>Visit your dashboard to review the findings.</p><p>— Researcher Prototype</p>"
+
+                    message_mail = Mail(from_email=config.SENDGRID_FROM_EMAIL, to_emails=email, subject=subject, plain_text_content=plain_content, html_content=html_content)
+                    try:
+                        sg = SendGridAPIClient(config.SENDGRID_API_KEY)
+                        resp = sg.send(message_mail)
+                        logger.info(f"✉️ Sent research complete email to {email} (status: {resp.status_code})")
+                    except Exception as e:
+                        logger.warning(f"✉️ Failed to send research complete email to {email}: {e}")
+
+        except Exception as e:
+            logger.warning(f"✉️ Error while attempting external notification for user {user_id}: {e}")
     
     @staticmethod
     async def notify_system_status(status: str, details: dict = None):

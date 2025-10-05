@@ -33,6 +33,11 @@ PUBMED_EMAIL = os.getenv("PUBMED_EMAIL", "researcher@example.com")
 ZEP_API_KEY = os.getenv("ZEP_API_KEY")
 ZEP_ENABLED = os.getenv("ZEP_ENABLED", "false").lower() == "true"
 
+# SendGrid / Email configuration
+SENDGRID_ENABLED = os.getenv("SENDGRID_ENABLED", "false").lower() == "true"
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
+SENDGRID_FROM_EMAIL = os.getenv("SENDGRID_FROM_EMAIL", "noreply@researcher-prototype.local")
+
 # LangSmith tracing configuration
 LANGCHAIN_TRACING_V2 = os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "true"
 LANGCHAIN_ENDPOINT = os.getenv("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com")

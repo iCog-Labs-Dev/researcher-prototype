@@ -297,6 +297,24 @@ class AutonomousResearcher:
                     logger.info(
                         f"🔬 LangGraph research completed successfully for {topic_name} - Finding stored (quality: {quality_score:.2f})"
                     )
+                    # Send notification (WebSocket + external channels via notification_manager)
+                    try:
+                        # Import here to avoid circular imports at module load time
+                        from services.notification_manager import notification_service
+
+                        # Notify that research for this topic has completed (1 new result)
+                        try:
+                            await notification_service.notify_research_complete(
+                                user_id=user_id,
+                                topic_id=topic_name,
+                                results_count=1,
+                                topic_name=topic_name,
+                            )
+                        except Exception as _notify_err:
+                            logger.warning(f"✉️ Failed to send research_complete notification for {topic_name} to {user_id}: {_notify_err}")
+                    except Exception:
+                        # If notification manager cannot be imported, continue silently
+                        logger.debug("Notification manager not available to send research_complete notification")
                     return {
                         "success": True,
                         "stored": True,

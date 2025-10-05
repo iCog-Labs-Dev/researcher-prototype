@@ -19,6 +19,9 @@ pytest-asyncio
 pytest-cov
 httpx  # For TestClient
 
+# SendGrid for external email notifications
+sendgrid>=6.10.4
+
 # Code quality tools
 black
 flake8
