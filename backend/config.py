@@ -202,3 +202,12 @@ EMAIL_FROM = os.getenv("EMAIL_FROM", "no-reply@researcher.local")
 
 # Frontend URL for deep-links in emails
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+# DB
+DATABASE_URL = (
+    f"postgresql+psycopg://{os.getenv("DB_USER")}:"
+    f"{os.getenv("DB_PASSWORD")}@"
+    f"{os.getenv("DB_HOST")}:"
+    f"{os.getenv("DB_PORT")}/"
+    f"{os.getenv("DB_NAME")}"
+)
