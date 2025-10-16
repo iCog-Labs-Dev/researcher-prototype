@@ -15,6 +15,8 @@ from utils import visualize_langgraph
 
 # Import all node functions
 from nodes.initializer_node import initializer_node
+from nodes.query_vagueness_analyzer_node import query_vagueness_analyzer_node
+from nodes.clarifier_node import clarifier_node
 from nodes.multi_source_analyzer_node import multi_source_analyzer_node
 from nodes.search_optimizer_node import search_prompt_optimizer_node
 from nodes.analysis_refiner_node import analysis_task_refiner_node
@@ -43,6 +45,16 @@ def create_chat_graph():
     # Configure LangSmith tracing if enabled
     if LANGCHAIN_TRACING_V2 and LANGCHAIN_API_KEY:
         setup_tracing()
+
+    def clarification_router(state:ChatState) -> str:
+        """Route to clarifier if query is vague, otherwise to multi-source analyzer."""
+        vagueness = not state.get("query_clarity")
+        if vagueness == True:
+            logger.info("⚡ Flow: Routing to Clarifier due to vague query")
+            return "clarifier_node"
+        else:
+            logger.info("⚡ Flow: Routing to Multi-Source Analyzer for clear query")
+            return "multi_source_analyzer"
     
     # Define the intent router function
     def intent_router(state: ChatState) -> str:
@@ -58,6 +70,8 @@ def create_chat_graph():
     
     # Add core nodes
     builder.add_node("initializer", initializer_node)
+    builder.add_node("query_vagueness_analyzer", query_vagueness_analyzer_node)
+    builder.add_node("clarifier_node", clarifier_node)
     builder.add_node("multi_source_analyzer", multi_source_analyzer_node)
     builder.add_node("integrator", integrator_node)
     builder.add_node("response_renderer", response_renderer_node)
@@ -78,8 +92,17 @@ def create_chat_graph():
     
     # Define the main workflow
     builder.set_entry_point("initializer")
-    builder.add_edge("initializer", "multi_source_analyzer")
+    builder.add_edge("initializer", "query_vagueness_analyzer")
+    builder.add_conditional_edges("query_vagueness_analyzer",
+                                  clarification_router,
+                                  {
+                                      "clarifier_node": "clarifier_node",
+                                      "multi_source_analyzer": "multi_source_analyzer"
+                                  })
     
+    # Output directly to integrator if clarifier was used
+    builder.add_edge("clarifier_node", "integrator")
+
     # Route based on intent: chat, search, or analysis
     builder.add_conditional_edges(
         "multi_source_analyzer",

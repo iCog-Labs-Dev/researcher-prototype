@@ -4,7 +4,9 @@ Pydantic models for LLM structured output parsing.
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Dict
 
-
+class QueryVaguenessAnalysis(BaseModel):
+    """Structured output for query analysis."""
+    is_vague: bool = Field(description="True if the query is vague or ambiguous")
 
 class MultiSourceAnalysis(BaseModel):
     """Structured output for multi-source search analysis."""
