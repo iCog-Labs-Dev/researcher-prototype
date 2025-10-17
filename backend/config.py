@@ -205,9 +205,11 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 # DB
 DATABASE_URL = (
-    f"postgresql+psycopg://{os.getenv("DB_USER")}:"
+    f"//{os.getenv("DB_USER")}:"
     f"{os.getenv("DB_PASSWORD")}@"
     f"{os.getenv("DB_HOST")}:"
     f"{os.getenv("DB_PORT")}/"
     f"{os.getenv("DB_NAME")}"
 )
+DATABASE_URL = "postgresql+psycopg:" + DATABASE_URL
+DATABASE_URL_ASYNC = "postgresql+asyncpg:" + DATABASE_URL

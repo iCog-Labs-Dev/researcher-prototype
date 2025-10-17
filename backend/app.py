@@ -17,7 +17,6 @@ from services.logging_config import configure_logging, get_logger
 logger = configure_logging()
 
 # Now import other modules that might use logging
-from models import PersonalityConfig, UserSummary, UserProfile, TopicSuggestion
 from pydantic import BaseModel
 
 
