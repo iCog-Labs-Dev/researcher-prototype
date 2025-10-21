@@ -14,7 +14,7 @@ from nodes.base import (
     get_current_datetime_str,
     queue_status,
 )
-from utils import get_last_user_message
+from utils.helpers import get_last_user_message
 
 # Remove the context template imports
 # from prompts import SEARCH_CONTEXT_TEMPLATE, ANALYSIS_CONTEXT_TEMPLATE, MEMORY_CONTEXT_TEMPLATE

@@ -9,7 +9,7 @@ import requests
 from datetime import datetime
 
 from nodes.base import logger, config, get_current_datetime_str, PERPLEXITY_SYSTEM_PROMPT
-from utils import get_last_user_message
+from utils.helpers import get_last_user_message
 
 
 class BaseSearchService(ABC):

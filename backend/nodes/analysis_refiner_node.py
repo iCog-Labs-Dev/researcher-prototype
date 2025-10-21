@@ -15,7 +15,7 @@ from nodes.base import (
     get_current_datetime_str,
     queue_status,
 )
-from utils import get_last_user_message
+from utils.helpers import get_last_user_message
 
 
 def analysis_task_refiner_node(state: ChatState) -> ChatState:

@@ -13,6 +13,8 @@ SQLAlchemy==2.0.44
 psycopg[binary]==3.2.10
 alembic==1.16.5
 asyncpg==0.30.0
+bcrypt==5.0.0
+email-validator==2.3.0
 
 # Test dependencies
 pytest==8.4.2

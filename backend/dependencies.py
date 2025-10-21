@@ -1,9 +1,13 @@
 import os
-from typing import Optional
-from fastapi import Header
+from typing import Optional, Annotated
+from uuid import UUID
+from fastapi import Header, Depends
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from storage import StorageManager, ProfileManager, ResearchManager, ZepManager
 from services.logging_config import get_logger
+from utils.jwt import decode_jwt_token
+from exceptions import AuthError
 
 logger = get_logger(__name__)
 
@@ -100,3 +104,18 @@ def get_or_create_user_id(user_id: Optional[str] = Header(None)) -> str:
 
 # Initialize guest user on startup
 ensure_guest_user_exists()
+
+
+async def get_current_user_id(credentials: Annotated[HTTPAuthorizationCredentials, Depends(HTTPBearer())]) -> UUID:
+    token = credentials.credentials
+
+    try:
+        payload = decode_jwt_token(token)
+    except ValueError as e:
+        raise AuthError(str(e))
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise AuthError("Invalid token payload")
+
+    return UUID(user_id)

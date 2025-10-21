@@ -15,7 +15,7 @@ from nodes.base import (
 
 # Fixed result key for this search source
 RESULT_KEY = "search"
-from utils import get_last_user_message
+from utils.helpers import get_last_user_message
 import requests
 
 

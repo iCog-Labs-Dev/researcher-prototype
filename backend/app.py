@@ -1,14 +1,16 @@
-from fastapi import FastAPI, HTTPException, Depends, Query
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from typing import Optional, List
+from fastapi.responses import JSONResponse
+from typing import Optional
 import os
-import traceback
-import time
 from contextlib import asynccontextmanager
 
 # Import config first to load environment variables
 import config
+
+# Import the base common error used by the global exception handler
+from exceptions import CommonError
 
 # Import and configure logging after environment variables are loaded
 from services.logging_config import configure_logging, get_logger
@@ -95,6 +97,7 @@ from api.admin import router as admin_router
 from api.graph import router as graph_router
 from api.status import router as status_router
 from api.notifications import router as notifications_router
+from api.auth import router as auth_router
 
 app.include_router(chat_router)
 app.include_router(users_router)
@@ -104,6 +107,18 @@ app.include_router(admin_router)
 app.include_router(graph_router)
 app.include_router(status_router)
 app.include_router(notifications_router)
+app.include_router(auth_router)
+
+@app.exception_handler(CommonError)
+async def common_error_handler(request: Request, e: CommonError):
+    status_code = e.status_code
+    headers = getattr(e, "headers", {}) or {}
+
+    return JSONResponse(
+        status_code=status_code,
+        content={"detail": str(e)},
+        headers=headers,
+    )
 
 # Mount static files for diagrams
 static_dir = "static"

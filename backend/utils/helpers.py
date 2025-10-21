@@ -376,4 +376,10 @@ def get_graph_flow_data(graph_type: str = "main") -> Dict[str, Any]:
         "edges": edges,
         "node_count": len(nodes),
         "edge_count": len(edges)
-    } 
+    }
+
+def normalize_provider_user_id(provider: str, value: str) -> str:
+    v = value.strip().lower()
+    if provider == 'local':
+        return v
+    return v

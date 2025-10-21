@@ -9,7 +9,7 @@ from nodes.base import (
     HumanMessage,
     queue_status,
 )
-from utils import get_last_user_message
+from utils.helpers import get_last_user_message
 
 
 async def analyzer_node(state: ChatState) -> ChatState:

@@ -211,5 +211,10 @@ DATABASE_URL = (
     f"{os.getenv("DB_PORT")}/"
     f"{os.getenv("DB_NAME")}"
 )
-DATABASE_URL = "postgresql+psycopg:" + DATABASE_URL
 DATABASE_URL_ASYNC = "postgresql+asyncpg:" + DATABASE_URL
+DATABASE_URL = "postgresql+psycopg:" + DATABASE_URL
+
+# JWT
+JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key")
+JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "120"))
