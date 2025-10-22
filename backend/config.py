@@ -211,5 +211,10 @@ DATABASE_URL = (
     f"{os.getenv("DB_PORT")}/"
     f"{os.getenv("DB_NAME")}"
 )
-DATABASE_URL = "postgresql+psycopg:" + DATABASE_URL
-DATABASE_URL_ASYNC = "postgresql+asyncpg:" + DATABASE_URL
+DATABASE_URL_ASYNC = (
+    f"postgresql+asyncpg://{os.getenv("DB_USER")}:"
+    f"{os.getenv("DB_PASSWORD")}@"
+    f"{os.getenv("DB_HOST")}:"
+    f"{os.getenv("DB_PORT")}/"
+    f"{os.getenv("DB_NAME")}"
+)
