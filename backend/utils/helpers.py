@@ -382,4 +382,10 @@ def normalize_provider_user_id(provider: str, value: str) -> str:
     v = value.strip().lower()
     if provider == 'local':
         return v
+
     return v
+
+def generate_display_name_from_user_id(user_id: str) -> str:
+    tail = user_id.replace("-", "")[-7:]
+
+    return f"User {tail}"

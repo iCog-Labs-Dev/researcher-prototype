@@ -15,5 +15,9 @@ class AuthError(CommonError):
     headers = {"WWW-Authenticate": "Bearer"}
 
 
-class PasswordError(CommonError):
-    pass
+class NotFound(CommonError):
+    status_code = status.HTTP_404_NOT_FOUND
+
+
+class Forbidden(CommonError):
+    status_code = status.HTTP_403_FORBIDDEN

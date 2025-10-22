@@ -98,6 +98,8 @@ from api.graph import router as graph_router
 from api.status import router as status_router
 from api.notifications import router as notifications_router
 from api.auth import router as auth_router
+from api.user import router as user_router
+
 
 app.include_router(chat_router)
 app.include_router(users_router)
@@ -108,6 +110,7 @@ app.include_router(graph_router)
 app.include_router(status_router)
 app.include_router(notifications_router)
 app.include_router(auth_router)
+app.include_router(user_router)
 
 @app.exception_handler(CommonError)
 async def common_error_handler(request: Request, e: CommonError):

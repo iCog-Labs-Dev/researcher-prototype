@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 from config import DEFAULT_MODEL
 
@@ -161,13 +161,3 @@ class UserProfile(BaseModel):
     metadata: Optional[Dict[str, Any]] = {}
     personality: PersonalityConfig
     preferences: Optional[PreferencesConfig] = None
-
-
-class AuthLocalIn(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=8)
-
-
-class TokenOut(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
