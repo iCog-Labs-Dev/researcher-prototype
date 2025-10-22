@@ -42,19 +42,9 @@ class AutonomousResearcher:
             # Extract storage manager from profile_manager to avoid duplication
             self.personalization_manager = PersonalizationManager(profile_manager.storage, profile_manager)
         
-        # Create motivation system with config overrides if provided
-        if motivation_config_override:
-            from services.motivation import DriveConfig
-            drives_config = DriveConfig()
-            for key, value in motivation_config_override.items():
-                if hasattr(drives_config, key):
-                    setattr(drives_config, key, value)
-            self.motivation = MotivationSystem(drives_config, self.personalization_manager)
-        else:
-            self.motivation = MotivationSystem(personalization_manager=self.personalization_manager)
-            
-        self.check_interval = config.MOTIVATION_CHECK_INTERVAL
-
+        # Initialize motivation system (will be set up in start() method with database session)
+        self.motivation_system = None
+        
         # Configure research parameters from config
         self.max_topics_per_user = config.RESEARCH_MAX_TOPICS_PER_USER
         self.quality_threshold = config.RESEARCH_QUALITY_THRESHOLD
@@ -102,12 +92,27 @@ class AutonomousResearcher:
         self.is_running = True
         logger.info("🔬 Starting LangGraph Autonomous Research Engine...")
 
-        # Reset motivation timer to prevent huge time deltas from accumulated server uptime
-        self.motivation.last_tick = time.time()
-        logger.info(f"🔬 Reset motivation timer - Current drives: B:{self.motivation.boredom:.2f} C:{self.motivation.curiosity:.2f} T:{self.motivation.tiredness:.2f} S:{self.motivation.satisfaction:.2f}")
+        # Initialize motivation system with database session
+        try:
+            from db import SessionLocal
+            # Create a persistent session for the motivation system
+            self.db_session = SessionLocal()
+            self.motivation_system = MotivationSystem(
+                session=self.db_session,
+                profile_manager=self.profile_manager,
+                research_manager=self.research_manager,
+                personalization_manager=self.personalization_manager
+            )
+            await self.motivation_system.start()
+            logger.info("🔬 Motivation system initialized and started")
+        except Exception as e:
+            logger.error(f"🔬 Failed to initialize motivation system: {str(e)}", exc_info=True)
+            self.is_running = False
+            return
 
-        # Start the research loop
-        self.research_task = asyncio.create_task(self._research_loop())
+        # Start the research loop (now handled by motivation system)
+        # The motivation system will handle the main research loop
+        logger.info("🔬 Autonomous Research Engine started with motivation-driven research loop")
 
     async def stop(self):
         """Stop the autonomous research engine."""
@@ -117,12 +122,21 @@ class AutonomousResearcher:
         logger.info("🔬 Stopping LangGraph Autonomous Research Engine...")
         self.is_running = False
 
-        if self.research_task:
-            self.research_task.cancel()
+        # Stop motivation system
+        if self.motivation_system:
             try:
-                await self.research_task
-            except asyncio.CancelledError:
-                pass
+                await self.motivation_system.stop()
+                logger.info("🔬 Motivation system stopped")
+            except Exception as e:
+                logger.error(f"🔬 Error stopping motivation system: {str(e)}")
+        
+        # Close database session
+        if hasattr(self, 'db_session') and self.db_session:
+            try:
+                await self.db_session.close()
+                logger.info("🔬 Database session closed")
+            except Exception as e:
+                logger.error(f"🔬 Error closing database session: {str(e)}")
 
         logger.info("🔬 LangGraph Autonomous Research Engine stopped")
 
@@ -145,39 +159,6 @@ class AutonomousResearcher:
     def is_enabled(self) -> bool:
         """Check if the research engine is enabled."""
         return self.enabled
-
-    async def _research_loop(self):
-        """Main loop that checks motivation and triggers research."""
-        while self.is_running:
-            try:
-                await asyncio.sleep(self.check_interval)
-                self.motivation.tick()
-
-                if not self.is_running:
-                    break
-
-                if self.motivation.should_research():
-                    logger.info("🔬 Motivation threshold reached - starting research cycle")
-                    result = await self._conduct_research_cycle()
-                    
-                    # Only update motivation if research was actually performed
-                    topics_researched = result.get("topics_researched", 0)
-                    if topics_researched > 0:
-                        avg_quality = result.get("average_quality", 0.0)
-                        self.motivation.on_research_completed(avg_quality)
-                        logger.info(f"🔬 Research cycle completed with {topics_researched} topics and quality {avg_quality:.2f}")
-                    else:
-                        logger.info("🔬 Research cycle completed with no qualified topics - motivation unchanged")
-                    
-                    logger.info("🔬 LangGraph research cycle completed.")
-
-            except asyncio.CancelledError:
-                logger.info("🔬 Research loop cancelled")
-                break
-            except Exception as e:
-                logger.error(f"🔬 Error in research loop: {str(e)}", exc_info=True)
-                # Sleep for a shorter time on error to retry
-                await asyncio.sleep(config.RESEARCH_CYCLE_SLEEP_INTERVAL)
 
     async def _conduct_research_cycle(self):
         """Conduct a complete research cycle for all users with active topics."""
@@ -760,13 +741,13 @@ class AutonomousResearcher:
 
     def get_status(self) -> Dict[str, Any]:
         """Get the current status of the research engine."""
-        return {
+        status = {
             "enabled": self.enabled,
             "running": self.is_running,
             "quality_threshold": self.quality_threshold,
             "max_topics_per_user": self.max_topics_per_user,
             "retention_days": config.RESEARCH_FINDINGS_RETENTION_DAYS,
-            "engine_type": "LangGraph-based",
+            "engine_type": "Motivation-driven LangGraph-based",
             "research_graph_nodes": [
                 "research_initializer",
                 "research_query_generator",
@@ -776,6 +757,12 @@ class AutonomousResearcher:
                 "research_storage",
             ],
         }
+        
+        # Add motivation system status if available
+        if self.motivation_system:
+            status["motivation_system"] = self.motivation_system.get_status()
+        
+        return status
 
 
 # Global instance
