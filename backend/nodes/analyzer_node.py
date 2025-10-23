@@ -28,7 +28,7 @@ from nodes.base import (
 from nodes.source_coordinator_node import source_coordinator_node
 from nodes.search_results_reviewer_node import search_results_reviewer_node
 from nodes.evidence_summarizer_node import evidence_summarizer_node
-from utils import get_last_user_message
+from utils.helpers import get_last_user_message
 
 
 # Configuration - use getattr for safer module attribute access

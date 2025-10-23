@@ -1,24 +1,27 @@
-fastapi
-uvicorn[standard]
-pydantic
-python-dotenv
-langchain
-langchain-openai
-langgraph
-langsmith
-zep-cloud>=3.0.0
-uuid
-pathlib
-#pygraphviz
-requests
-PyJWT
+fastapi==0.119.0
+uvicorn[standard]==0.37.0
+pydantic==2.12.1
+python-dotenv==1.1.1
+langchain==0.3.27
+langchain-openai==0.3.35
+langgraph==0.6.10
+langsmith==0.4.34
+zep-cloud==3.5.0
+requests==2.32.5
+PyJWT==2.10.1
+SQLAlchemy==2.0.44
+psycopg[binary]==3.2.10
+alembic==1.16.5
+asyncpg==0.30.0
+bcrypt==5.0.0
+email-validator==2.3.0
 
 # Test dependencies
-pytest
-pytest-asyncio
-pytest-cov
-httpx  # For TestClient
+pytest==8.4.2
+pytest-asyncio==1.2.0
+pytest-cov==7.0.0
+httpx==0.28.1  # For TestClient
 
 # Code quality tools
-black
-flake8
+black==25.9.0
+flake8==7.3.0

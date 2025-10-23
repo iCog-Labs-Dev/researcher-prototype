@@ -15,7 +15,7 @@ from nodes.base import (
 )
 from llm_models import EvidenceSummary
 from prompts import EVIDENCE_SUMMARIZER_PROMPT
-from utils import get_last_user_message
+from utils.helpers import get_last_user_message
 
 
 async def evidence_summarizer_node(state: ChatState) -> ChatState:

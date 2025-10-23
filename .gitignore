@@ -57,3 +57,6 @@ yarn-error.log*
 
 # Cursor files
 .cursor/
+
+# DB
+/backend/.db/

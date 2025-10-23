@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 import asyncio
 
-from models import ChatRequest, ChatResponse
+from schemas.schemas import ChatRequest, ChatResponse
 from graph_builder import chat_graph
 from dependencies import get_or_create_user_id, profile_manager, zep_manager
 from services.chat_service import extract_and_store_topics_async

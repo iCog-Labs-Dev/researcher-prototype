@@ -15,7 +15,7 @@ from services.logging_config import get_logger
 logger = get_logger(__name__)
 
 # Import from our utility module
-from utils import get_current_datetime_str
+from utils.helpers import get_current_datetime_str
 from services.status_manager import queue_status  # noqa: F401
 
 # Import our storage components

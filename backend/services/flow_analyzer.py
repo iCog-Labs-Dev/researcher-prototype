@@ -4,7 +4,7 @@ Flow analyzer service for generating and managing LangGraph flow visualizations.
 import os
 import json
 from typing import Dict, Any, List, Optional
-from utils import (
+from utils.helpers import (
     visualize_langgraph_with_prompts, 
     get_graph_flow_data,
     get_node_prompt_mapping
