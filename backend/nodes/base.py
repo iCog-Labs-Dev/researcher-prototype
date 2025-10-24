@@ -27,6 +27,10 @@ from services.personalization_manager import PersonalizationManager
 
 # Import all prompt templates from prompts.py
 from prompts import (
+    # Query vagueness analysis prompts
+    QUERY_VAGUENESS_ANALYSIS_PROMPT,
+    # Clarification prompts
+    CLARIFICATION_PROMPT,
     # Multi-source analyzer prompts
     MULTI_SOURCE_SYSTEM_PROMPT,
     # Search prompts
@@ -44,6 +48,7 @@ from prompts import (
 
 # Internal imports - LLM models
 from llm_models import (
+    QueryVaguenessAnalysis,
     MultiSourceAnalysis,
     AnalysisTask,
     FormattedResponse,
@@ -66,6 +71,7 @@ class ChatState(TypedDict):
     """Type definition for the chat state that flows through the graph."""
 
     messages: Annotated[List[BaseMessage], "The messages in the conversation using LangChain core message types"]
+    query_clarity: Annotated[Optional[bool], "Indicates if the user's query is clear or vague"]
     model: Annotated[str, "The model to use for the conversation"]
     temperature: Annotated[float, "The temperature to use for generation"]
     max_tokens: Annotated[int, "The maximum number of tokens to generate"]
