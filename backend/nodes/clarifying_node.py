@@ -52,7 +52,6 @@ async def clarifying_node(state: ChatState) -> ChatState:
         clarifying_messages = [system_message] + history_messages
 
         response = clarifying_llm.invoke(clarifying_messages)
-        print(response.content)
         logger.info("❓ Clarification Node: Generated clarification response")
         state["workflow_context"]["clarifying_question"] = response.content
         ai_response = AIMessage(content=response.content)
