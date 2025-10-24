@@ -30,6 +30,13 @@ async def integrator_node(state: ChatState) -> ChatState:
     temperature = state.get("temperature", 0.7)
     max_tokens = state.get("max_tokens", 1000)
 
+    if state["is_vague"] is True:
+        system_response = state["workflow_context"]["clarifying_question"]
+        state["workflow_context"]["integrator_response"] = system_response
+        state["module_results"]["integrator"] = system_response
+        logger.info(f'🧠 Integrator: Leaving integrator node...')
+        return state
+    
     # Get last user message for logging
     last_message = get_last_user_message(state.get("messages", []))
 

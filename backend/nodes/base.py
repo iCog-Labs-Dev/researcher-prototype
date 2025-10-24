@@ -71,7 +71,7 @@ class ChatState(TypedDict):
     """Type definition for the chat state that flows through the graph."""
 
     messages: Annotated[List[BaseMessage], "The messages in the conversation using LangChain core message types"]
-    query_clarity: Annotated[Optional[bool], "Indicates if the user's query is clear or vague"]
+    is_vague: Annotated[Optional[bool], "Indicates if the user's query is clear or vague"]
     model: Annotated[str, "The model to use for the conversation"]
     temperature: Annotated[float, "The temperature to use for generation"]
     max_tokens: Annotated[int, "The maximum number of tokens to generate"]

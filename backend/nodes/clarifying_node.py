@@ -16,7 +16,7 @@ from utils import get_last_user_message
 
 async def clarifying_node(state: ChatState) -> ChatState:
     """Clarifies vague or ambiguous user queries"""
-    logger.info("❓ Clarification Node: Checking if query needs clarification")
+    logger.info("❓ Clarification Node: Preparing a clarifying response to send to the user...")
     await asyncio.sleep(0.1) #Small delay to ensure status is visible
 
     # Get the last user message

@@ -25,7 +25,7 @@ async def query_vagueness_analyzer_node(state: ChatState) -> ChatState:
     if not last_message:
         state["intent"] = "chat"
         state["selected_sources"] = []
-        ## ############state["routing_analysis"] =
+        
     analyzer_llm = ChatOpenAI(
         model=config.ROUTER_MODEL,
         temperature=0.0, # Keep deterministic
@@ -68,18 +68,20 @@ async def query_vagueness_analyzer_node(state: ChatState) -> ChatState:
         analysis_result = structured_analyzer.invoke(analyzer_messages)
 
         # Extract results
-        query_is_clear = not analysis_result.is_vague
+        query_is_vague = analysis_result.is_vague
 
-        if query_is_clear:
-            state["query_clarity"] = True
-            logger.info("❓ Query Analysis: Query is clear and specific, skipping clarification")
+        if query_is_vague:
+            state["is_vague"] = True
+            logger.info("❓ Query Analysis: Query is vague or ambiguous, heading to clarification")
+
         else:
-            state["query_clarity"] = False
-            logger.info("❓ Query Analysis: Query is vague or ambiguous, heading to clarifying node")
+            state["is_vague"] = False
+            logger.info("❓ Query Analysis: Query is clear and specific, skipping clarification")
+
     except Exception as e:
-        # Error handling with fallback to query_clarity = True
+        # Error handling with fallback to is_vague = True
         logger.error(f"Error in query_vagueness_analyzer_node: {str(e)}")
-        state["query_clarity"] = True
+        state["is_vague"] = True
         logger.info("❓ Query Analysis: Exception occurred, defaulting to chat")
     
     return state
