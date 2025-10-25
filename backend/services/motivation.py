@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import update, func
 from services.logging_config import get_logger
 from database.motivation_repository import MotivationRepository
 from storage.profile_manager import ProfileManager
@@ -16,6 +17,7 @@ from storage.research_manager import ResearchManager
 from services.personalization_manager import PersonalizationManager
 from research_graph_builder import research_graph
 from services.topic_expansion_service import TopicExpansionService
+from models.motivation import TopicScore
 import config
 
 logger = get_logger(__name__)
@@ -162,62 +164,38 @@ class MotivationSystem:
 
     async def update_scores(self) -> None:
         """
-        Update motivation scores for all active topics.
+        Update motivation scores for all active topics using optimized bulk query.
         
         This function:
-        1. Gets all users and their active topics
-        2. Calculates per-topic motivation scores based on:
+        1. Updates all topic scores in a single database query
+        2. Calculates motivation scores based on:
            - Staleness pressure (time since last research)
            - User engagement with research findings
            - Research success rate
-        3. Updates scores in the database
         """
         try:
-            # Get all users
-            users = self.profile_manager.list_users()
-            users_list = list(users) if users else []
-            all_users = users_list or ["guest"]
+            if not self._config:
+                return
             
-            updated_count = 0
+            # Optimized: Single query to update all topic scores at once
             
-            for user_id in all_users:
-                try:
-                    # Get active research topics for this user
-                    active_topics = self.research_manager.get_active_research_topics(user_id)
-                    
-                    if not active_topics:
-                        continue
-                    
-                    user_uuid = uuid.UUID(user_id) if user_id != "guest" else None
-                    if not user_uuid:
-                        continue  # Skip guest user for now
-                    
-                    for topic in active_topics:
-                        topic_name = topic.get('topic_name', '')
-                        if not topic_name:
-                            continue
-                        
-                        # Calculate motivation score
-                        motivation_score = await self._calculate_topic_motivation_score(
-                            str(user_uuid), topic
-                        )
-                        
-                        # Update in database
-                        await self.db_service.create_or_update_topic_score(
-                            user_id=user_uuid,
-                            topic_name=topic_name,
-                            motivation_score=motivation_score,
-                            last_researched=topic.get('last_researched'),
-                            staleness_coefficient=topic.get('staleness_coefficient', 1.0),
-                            is_active_research=topic.get('is_active_research', False)
-                        )
-                        
-                        updated_count += 1
-                
-                except Exception as e:
-                    logger.error(f"Error updating scores for user {user_id}: {str(e)}")
-                    continue
+            result = await self.session.execute(
+                update(TopicScore)
+                .where(TopicScore.is_active_research == True)
+                .values(
+                    staleness_pressure=(
+                        func.extract('epoch', func.now()) - TopicScore.last_researched
+                    ) * TopicScore.staleness_coefficient * self._config.staleness_scale,
+                    motivation_score=(
+                        (func.extract('epoch', func.now()) - TopicScore.last_researched) * 
+                        TopicScore.staleness_coefficient * self._config.staleness_scale +
+                        TopicScore.engagement_score * self._config.engagement_weight +
+                        TopicScore.success_rate * self._config.quality_weight
+                    )
+                )
+            )
             
+            updated_count = result.rowcount
             logger.debug(f"🎯 Updated motivation scores for {updated_count} topics")
             
         except Exception as e:
