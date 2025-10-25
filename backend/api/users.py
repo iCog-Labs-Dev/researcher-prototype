@@ -1,7 +1,7 @@
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException
 
-from schemas import (
+from schemas.schemas import (
     PersonalityConfig, UserSummary, UserProfile, PreferencesConfig,
     EngagementAnalytics, PersonalizationHistory, PreferenceOverride
 )

@@ -1,9 +1,16 @@
 import os
-from typing import Optional
-from fastapi import Header
+from typing import Optional, Annotated
+from uuid import UUID
+from fastapi import Header, Depends
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from storage import StorageManager, ProfileManager, ResearchManager, ZepManager
+from db import get_session
+from utils.jwt import decode_jwt_token
 from services.logging_config import get_logger
+from services.user import UserService
+from exceptions import AuthError, Forbidden
 
 logger = get_logger(__name__)
 
@@ -100,3 +107,31 @@ def get_or_create_user_id(user_id: Optional[str] = Header(None)) -> str:
 
 # Initialize guest user on startup
 ensure_guest_user_exists()
+
+
+async def get_current_user_id(
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(HTTPBearer())]
+) -> UUID:
+    token = credentials.credentials
+
+    try:
+        payload = decode_jwt_token(token)
+    except ValueError as e:
+        raise AuthError(str(e))
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise AuthError("Invalid token payload")
+
+    return UUID(user_id)
+
+async def get_current_admin_id(
+    user_id: Annotated[UUID, Depends(get_current_user_id)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> UUID:
+    service = UserService()
+    user = await service.get_user(session, user_id)
+    if user.role != "admin":
+        raise Forbidden("Admin role required")
+
+    return user_id

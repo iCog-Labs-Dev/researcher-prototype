@@ -11,7 +11,7 @@ from config import (
     LANGCHAIN_ENDPOINT,
     LANGCHAIN_PROJECT
 )
-from utils import visualize_langgraph
+from utils.helpers import visualize_langgraph
 
 # Import all node functions
 from nodes.initializer_node import initializer_node

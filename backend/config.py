@@ -151,6 +151,11 @@ MAX_ACTIVE_RESEARCH_TOPICS_PER_USER = _clamp_int(int(os.getenv("MAX_ACTIVE_RESEA
 # Search Results Configuration
 SEARCH_RESULTS_LIMIT = 10  # Standard limit for all search API calls
 
+# Deep Analysis Configuration - for analyzer_node
+DEEP_ANALYSIS_MAX_SUB_QUESTIONS = int(os.getenv("DEEP_ANALYSIS_MAX_SUB_QUESTIONS", "4"))
+DEEP_ANALYSIS_TEMPERATURE = float(os.getenv("DEEP_ANALYSIS_TEMPERATURE", "0.3"))
+DEEP_ANALYSIS_SYNTHESIS_TEMPERATURE = float(os.getenv("DEEP_ANALYSIS_SYNTHESIS_TEMPERATURE", "0.7"))
+
 # Motivation system configuration
 MOTIVATION_CHECK_INTERVAL = int(os.getenv("MOTIVATION_CHECK_INTERVAL", "60"))
 MOTIVATION_THRESHOLD = float(os.getenv("MOTIVATION_THRESHOLD", "2.0"))  # Conservative default
@@ -205,16 +210,21 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 # DB
 DATABASE_URL = (
-    f"//{os.getenv("DB_USER")}:"
-    f"{os.getenv("DB_PASSWORD")}@"
-    f"{os.getenv("DB_HOST")}:"
-    f"{os.getenv("DB_PORT")}/"
-    f"{os.getenv("DB_NAME")}"
+    f"postgresql+psycopg://{os.getenv('DB_USER')}:"
+    f"{os.getenv('DB_PASSWORD')}@"
+    f"{os.getenv('DB_HOST')}:"
+    f"{os.getenv('DB_PORT')}/"
+    f"{os.getenv('DB_NAME')}"
 )
 DATABASE_URL_ASYNC = (
-    f"postgresql+asyncpg://{os.getenv("DB_USER")}:"
-    f"{os.getenv("DB_PASSWORD")}@"
-    f"{os.getenv("DB_HOST")}:"
-    f"{os.getenv("DB_PORT")}/"
-    f"{os.getenv("DB_NAME")}"
+    f"postgresql+asyncpg://{os.getenv('DB_USER')}:"
+    f"{os.getenv('DB_PASSWORD')}@"
+    f"{os.getenv('DB_HOST')}:"
+    f"{os.getenv('DB_PORT')}/"
+    f"{os.getenv('DB_NAME')}"
 )
+
+# JWT
+JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key")
+JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "120"))
