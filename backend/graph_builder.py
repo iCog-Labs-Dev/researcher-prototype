@@ -15,6 +15,7 @@ from utils import visualize_langgraph
 
 # Import all node functions
 from nodes.initializer_node import initializer_node
+from nodes.query_disambiguation_node import query_disambiguation_node
 from nodes.multi_source_analyzer_node import multi_source_analyzer_node
 from nodes.search_optimizer_node import search_prompt_optimizer_node
 from nodes.analysis_refiner_node import analysis_task_refiner_node
@@ -58,6 +59,7 @@ def create_chat_graph():
     
     # Add core nodes
     builder.add_node("initializer", initializer_node)
+    builder.add_node("query_disambiguation", query_disambiguation_node)
     builder.add_node("multi_source_analyzer", multi_source_analyzer_node)
     builder.add_node("integrator", integrator_node)
     builder.add_node("response_renderer", response_renderer_node)
@@ -78,7 +80,8 @@ def create_chat_graph():
     
     # Define the main workflow
     builder.set_entry_point("initializer")
-    builder.add_edge("initializer", "multi_source_analyzer")
+    builder.add_edge("initializer", "query_disambiguation")
+    builder.add_edge("query_disambiguation", "multi_source_analyzer")
     
     # Route based on intent: chat, search, or analysis
     builder.add_conditional_edges(

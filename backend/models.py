@@ -161,3 +161,31 @@ class UserProfile(BaseModel):
     metadata: Optional[Dict[str, Any]] = {}
     personality: PersonalityConfig
     preferences: Optional[PreferencesConfig] = None
+
+
+# Query Disambiguation Models
+class ClarifyingQuestion(BaseModel):
+    """A clarifying question to help disambiguate a vague query."""
+    question: str
+    question_type: str  # "multiple_choice", "open_ended", "specific"
+    options: Optional[List[str]] = None  # For multiple choice questions
+    context: Optional[str] = None  # Additional context for the question
+
+
+class QueryDisambiguationAnalysis(BaseModel):
+    """Analysis of whether a query needs disambiguation."""
+    is_vague: bool
+    confidence_score: float  # 0.0 to 1.0, higher means more vague
+    vague_indicators: List[str] = []  # What made it vague
+    clarifying_questions: List[ClarifyingQuestion] = []
+    suggested_refinements: List[str] = []  # Suggested query improvements
+    context_analysis: Optional[str] = None  # Analysis of conversation context
+
+
+class QueryRefinement(BaseModel):
+    """A refined version of the original query."""
+    original_query: str
+    refined_query: str
+    refinement_type: str  # "clarification", "expansion", "focus"
+    confidence_score: float  # 0.0 to 1.0, higher means better refinement
+    reasoning: str  # Why this refinement was made
