@@ -9,25 +9,27 @@ from exceptions import AuthError
 from services.auth import AuthService
 from utils.jwt import create_jwt_token
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["v2/auth"])
+
 
 @router.post("/register", response_model=TokenOut, status_code=201)
 async def register(
+    session: Annotated[AsyncSession, Depends(get_session)],
     body: AuthLocalIn,
-    session: Annotated[AsyncSession, Depends(get_session)]
 ) -> TokenOut:
     service = AuthService()
-    user = await service.register_local_user(session, body.email, body.password)
+    user = await service.register_local_user(session, str(body.email), body.password)
 
     return TokenOut(access_token=create_jwt_token(str(user.id)))
 
+
 @router.post("/login", response_model=TokenOut)
 async def login(
+    session: Annotated[AsyncSession, Depends(get_session)],
     body: AuthLocalIn,
-    session: Annotated[AsyncSession, Depends(get_session)]
 ) -> TokenOut:
     service = AuthService()
-    user = await service.authenticate_local_user(session, body.email, body.password)
+    user = await service.authenticate_local_user(session, str(body.email), body.password)
     if not user:
         raise AuthError("Invalid credentials")
 

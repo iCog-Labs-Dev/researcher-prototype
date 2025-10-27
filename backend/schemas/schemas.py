@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from config import DEFAULT_MODEL
 
@@ -161,3 +161,41 @@ class UserProfile(BaseModel):
     metadata: Optional[Dict[str, Any]] = {}
     personality: PersonalityConfig
     preferences: Optional[PreferencesConfig] = None
+
+
+class GraphRequest(BaseModel):
+    """Request model for graph data."""
+    type: str  # "user" or "group"
+    id: str    # user_id or group_id
+
+
+class GraphResponse(BaseModel):
+    """Response model for graph data."""
+    triplets: List[Dict[str, Any]]
+
+
+class CustomTopicRequest(BaseModel):
+    """Request model for creating a custom research topic."""
+    name: str = Field(..., min_length=1, max_length=100, description="Name of the research topic")
+    description: str = Field(..., min_length=10, max_length=500, description="Description of what the topic covers")
+    confidence_score: Optional[float] = Field(default=0.8, ge=0.0, le=1.0, description="Confidence score between 0.0 and 1.0")
+    enable_research: Optional[bool] = Field(default=False, description="Whether to enable research immediately")
+
+
+class MotivationConfigUpdate(BaseModel):
+    threshold: Optional[float] = None
+    boredom_rate: Optional[float] = None
+    curiosity_decay: Optional[float] = None
+    tiredness_decay: Optional[float] = None
+    satisfaction_decay: Optional[float] = None
+
+
+class BookmarkUpdate(BaseModel):
+    bookmarked: bool
+
+
+class ExpansionRequest(BaseModel):
+    root_topic: Dict[str, Any]
+    create_topics: Optional[bool] = False
+    enable_research: Optional[bool] = False
+    limit: Optional[int] = None

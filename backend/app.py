@@ -31,11 +31,9 @@ class MotivationConfigUpdate(BaseModel):
 
 
 from dependencies import (
-    storage_manager,
     profile_manager,
     research_manager,
     zep_manager,
-    get_or_create_user_id,
     _motivation_config_override,
 )
 from services.autonomous_research_engine import initialize_autonomous_researcher
@@ -89,6 +87,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 logger = get_logger(__name__)
+
 from api.chat import router as chat_router
 from api.users import router as users_router
 from api.topics import router as topics_router
@@ -97,9 +96,6 @@ from api.admin import router as admin_router
 from api.graph import router as graph_router
 from api.status import router as status_router
 from api.notifications import router as notifications_router
-from api.auth import router as auth_router
-from api.user import router as user_router
-
 
 app.include_router(chat_router)
 app.include_router(users_router)
@@ -109,8 +105,10 @@ app.include_router(admin_router)
 app.include_router(graph_router)
 app.include_router(status_router)
 app.include_router(notifications_router)
-app.include_router(auth_router)
-app.include_router(user_router)
+
+from api.v2 import router
+app.include_router(router)
+
 
 @app.exception_handler(CommonError)
 async def common_error_handler(request: Request, e: CommonError):
