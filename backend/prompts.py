@@ -541,12 +541,24 @@ For "What is quantum computing":
 5. Provide multiple choice options when appropriate
 6. Keep questions concise and focused
 
-**OUTPUT FORMAT:**
-- is_vague: boolean
-- confidence_score: float (0.0-1.0)
-- vague_indicators: list of strings
-- clarifying_questions: list of question objects
-- suggested_refinements: list of improved query suggestions
+**OUTPUT FORMAT (use this exact structure):**
+
+VAGUE: [true/false]
+CONFIDENCE: [0.0-1.0]
+
+INDICATORS:
+- [reason 1 why query is vague]
+- [reason 2 why query is vague]
+
+QUESTIONS:
+- [clarifying question 1]
+- [clarifying question 2]
+
+SUGGESTIONS:
+- [suggested refined query 1]
+- [suggested refined query 2]
+
+CONTEXT: [analysis of conversation context and user intent]
 """
 
 CLARIFYING_QUESTION_GENERATION_PROMPT = """

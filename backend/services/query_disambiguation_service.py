@@ -1,12 +1,16 @@
-"""
-Query disambiguation service for detecting vague queries and generating clarifying questions.
-"""
-
 import asyncio
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
-from nodes.base import logger, config, get_current_datetime_str
+from nodes.base import (
+    logger, 
+    config, 
+    get_current_datetime_str,
+    ChatOpenAI,
+    SystemMessage,
+    HumanMessage,
+    QUERY_DISAMBIGUATION_SYSTEM_PROMPT
+)
 from models import (
     QueryDisambiguationAnalysis,
     ClarifyingQuestion,
@@ -16,25 +20,14 @@ from utils import get_last_user_message
 
 
 class QueryDisambiguationService:
-    """Service for analyzing query vagueness and generating clarifying questions."""
+    """Service for analyzing query vagueness and generating clarifying questions using LLM."""
     
     def __init__(self):
-        self.vague_query_indicators = [
-            "tell me about", "help with", "what is", "explain",
-            "information on", "research", "project", "help me",
-            "can you", "how do i", "what should", "i need",
-            "looking for", "want to know", "curious about"
-        ]
-        
-        self.broad_topics = [
-            "ai", "technology", "science", "health", "business",
-            "politics", "education", "art", "music", "sports",
-            "history", "philosophy", "psychology", "economics"
-        ]
+        pass
     
     async def analyze_query(self, query: str, context: Dict[str, Any]) -> QueryDisambiguationAnalysis:
         """
-        Analyze a query to determine if it needs disambiguation.
+        Analyze a query to determine if it needs disambiguation using LLM.
         
         Args:
             query: The user query to analyze
@@ -46,40 +39,166 @@ class QueryDisambiguationService:
         logger.info(f"🔍 Query Disambiguation: Analyzing query: '{query[:50]}...'")
         
         try:
-            # Basic vagueness detection
-            is_vague, confidence_score, vague_indicators = self._detect_vagueness(query)
+            # Use LLM-based analysis
+            analysis = await self._llm_analyze_query(query, context)
             
-            # If not vague, return early
-            if not is_vague:
-                return QueryDisambiguationAnalysis(
-                    is_vague=False,
-                    confidence_score=confidence_score,
-                    vague_indicators=[],
-                    clarifying_questions=[],
-                    suggested_refinements=[],
-                    context_analysis="Query appears specific and clear"
-                )
+            logger.info(f"🔍 Query Disambiguation: LLM analysis complete - vague: {analysis.is_vague}, confidence: {analysis.confidence_score:.2f}")
+            return analysis
             
-            # Generate clarifying questions for vague queries
-            clarifying_questions = await self._generate_clarifying_questions(query, context)
+        except Exception as e:
+            logger.error(f"🔍 Query Disambiguation: Error in LLM analysis: {str(e)}")
+            # Return safe fallback without rule-based analysis
+            return QueryDisambiguationAnalysis(
+                is_vague=False,
+                confidence_score=0.0,
+                vague_indicators=[],
+                clarifying_questions=[],
+                suggested_refinements=[],
+                context_analysis=f"LLM analysis failed: {str(e)}"
+            )
+    
+    async def _llm_analyze_query(self, query: str, context: Dict[str, Any]) -> QueryDisambiguationAnalysis:
+        """
+        Use LLM to analyze query vagueness and generate intelligent clarifying questions.
+        """
+        logger.info("🔍 Query Disambiguation: Using LLM for analysis")
+        
+        try:
+            # Initialize LLM
+            llm = ChatOpenAI(
+                model=config.ROUTER_MODEL,  # Use router model for cost efficiency
+                temperature=0.1,  # Low temperature for consistent analysis
+                max_tokens=500,
+                api_key=config.OPENAI_API_KEY
+            )
             
-            # Generate suggested refinements
-            suggested_refinements = self._generate_suggested_refinements(query, context)
+            # Prepare conversation context
+            conversation_context = self._build_conversation_context(context)
+            memory_context = context.get("memory_context", "")
             
-            # Analyze conversation context
-            context_analysis = self._analyze_context(context)
+            # Create system prompt
+            system_prompt = QUERY_DISAMBIGUATION_SYSTEM_PROMPT.format(
+                current_time=get_current_datetime_str(),
+                memory_context_section=f"CONVERSATION MEMORY:\n{memory_context}\n\n" if memory_context else ""
+            )
+            
+            # Create messages for LLM
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=f"QUERY TO ANALYZE: {query}\n\nCONVERSATION CONTEXT:\n{conversation_context}")
+            ]
+            
+            # Get LLM response
+            response = await llm.ainvoke(messages)
+            llm_response = response.content
+            
+            # Parse LLM response into structured analysis
+            analysis = self._parse_llm_response(llm_response, query, context)
+            
+            logger.info(f"🔍 Query Disambiguation: LLM analysis - vague: {analysis.is_vague}, confidence: {analysis.confidence_score:.2f}")
+            return analysis
+            
+        except Exception as e:
+            logger.error(f"🔍 Query Disambiguation: LLM analysis failed: {str(e)}")
+            raise e
+    
+    def _build_conversation_context(self, context: Dict[str, Any]) -> str:
+        """Build conversation context string for LLM."""
+        messages = context.get("messages", [])
+        
+        if not messages:
+            return "No previous conversation context."
+        
+        # Get last 3 messages for context
+        recent_messages = messages[-3:] if len(messages) > 3 else messages
+        context_lines = []
+        
+        for msg in recent_messages:
+            if hasattr(msg, 'content'):
+                role = "User" if hasattr(msg, 'role') and msg.role == "user" else "Assistant"
+                context_lines.append(f"{role}: {msg.content}")
+        
+        return "\n".join(context_lines) if context_lines else "No recent conversation context."
+    
+    def _parse_llm_response(self, llm_response: str, query: str, context: Dict[str, Any]) -> QueryDisambiguationAnalysis:
+        """Parse LLM response into structured QueryDisambiguationAnalysis."""
+        try:
+            # Extract structured information from LLM response
+            lines = llm_response.strip().split('\n')
+            
+            # Initialize default values
+            is_vague = False
+            confidence_score = 0.0
+            vague_indicators = []
+            clarifying_questions = []
+            suggested_refinements = []
+            context_analysis = ""
+            
+            # Parse the response (this is a simplified parser - you could make it more sophisticated)
+            current_section = None
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                # Detect sections
+                if "VAGUE:" in line.upper() or "IS_VAGUE:" in line.upper():
+                    is_vague = "true" in line.lower() or "yes" in line.lower()
+                elif "CONFIDENCE:" in line.upper():
+                    try:
+                        confidence_score = float(line.split(":")[1].strip())
+                    except:
+                        confidence_score = 0.5 if is_vague else 0.0
+                elif "INDICATORS:" in line.upper():
+                    current_section = "indicators"
+                elif "QUESTIONS:" in line.upper():
+                    current_section = "questions"
+                elif "SUGGESTIONS:" in line.upper():
+                    current_section = "suggestions"
+                elif "CONTEXT:" in line.upper():
+                    current_section = "context"
+                elif line.startswith("-") or line.startswith("•"):
+                    # List item
+                    item = line[1:].strip()
+                    if current_section == "indicators":
+                        vague_indicators.append(item)
+                    elif current_section == "questions":
+                        clarifying_questions.append(ClarifyingQuestion(
+                            question=item,
+                            question_type="open_ended",
+                            context="Generated by LLM"
+                        ))
+                    elif current_section == "suggestions":
+                        suggested_refinements.append(item)
+                elif current_section == "context":
+                    context_analysis += line + " "
+            
+            # If LLM didn't provide structured output, use intelligent defaults
+            if not vague_indicators and is_vague:
+                vague_indicators = ["LLM detected vagueness"]
+            
+            if not clarifying_questions and is_vague:
+                clarifying_questions = [ClarifyingQuestion(
+                    question="Could you provide more specific details about what you're looking for?",
+                    question_type="open_ended",
+                    context="LLM-generated clarification request"
+                )]
+            
+            if not suggested_refinements:
+                suggested_refinements = [f"{query} with more specific details"]
             
             return QueryDisambiguationAnalysis(
-                is_vague=True,
+                is_vague=is_vague,
                 confidence_score=confidence_score,
                 vague_indicators=vague_indicators,
                 clarifying_questions=clarifying_questions,
                 suggested_refinements=suggested_refinements,
-                context_analysis=context_analysis
+                context_analysis=context_analysis.strip() or "LLM analysis completed"
             )
             
         except Exception as e:
-            logger.error(f"🔍 Query Disambiguation: Error analyzing query: {str(e)}")
+            logger.error(f"🔍 Query Disambiguation: Error parsing LLM response: {str(e)}")
             # Return safe fallback
             return QueryDisambiguationAnalysis(
                 is_vague=False,
@@ -87,132 +206,9 @@ class QueryDisambiguationService:
                 vague_indicators=[],
                 clarifying_questions=[],
                 suggested_refinements=[],
-                context_analysis=f"Error in analysis: {str(e)}"
+                context_analysis=f"Error parsing LLM response: {str(e)}"
             )
     
-    def _detect_vagueness(self, query: str) -> tuple[bool, float, List[str]]:
-        """Detect if a query is vague using pattern matching and heuristics."""
-        query_lower = query.lower().strip()
-        vague_indicators = []
-        confidence_score = 0.0
-        
-        # Check for vague indicator phrases
-        for indicator in self.vague_query_indicators:
-            if indicator in query_lower:
-                vague_indicators.append(f"Contains vague phrase: '{indicator}'")
-                confidence_score += 0.3
-        
-        # Check for broad topics without specificity
-        for topic in self.broad_topics:
-            if topic in query_lower and len(query.split()) < 5:
-                vague_indicators.append(f"Broad topic '{topic}' without specificity")
-                confidence_score += 0.2
-        
-        # Check query length (very short queries are often vague)
-        if len(query.split()) < 3:
-            vague_indicators.append("Query is very short")
-            confidence_score += 0.4
-        
-        # Check for question words without specifics
-        question_words = ["what", "how", "why", "when", "where", "who"]
-        if any(word in query_lower for word in question_words) and len(query.split()) < 4:
-            vague_indicators.append("Question word without specific context")
-            confidence_score += 0.3
-        
-        # Normalize confidence score
-        confidence_score = min(confidence_score, 1.0)
-        is_vague = confidence_score >= 0.5
-        
-        return is_vague, confidence_score, vague_indicators
-    
-    async def _generate_clarifying_questions(self, query: str, context: Dict[str, Any]) -> List[ClarifyingQuestion]:
-        """Generate clarifying questions using LLM assistance."""
-        try:
-            # For now, use rule-based generation
-            # TODO: Implement LLM-based generation in next iteration
-            questions = []
-            
-            query_lower = query.lower()
-            
-            # Generate questions based on query patterns
-            if "help" in query_lower or "project" in query_lower:
-                questions.append(ClarifyingQuestion(
-                    question="What type of project or help do you need?",
-                    question_type="open_ended",
-                    context="Understanding the specific type of assistance needed"
-                ))
-            
-            if any(topic in query_lower for topic in ["ai", "technology", "science"]):
-                questions.append(ClarifyingQuestion(
-                    question="Are you interested in:",
-                    question_type="multiple_choice",
-                    options=["Recent developments", "Basic concepts", "Technical details", "Applications"],
-                    context="Clarifying the depth and focus of your interest"
-                ))
-            
-            if "research" in query_lower:
-                questions.append(ClarifyingQuestion(
-                    question="What specific aspect would you like to research?",
-                    question_type="open_ended",
-                    context="Narrowing down the research focus"
-                ))
-            
-            # Default question if no specific patterns match
-            if not questions:
-                questions.append(ClarifyingQuestion(
-                    question="Could you provide more specific details about what you're looking for?",
-                    question_type="open_ended",
-                    context="General clarification request"
-                ))
-            
-            return questions
-            
-        except Exception as e:
-            logger.error(f"🔍 Query Disambiguation: Error generating questions: {str(e)}")
-            return [ClarifyingQuestion(
-                question="Could you provide more specific details about what you're looking for?",
-                question_type="open_ended",
-                context="Fallback clarification request"
-            )]
-    
-    def _generate_suggested_refinements(self, query: str, context: Dict[str, Any]) -> List[str]:
-        """Generate suggested query refinements."""
-        suggestions = []
-        
-        # Add time-based refinements
-        suggestions.append(f"{query} recent developments")
-        suggestions.append(f"{query} 2024")
-        
-        # Add specificity refinements
-        if "ai" in query.lower():
-            suggestions.append("artificial intelligence applications in healthcare")
-            suggestions.append("machine learning algorithms for data analysis")
-        
-        if "research" in query.lower():
-            suggestions.append("research methodology best practices")
-            suggestions.append("academic research paper writing")
-        
-        return suggestions[:3]  # Limit to 3 suggestions
-    
-    def _analyze_context(self, context: Dict[str, Any]) -> str:
-        """Analyze conversation context for better disambiguation."""
-        messages = context.get("messages", [])
-        
-        if len(messages) < 2:
-            return "New conversation - no previous context"
-        
-        # Look for recent topics in conversation
-        recent_topics = []
-        for msg in messages[-3:]:  # Last 3 messages
-            if isinstance(msg, dict) and msg.get("role") == "user":
-                content = msg.get("content", "")
-                if len(content.split()) > 2:  # Non-trivial content
-                    recent_topics.append(content[:50])
-        
-        if recent_topics:
-            return f"Recent conversation topics: {', '.join(recent_topics)}"
-        
-        return "Limited conversation context available"
     
     async def refine_query_with_clarification(self, original_query: str, clarification: str, context: Dict[str, Any]) -> QueryRefinement:
         """
