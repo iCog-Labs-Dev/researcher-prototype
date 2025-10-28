@@ -169,7 +169,7 @@ class MotivationRepository:
         if not update_data:
             return existing
         
-        return await self.motivation_state_repo.update(existing.id, **update_data)
+        return await self.topic_score_repo.update(existing.id, **update_data)
     
     async def create_or_update_topic_score(
         self,
