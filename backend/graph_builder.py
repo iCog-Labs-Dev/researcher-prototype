@@ -48,7 +48,7 @@ def create_chat_graph():
 
     def clarification_router(state:ChatState) -> str:
         """Route to clarifying node if query is vague, otherwise to multi-source analyzer."""
-        vagueness = not state.get("query_clarity")
+        vagueness = state["is_vague"]
         if vagueness is True:
             logger.info("⚡ Flow: Routing to Clarifying due to vague query")
             return "clarifying_node"
