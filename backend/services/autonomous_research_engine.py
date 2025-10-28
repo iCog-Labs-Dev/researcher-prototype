@@ -779,3 +779,71 @@ def initialize_autonomous_researcher(profile_manager: ProfileManager, research_m
     global autonomous_researcher
     autonomous_researcher = AutonomousResearcher(profile_manager, research_manager, motivation_config_override)
     return autonomous_researcher
+
+
+# Reusable helper to run LangGraph research for a single topic (for callers outside the engine)
+async def run_langgraph_research(user_id: str, topic: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Run LangGraph research workflow for a single topic and return the result."""
+    try:
+        topic_name = topic["topic_name"]
+        topic_description = topic.get("description", "")
+        last_researched = topic.get("last_researched")
+
+        logger.info(f"🔬 Starting LangGraph research workflow for topic: {topic_name}")
+
+        research_state = {
+            "messages": [],
+            "model": config.RESEARCH_MODEL,
+            "temperature": 0.3,
+            "max_tokens": config.RESEARCH_MAX_TOKENS,
+            "personality": {"style": "research", "tone": "analytical"},
+            "current_module": None,
+            "module_results": {},
+            "workflow_context": {
+                "research_context": {
+                    "topic_name": topic_name,
+                    "topic_description": topic_description,
+                    "user_id": user_id,
+                    "last_researched": last_researched,
+                    "model": config.RESEARCH_MODEL,
+                }
+            },
+            "user_id": user_id,
+            "routing_analysis": None,
+            "thread_id": None,
+            "memory_context": None,
+        }
+
+        logger.debug(f"🔬 Invoking research graph for topic: {topic_name}")
+        research_result = await research_graph.ainvoke(research_state)
+
+        storage_results = research_result.get("module_results", {}).get("research_storage", {})
+        if storage_results.get("success", False):
+            stored = storage_results.get("stored", False)
+            quality_score = storage_results.get("quality_score", 0.0)
+            if stored:
+                logger.info(
+                    f"🔬 LangGraph research completed successfully for {topic_name} - Finding stored (quality: {quality_score:.2f})"
+                )
+                return {
+                    "success": True,
+                    "stored": True,
+                    "quality_score": quality_score,
+                    "finding_id": storage_results.get("finding_id"),
+                    "insights_count": storage_results.get("insights_count", 0),
+                }
+            else:
+                reason = storage_results.get("reason", "Unknown reason")
+                logger.info(f"🔬 LangGraph research completed for {topic_name} - Finding not stored: {reason}")
+                return {"success": True, "stored": False, "reason": reason, "quality_score": quality_score}
+        else:
+            error = storage_results.get("error", "Unknown error in storage")
+            logger.error(f"🔬 LangGraph research failed for {topic_name}: {error}")
+            return {"success": False, "error": error, "stored": False}
+
+    except Exception as e:
+        logger.error(
+            f"🔬 Error in LangGraph research workflow for topic {topic.get('topic_name', 'unknown')}: {str(e)}",
+            exc_info=True,
+        )
+        return {"success": False, "error": str(e), "stored": False}
