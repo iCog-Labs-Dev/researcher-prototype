@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.motivation_repository import MotivationRepository
 from database.database_manager import DatabaseManager
-from models.motivation import MotivationState, TopicScore, MotivationConfig
+from models.motivation import TopicScore, MotivationConfig
 from services.logging_config import get_logger
 from db import get_session
 
@@ -25,117 +25,6 @@ async def get_motivation_repository(session: AsyncSession = Depends(get_session)
 async def get_database_manager(session: AsyncSession = Depends(get_session)) -> DatabaseManager:
     """Dependency to get database manager."""
     return DatabaseManager(session)
-
-
-# MotivationState endpoints
-
-@router.get("/motivation/state")
-async def get_motivation_state(
-    state_id: Optional[str] = None,
-    repo: MotivationRepository = Depends(get_motivation_repository)
-):
-    """Get motivation state by ID or the active one."""
-    try:
-        if state_id:
-            state_uuid = uuid.UUID(state_id)
-            state = await repo.get_motivation_state(state_uuid)
-        else:
-            state = await repo.get_motivation_state()
-        
-        if not state:
-            raise HTTPException(status_code=404, detail="Motivation state not found")
-        
-        return {
-            "id": str(state.id),
-            "boredom": state.boredom,
-            "curiosity": state.curiosity,
-            "tiredness": state.tiredness,
-            "satisfaction": state.satisfaction,
-            "last_tick": state.last_tick,
-            "is_active": state.is_active,
-            "meta_data": state.meta_data
-        }
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid UUID format")
-    except Exception as e:
-        logger.error(f"Error getting motivation state: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error getting motivation state: {str(e)}")
-
-
-@router.post("/motivation/state")
-async def create_motivation_state(
-    request: Request,
-    repo: MotivationRepository = Depends(get_motivation_repository)
-):
-    """Create a new motivation state."""
-    try:
-        body = await request.json()
-        boredom = body.get("boredom", 0.0)
-        curiosity = body.get("curiosity", 0.0)
-        tiredness = body.get("tiredness", 0.0)
-        satisfaction = body.get("satisfaction", 0.0)
-        meta_data = body.get("meta_data")
-        
-        state = await repo.create_motivation_state(
-            boredom=boredom,
-            curiosity=curiosity,
-            tiredness=tiredness,
-            satisfaction=satisfaction,
-            meta_data=meta_data
-        )
-        
-        return {
-            "id": str(state.id),
-            "boredom": state.boredom,
-            "curiosity": state.curiosity,
-            "tiredness": state.tiredness,
-            "satisfaction": state.satisfaction,
-            "last_tick": state.last_tick,
-            "is_active": state.is_active,
-            "meta_data": state.meta_data
-        }
-    except Exception as e:
-        logger.error(f"Error creating motivation state: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error creating motivation state: {str(e)}")
-
-
-@router.put("/motivation/state/{state_id}")
-async def update_motivation_state(
-    state_id: str,
-    request: Request,
-    repo: MotivationRepository = Depends(get_motivation_repository)
-):
-    """Update motivation state."""
-    try:
-        body = await request.json()
-        state_uuid = uuid.UUID(state_id)
-        state = await repo.update_motivation_state(
-            state_uuid,
-            boredom=body.get("boredom"),
-            curiosity=body.get("curiosity"),
-            tiredness=body.get("tiredness"),
-            satisfaction=body.get("satisfaction"),
-            meta_data=body.get("meta_data")
-        )
-        
-        if not state:
-            raise HTTPException(status_code=404, detail="Motivation state not found")
-        
-        return {
-            "id": str(state.id),
-            "boredom": state.boredom,
-            "curiosity": state.curiosity,
-            "tiredness": state.tiredness,
-            "satisfaction": state.satisfaction,
-            "last_tick": state.last_tick,
-            "is_active": state.is_active,
-            "meta_data": state.meta_data
-        }
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid UUID format")
-    except Exception as e:
-        logger.error(f"Error updating motivation state: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error updating motivation state: {str(e)}")
 
 
 # TopicScore endpoints

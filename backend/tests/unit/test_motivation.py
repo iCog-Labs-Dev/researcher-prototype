@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.motivation import MotivationSystem
 from database.motivation_repository import MotivationRepository
-from models.motivation import MotivationState, TopicScore, MotivationConfig
+from models.motivation import TopicScore, MotivationConfig
 from storage.profile_manager import ProfileManager
 from storage.research_manager import ResearchManager
 from services.personalization_manager import PersonalizationManager

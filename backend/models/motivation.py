@@ -8,32 +8,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 from .base import Base
 
 
-class MotivationState(Base):
-    """Stores global motivation drives for the system."""
-    __tablename__ = "motivation_states"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    
-    # Global motivation drives (replacing the old global score system)
-    boredom: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    curiosity: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    tiredness: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    satisfaction: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    
-    # System state
-    last_tick: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    
-    # Additional metadata
-    meta_data: Mapped[Union[dict[str, Any], None]] = mapped_column(MutableDict.as_mutable(JSONB))
-
-    __table_args__ = (
-        Index('ix_motivation_states_active', 'is_active'),
-    )
-
-
 class TopicScore(Base):
     """Stores per-topic motivation scores and metadata."""
     __tablename__ = "topic_scores"

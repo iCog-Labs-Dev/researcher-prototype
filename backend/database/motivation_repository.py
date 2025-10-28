@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete, and_, or_, func
 from sqlalchemy.orm import selectinload
 
-from models.motivation import MotivationState, TopicScore, MotivationConfig
+from models.motivation import TopicScore, MotivationConfig
 from .base_repository import BaseRepository
 from services.logging_config import get_logger
 
@@ -20,100 +20,14 @@ class MotivationRepository:
     """
     Comprehensive repository for motivation system operations.
     
-    This repository provides all CRUD operations for MotivationState, TopicScore, and MotivationConfig models,
+    This repository provides all CRUD operations for TopicScore and MotivationConfig models,
     replacing the scattered database logic in services/motivation_db_service.py.
     """
     
     def __init__(self, session: AsyncSession):
         self.session = session
-        self.motivation_state_repo = BaseRepository(session, MotivationState)
         self.topic_score_repo = BaseRepository(session, TopicScore)
         self.motivation_config_repo = BaseRepository(session, MotivationConfig)
-    
-    # MotivationState CRUD operations
-    
-    async def get_motivation_state(self, state_id: Optional[uuid.UUID] = None) -> Optional[MotivationState]:
-        """Get motivation state by ID or the active one."""
-        if state_id:
-            return await self.motivation_state_repo.get_by_id(state_id)
-        else:
-            result = await self.session.execute(
-                select(MotivationState).where(MotivationState.is_active == True).limit(1)
-            )
-            return result.scalar_one_or_none()
-    
-    async def create_motivation_state(
-        self, 
-        boredom: float = 0.0,
-        curiosity: float = 0.0,
-        tiredness: float = 0.0,
-        satisfaction: float = 0.0,
-        last_tick: Optional[float] = None,
-        meta_data: Optional[Dict[str, Any]] = None
-    ) -> MotivationState:
-        """Create a new motivation state."""
-        if last_tick is None:
-            last_tick = time.time()
-        
-        # Deactivate existing active states
-        await self.session.execute(
-            update(MotivationState).where(MotivationState.is_active == True).values(is_active=False)
-        )
-        
-        state = MotivationState(
-            boredom=boredom,
-            curiosity=curiosity,
-            tiredness=tiredness,
-            satisfaction=satisfaction,
-            last_tick=last_tick,
-            is_active=True,
-            meta_data=meta_data or {}
-        )
-        
-        self.session.add(state)
-        await self.session.commit()
-        await self.session.refresh(state)
-        
-        logger.info(f"Created new motivation state: {state.id}")
-        return state
-    
-    async def update_motivation_state(
-        self, 
-        state_id: uuid.UUID,
-        boredom: Optional[float] = None,
-        curiosity: Optional[float] = None,
-        tiredness: Optional[float] = None,
-        satisfaction: Optional[float] = None,
-        last_tick: Optional[float] = None,
-        meta_data: Optional[Dict[str, Any]] = None
-    ) -> Optional[MotivationState]:
-        """Update motivation state values."""
-        update_data = {}
-        if boredom is not None:
-            update_data['boredom'] = boredom
-        if curiosity is not None:
-            update_data['curiosity'] = curiosity
-        if tiredness is not None:
-            update_data['tiredness'] = tiredness
-        if satisfaction is not None:
-            update_data['satisfaction'] = satisfaction
-        if last_tick is not None:
-            update_data['last_tick'] = last_tick
-        if meta_data is not None:
-            update_data['meta_data'] = meta_data
-        
-        if not update_data:
-            return None
-        
-        return await self.motivation_state_repo.update(state_id, **update_data)
-    
-    async def get_all_motivation_states(self, limit: Optional[int] = None, offset: int = 0) -> List[MotivationState]:
-        """Get all motivation states with pagination."""
-        return await self.motivation_state_repo.get_all(limit=limit, offset=offset)
-    
-    async def delete_motivation_state(self, state_id: uuid.UUID) -> bool:
-        """Delete a motivation state."""
-        return await self.motivation_state_repo.delete(state_id)
     
     # TopicScore CRUD operations
     

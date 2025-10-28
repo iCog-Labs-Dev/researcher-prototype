@@ -84,13 +84,7 @@ class MotivationSystem:
                 logger.info("Creating default motivation configuration...")
                 self._config = await self.db_service.create_default_config()
             
-            # Get or create active motivation state
-            state = await self.db_service.get_motivation_state()
-            if not state:
-                logger.info("Creating initial motivation state...")
-                state = await self.db_service.create_motivation_state()
-            
-            logger.info(f"🎯 Motivation system initialized with config: {self._config.id}, state: {state.id}")
+            logger.info(f"🎯 Motivation system initialized with config: {self._config.id}")
             
         except Exception as e:
             logger.error(f"Failed to initialize motivation system: {str(e)}", exc_info=True)
