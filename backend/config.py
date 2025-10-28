@@ -223,3 +223,6 @@ DATABASE_URL = "postgresql+psycopg:" + DATABASE_URL
 JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "120"))
+
+# Google auth
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
