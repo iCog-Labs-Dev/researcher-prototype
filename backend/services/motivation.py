@@ -18,6 +18,7 @@ from services.personalization_manager import PersonalizationManager
 from research_graph_builder import research_graph
 from services.topic_expansion_service import TopicExpansionService
 from models.motivation import TopicScore
+from models.research_finding import ResearchFinding
 import config
 
 logger = get_logger(__name__)
@@ -173,20 +174,60 @@ class MotivationSystem:
             
             # Optimized: Single query to update all topic scores at once
             
+            # Compute engagement and success via DB aggregates from research_findings
+            now_epoch = func.extract('epoch', func.now())
+
+            # Build a CTE that aggregates findings per user/topic
+            findings_agg = (
+                self.session.query(
+                    ResearchFinding.user_id.label('user_id'),
+                    ResearchFinding.topic_name.label('topic_name'),
+                    func.avg(func.cast(ResearchFinding.read, sa.Float)).label('engagement_reads'),
+                    func.avg(ResearchFinding.quality_score).label('avg_quality'),
+                    func.sum(func.cast(ResearchFinding.bookmarked, sa.Integer)).label('bookmarks'),
+                    func.sum(func.cast(ResearchFinding.integrated, sa.Integer)).label('integrations'),
+                    func.count().label('total')
+                )
+                .group_by(ResearchFinding.user_id, ResearchFinding.topic_name)
+                .cte('findings_agg')
+            )
+
+            # Derive engagement and success on the DB side using the CTE
+            staleness = (now_epoch - func.coalesce(TopicScore.last_researched, 0.0))
+            reads_pct = func.coalesce(findings_agg.c.engagement_reads, 0.0)
+            volume_bonus = func.least(
+                findings_agg.c.total * config.ENGAGEMENT_VOLUME_BONUS_RATE,
+                config.ENGAGEMENT_VOLUME_BONUS_MAX,
+            )
+            bookmark_bonus = func.least(
+                findings_agg.c.bookmarks * config.ENGAGEMENT_BOOKMARK_BONUS_RATE,
+                config.ENGAGEMENT_BOOKMARK_BONUS_MAX,
+            )
+            integration_bonus = func.least(
+                findings_agg.c.integrations * config.ENGAGEMENT_INTEGRATION_BONUS_RATE,
+                config.ENGAGEMENT_INTEGRATION_BONUS_MAX,
+            )
+            engagement_expr = func.least(
+                reads_pct + volume_bonus + bookmark_bonus + integration_bonus,
+                config.ENGAGEMENT_SCORE_MAX,
+            )
+            success_expr = 0.3 + engagement_expr * 0.4
+
             result = await self.session.execute(
                 update(TopicScore)
                 .where(TopicScore.is_active_research == True)
                 .values(
-                    staleness_pressure=(
-                        func.extract('epoch', func.now()) - TopicScore.last_researched
-                    ) * TopicScore.staleness_coefficient * self._config.staleness_scale,
+                    staleness_pressure=(staleness * TopicScore.staleness_coefficient * self._config.staleness_scale),
+                    engagement_score=engagement_expr,
+                    success_rate=func.coalesce(findings_agg.c.avg_quality, success_expr),
                     motivation_score=(
-                        (func.extract('epoch', func.now()) - TopicScore.last_researched) * 
-                        TopicScore.staleness_coefficient * self._config.staleness_scale +
-                        TopicScore.engagement_score * self._config.engagement_weight +
-                        TopicScore.success_rate * self._config.quality_weight
-                    )
+                        staleness * TopicScore.staleness_coefficient * self._config.staleness_scale +
+                        engagement_expr * self._config.engagement_weight +
+                        func.coalesce(findings_agg.c.avg_quality, success_expr) * self._config.quality_weight
+                    ),
                 )
+                .where(TopicScore.user_id == findings_agg.c.user_id)
+                .where(TopicScore.topic_name == findings_agg.c.topic_name)
             )
             
             updated_count = result.rowcount
@@ -402,6 +443,28 @@ class MotivationSystem:
                                 topic_name=topic_name,
                                 last_researched=time.time()
                             )
+
+                            # Dual-write: persist finding summary into DB when available
+                            try:
+                                from models.research_finding import ResearchFinding
+                                storage_results = result if result else {}
+                                if storage_results.get("stored"):
+                                    finding_id = storage_results.get("finding_id")
+                                    quality = storage_results.get("quality_score")
+                                    self.session.add(
+                                        ResearchFinding(
+                                            user_id=user_uuid,
+                                            topic_name=topic_name,
+                                            finding_id=finding_id,
+                                            read=False,
+                                            bookmarked=False,
+                                            integrated=False,
+                                            research_time=time.time(),
+                                            quality_score=quality,
+                                        )
+                                    )
+                            except Exception as e:
+                                logger.debug(f"Dual-write finding failed for {topic_name}: {e}")
                             
                             # Small delay between topics
                             await asyncio.sleep(config.RESEARCH_TOPIC_DELAY)
