@@ -11,9 +11,9 @@ The **autonomous research engine** runs in the background, gathering high-qualit
 ## How it Works
 
 1. **Topic discovery** – after each chat message the `topic_extractor_node` suggests candidate topics.  
-2. **Subscription** – the UI lets you enable research per topic; selected topics are persisted in `storage_data/`.
+2. **Subscription** – the UI lets you enable research per topic; selections are persisted and can be toggled anytime.
 3. **Topic expansion** – the system automatically discovers related topics using knowledge graph analysis and AI selection (requires Zep).
-4. **Intelligent motivation model** – hierarchical system with global drives (boredom/curiosity/tiredness/satisfaction) that gate overall research activity, plus per-topic evaluation that prioritizes which specific topics to research based on staleness, user engagement, and success rates.
+4. **Intelligent motivation model** – per-topic evaluation that prioritizes which specific topics to research based on staleness, user engagement, and success rates. The research loop is owned by the Motivation module.
 5. **Graph workflow** – the research LangGraph (`research_graph_builder.py`) runs: initialization ➜ query generation ➜ source selection ➜ multi-source search coordination ➜ integration ➜ quality scoring ➜ deduplication ➜ storage.
 6. **Review** – findings appear in the results dashboard with summary, quality bars & source links.
 
@@ -61,27 +61,14 @@ Research Topic → Query Generation → Source Selection → Multi-Source Search
 - **Quality Filtering**: Results assessed across multiple source types
 - **Automatic Relevance**: Sources selected based on topic characteristics
 
-## Hierarchical Motivation System
-
-The research engine uses a two-tier intelligent motivation system combining global drives with per-topic evaluation for optimal research scheduling.
-
-### Tier 1: Global Motivation Gates
-Global drives determine whether any research should occur at all:
-
-```
-global_motivation = (boredom + curiosity) - (tiredness + satisfaction)
-```
-
-**Research cycle triggers when**: `global_motivation ≥ MOTIVATION_THRESHOLD`
-
-### Tier 2: Per-Topic Prioritization  
-When globally motivated, the system evaluates **only topics marked for active research** by the user:
+## Motivation and Topic Prioritization
+The system evaluates only topics marked for active research by the user and schedules research directly from the Motivation module.
 
 ```
 topic_score = staleness_pressure + (engagement_score × weight) + (quality_score × weight)
 ```
 
-**Topics researched when**: `topic_score ≥ TOPIC_MOTIVATION_THRESHOLD`
+**Topics are researched when**: `topic_score ≥ TOPIC_MOTIVATION_THRESHOLD`
 
 #### Research Findings Engagement (Primary Signal)
 The engagement score heavily weights actual user interaction with research results:
@@ -117,9 +104,7 @@ staleness_pressure = time_since_last_research × staleness_coefficient × TOPIC_
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
-    Idle --> GlobalCheck : "Check global motivation"
-    GlobalCheck --> Idle : "motivation < threshold"
-    GlobalCheck --> TopicEval : "motivation ≥ MOTIVATION_THRESHOLD"
+    Idle --> TopicEval : "check topic priorities"
     TopicEval --> NoTopics : "no topics above TOPIC_MOTIVATION_THRESHOLD"
     TopicEval --> Researching : "prioritized topics found"
     NoTopics --> Idle : "wait for next cycle"
