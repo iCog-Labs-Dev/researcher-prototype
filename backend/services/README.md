@@ -4,19 +4,15 @@ This directory contains business logic and services that are used by the API end
 
 ## Key Services
 
-### `motivation.py` - Intelligent Motivation System
-Hierarchical motivation system for autonomous research scheduling:
-
-**Global Motivation (`MotivationSystem`)**:
-- Tracks global drives: boredom, curiosity, tiredness, satisfaction
-- Gates overall research activity with `should_research()` method
-- Prevents unnecessary resource usage when system should rest
+### `motivation.py` - Per-Topic Motivation System
+Intelligent per-topic motivation system for autonomous research scheduling:
 
 **Per-Topic Motivation**:
-- `evaluate_topics(user_id, topics)` - Returns prioritized list of topics to research
-- `should_research_topic(user_id, topic)` - Evaluates individual topics
+- `update_scores()` - Updates motivation scores for all active topics
+- `check_for_research_needed()` - Identifies topics that need research
 - Factors: staleness pressure, user engagement, research success rate
 - Staleness coefficients: LLM-assessed values (0.1=stable, 2.0=urgent)
+- Research loop owned by Motivation module
 
 **Integration**:
 - Uses PersonalizationManager for user engagement data

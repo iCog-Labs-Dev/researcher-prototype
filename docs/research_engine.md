@@ -90,14 +90,6 @@ staleness_pressure = time_since_last_research × staleness_coefficient × TOPIC_
 - **time_since_last_research**: Hours since topic was last researched  
 - **TOPIC_STALENESS_SCALE**: Configurable time-to-pressure conversion (default: 0.0001)
 
-#### Drive Updates Over Time
-
-| Drive | When Active | Update Formula |
-|-------|-------------|----------------|
-| **Boredom** | Always (idle) | `boredom += BOREDOM_RATE × time_delta` |
-| **Curiosity** | Always | `curiosity -= CURIOSITY_DECAY × time_delta` |
-| **Tiredness** | During research | `tiredness += time_delta` then `tiredness -= TIREDNESS_DECAY × time_delta` |
-| **Satisfaction** | After research | `satisfaction += quality_score` then `satisfaction -= SATISFACTION_DECAY × time_delta` |
 
 ### Hierarchical Flow Diagram
 
@@ -108,23 +100,23 @@ stateDiagram-v2
     TopicEval --> NoTopics : "no topics above TOPIC_MOTIVATION_THRESHOLD"
     TopicEval --> Researching : "prioritized topics found"
     NoTopics --> Idle : "wait for next cycle"
-    Researching --> Idle : "research complete<br/>satisfaction ↑, tiredness ↑"
+    Researching --> Idle : "research complete<br/>engagement data updated"
     
-    note right of Idle : "• Global drives accumulate/decay<br/>• Topic staleness increases"
+    note right of Idle : "• Topic staleness increases<br/>• Engagement scores decay"
     note right of TopicEval : "• Evaluate each topic's<br/>  staleness + engagement + quality<br/>• Sort by priority"
     note right of Researching : "• Research highest priority topics<br/>• Update engagement data"
 ```
 
 ### Parameter Impact Examples
 
-With default values (`THRESHOLD=2.0`, `BOREDOM_RATE=0.0005`, `CURIOSITY_DECAY=0.0002`):
+With default values (`TOPIC_MOTIVATION_THRESHOLD=0.5`, `TOPIC_ENGAGEMENT_WEIGHT=0.3`, `TOPIC_QUALITY_WEIGHT=0.2`):
 
 ```mermaid
 graph LR
-    A["🕐 Time: 0h<br/>Motivation: 0"] --> B["🕐 Time: 2h<br/>Motivation: 1.0<br/>(boredom accumulated)"]
-    B --> C["🕐 Time: 4h<br/>Motivation: 2.0<br/>🚀 RESEARCH TRIGGERED"]
-    C --> D["🕐 Research Complete<br/>Motivation: -1.0<br/>(satisfaction + tiredness)"]
-    D --> E["🕐 Time: 6h<br/>Motivation: 0.5<br/>(drives decay)"]
+    A["🕐 Time: 0h<br/>Topic Score: 0.2"] --> B["🕐 Time: 2h<br/>Topic Score: 0.4<br/>(staleness increases)"]
+    B --> C["🕐 Time: 4h<br/>Topic Score: 0.6<br/>🚀 RESEARCH TRIGGERED"]
+    C --> D["🕐 Research Complete<br/>Topic Score: 0.3<br/>(engagement updated)"]
+    D --> E["🕐 Time: 6h<br/>Topic Score: 0.5<br/>(scores recalculated)"]
 ```
 
 ## Controlling the Engine
@@ -137,21 +129,11 @@ graph LR
 
 ### Motivation debug
 
-* `GET  /research/debug/motivation` – current drive values
-* `POST /research/debug/adjust-drives` – set boredom/curiosity… manually
-* `POST /research/debug/update-config` – override threshold & decay rates at runtime
+* `GET  /motivation/topic-scores/{user_id}` – current topic scores and priorities
+* `POST /motivation/topic-scores` – create or update topic scores
+* `GET  /motivation/config/{user_id}` – current motivation configuration
 
 ### Parameter Tuning Guide
-
-#### Global Motivation Parameters
-| Behavior Goal | Parameter Changes | Effect |
-|---------------|------------------|--------|
-| **More frequent research** | ↑ `BOREDOM_RATE` or ↓ `MOTIVATION_THRESHOLD` | Triggers research sooner |
-| **Less frequent research** | ↓ `BOREDOM_RATE` or ↑ `MOTIVATION_THRESHOLD` | Longer intervals between research |
-| **Longer research sessions** | ↓ `TIREDNESS_DECAY` | Takes longer to get tired |
-| **Shorter research sessions** | ↑ `TIREDNESS_DECAY` | Gets tired faster |
-| **More persistent curiosity** | ↓ `CURIOSITY_DECAY` | Curiosity lasts longer |
-| **Quick satisfaction reset** | ↑ `SATISFACTION_DECAY` | Ready for new research sooner |
 
 #### Per-Topic Parameters  
 | Behavior Goal | Parameter Changes | Effect |
@@ -165,16 +147,16 @@ graph LR
 
 #### Example Configurations
 
-**Aggressive Research** (every ~1 hour):
+**Aggressive Research** (more topics researched):
 ```env
-MOTIVATION_THRESHOLD=1.5
-MOTIVATION_BOREDOM_RATE=0.001
+TOPIC_MOTIVATION_THRESHOLD=0.3
+TOPIC_ENGAGEMENT_WEIGHT=0.4
 ```
 
-**Conservative Research** (every ~6 hours):
+**Conservative Research** (fewer, higher-priority topics):
 ```env
-MOTIVATION_THRESHOLD=3.0
-MOTIVATION_BOREDOM_RATE=0.0002
+TOPIC_MOTIVATION_THRESHOLD=0.7
+TOPIC_QUALITY_WEIGHT=0.4
 ```
 
 ## Active Research Topics Limit
@@ -311,13 +293,6 @@ RESEARCH_MAX_TOPICS_PER_USER=3
 
 # Active Topics Limit
 MAX_ACTIVE_RESEARCH_TOPICS_PER_USER=5  # Max simultaneously active topics (manual + expansion)
-
-# Global Motivation Drives
-MOTIVATION_THRESHOLD=2.0
-MOTIVATION_BOREDOM_RATE=0.0005
-MOTIVATION_CURIOSITY_DECAY=0.0002
-MOTIVATION_TIREDNESS_DECAY=0.0002
-MOTIVATION_SATISFACTION_DECAY=0.0002
 
 # Per-Topic Motivation
 TOPIC_MOTIVATION_THRESHOLD=0.5      # Minimum score for individual topic research

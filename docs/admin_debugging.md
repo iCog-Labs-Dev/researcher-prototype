@@ -44,9 +44,9 @@ POST /admin/flows/diagrams/generate?force_regenerate=true  # regenerate even if 
 
 All routes live under `/research/debug/*` and do **not** require admin auth – use responsibly.
 
-* `GET  /research/debug/motivation` – inspect current drives & next scheduled run
-* `POST /research/debug/adjust-drives?boredom=0.9` – nudge drives
-* `POST /research/debug/update-config` – JSON body with any of: `threshold`, `boredom_rate`, `curiosity_decay`, `tiredness_decay`, `satisfaction_decay`
+* `GET  /motivation/topic-scores/{user_id}` – inspect current topic scores and priorities
+* `POST /motivation/topic-scores` – create or update topic scores
+* `GET  /motivation/config/{user_id}` – view motivation configuration
 * `POST /research/debug/active-topics` – list active topics for all users
 
 ## 3. Knowledge Graph Debug
