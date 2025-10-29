@@ -15,7 +15,6 @@ from database.motivation_repository import MotivationRepository
 from storage.profile_manager import ProfileManager
 from storage.research_manager import ResearchManager
 from services.personalization_manager import PersonalizationManager
-from research_graph_builder import research_graph
 from services.topic_expansion_service import TopicExpansionService
 from models.motivation import TopicScore
 from models.research_finding import ResearchFinding
@@ -71,8 +70,7 @@ class MotivationSystem:
         # Configuration
         self._config = None
         
-        # Research graph
-        self.research_graph = research_graph
+        # Research graph decoupled; execution delegated to Research Engine
         
         logger.info("🎯 Motivation System initialized")
 
