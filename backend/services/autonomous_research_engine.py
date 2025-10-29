@@ -218,182 +218,29 @@ class AutonomousResearcher:
                             except Exception:
                                 pass
 
-                            tasks = []
-
-                            async def _run_root() -> Optional[Dict[str, Any]]:
-                                return await self._research_topic_with_langgraph(user_id, topic)
-
-                            logger.debug(f"🔬 Scheduling root research task for '{root_name}'")
-                            tasks.append(asyncio.create_task(_run_root()))
-
-                            # Schedule expansions with lifecycle gating
-                            created_expansions: List[Dict[str, Any]] = []
-                            # Topic expansion is always enabled - core feature
-                            # Determine gating for child expansion
-                            depth = int(topic.get('expansion_depth', 0) or 0)
-                            is_expansion = bool(topic.get('is_expansion', False))
-                            backoff_until = float(topic.get('last_backoff_until', 0) or 0)
-                            now_ts = time.time()
-
-                            allowed_for_children = True
-                            gating_reason = ""
-                            
-                            # Apply gating only for expansion topics (child generations)
-                            if is_expansion:
-                                child_enabled = bool(topic.get('child_expansion_enabled', False))
-                                max_depth = config.EXPANSION_MAX_DEPTH
-                                depth_ok = depth < max_depth
-                                backoff_ok = backoff_until <= now_ts
-
-                                # Debug the raw gating flags
-                                logger.debug(
-                                    "🔬 Expansion gating for '%s': child_enabled=%s depth=%s/%s depth_ok=%s backoff_ok=%s backoff_until=%.0f now=%.0f",
-                                    root_name, child_enabled, depth, max_depth, depth_ok, backoff_ok, backoff_until, now_ts,
-                                )
-                                
-                                allowed_for_children = child_enabled and depth_ok and backoff_ok
-                                
-                                if not allowed_for_children:
-                                    reasons = []
-                                    if not child_enabled:
-                                        reasons.append("child expansion not enabled")
-                                    if not depth_ok:
-                                        reasons.append(f"depth {depth} >= max {max_depth}")
-                                    if not backoff_ok:
-                                        remaining_hrs = (backoff_until - now_ts) / 3600
-                                        reasons.append(f"backoff active ({remaining_hrs:.1f}h remaining)")
-                                    gating_reason = ", ".join(reasons)
-
-                            if not allowed_for_children:
-                                logger.info(
-                                    f"🔬 Skipping child expansion for '{root_name}': {gating_reason}"
-                                )
-                            else:
-                                # Check breadth control before generating candidates
-                                if not self._should_allow_expansion(user_id):
-                                    logger.info(f"🔬 Skipping expansion for '{root_name}': breadth limits reached")
-                                else:
-                                    # Generate candidates
-                                    candidates = await self.topic_expansion_service.generate_candidates(user_id, topic)
-                                    if not candidates:
-                                        logger.info(f"🔬 No expansion candidates generated for '{root_name}' (check Zep availability and similarity thresholds)")
-                                        logger.debug(
-                                            "🔬 Expansion diagnostics: ZEP_ENABLED=%s ZEP_SEARCH_LIMIT=%s EXPANSION_MIN_SIMILARITY=%s",
-                                            getattr(config, 'ZEP_ENABLED', None), getattr(config, 'ZEP_SEARCH_LIMIT', None), getattr(config, 'EXPANSION_MIN_SIMILARITY', None),
-                                        )
-                                    else:
-                                        logger.debug(f"🔬 Generated {len(candidates)} expansion candidates for '{root_name}'")
-                                    if candidates:
-                                        k = min(config.EXPLORATION_PER_ROOT_MAX, len(candidates))
-                                        selected = candidates[:k]
-                                        logger.info(
-                                            f"🔬 Choosing {len(selected)}/{len(candidates)} expansions for '{root_name}'"
-                                        )
-                                        for cand in selected:
-                                            # Use description from LLM expansion selection (if available)
-                                            desc_from_llm = getattr(cand, 'description', None)
-                                            if desc_from_llm:
-                                                desc = desc_from_llm
-                                                logger.debug(f"🔬 Using LLM description for '{cand.name}': {desc[:100]}...")
-                                            else:
-                                                desc = f"Research into {cand.name.lower()} and its relationship to {root_name.lower()}"
-                                                logger.debug(f"🔬 Using fallback description for '{cand.name}'")
-                                            # Compute child depth
-                                            child_depth = min(depth + 1, config.EXPANSION_MAX_DEPTH)
-                                            extra_meta = {
-                                                "is_expansion": True,
-                                                "origin": {
-                                                    "type": "expansion",
-                                                    "parent_topic": root_name,
-                                                    "method": cand.source,
-                                                    "similarity": cand.similarity,
-                                                    "rationale": cand.rationale,
-                                                },
-                                                "expansion_depth": child_depth,
-                                                "child_expansion_enabled": True,  # Start enabled for initial exploration
-                                                "expansion_status": "active",
-                                                "last_evaluated_at": now_ts,
-                                            }
-                                            
-                                            # Check if we can auto-activate this expansion topic
-                                            # If at limit, create as inactive so user can manually choose
-                                            limit_check = self.research_manager.check_active_topics_limit(user_id, enabling_new=True)
-                                            enable_research = limit_check.get("allowed", False)
-                                            
-                                            if not enable_research:
-                                                logger.info(
-                                                    f"🔬 Creating expansion '{cand.name}' as inactive (limit reached: {limit_check.get('current_count')}/{limit_check.get('limit')})"
-                                                )
-                                            
-                                            res = self.research_manager.add_custom_topic(
-                                                user_id=user_id,
-                                                topic_name=cand.name,
-                                                description=desc,
-                                                confidence_score=0.8,
-                                                enable_research=enable_research,
-                                                extra=extra_meta,
-                                            )
-                                            if res and res.get('success'):
-                                                topic_obj = res.get('topic', {})
-                                                created_expansions.append({
-                                                    "topic": topic_obj,
-                                                    "candidate": cand,
-                                                })
-                                                sim_txt = (
-                                                    f"{cand.similarity:.2f}" if isinstance(cand.similarity, (int, float)) else "n/a"
-                                                )
-                                                status_txt = "active" if enable_research else "inactive (awaiting activation)"
-                                                logger.info(
-                                                    f"🔬 Created expansion: {cand.name} ({status_txt}, source={cand.source}, sim={sim_txt}, depth={child_depth})"
-                                                )
-                                            else:
-                                                error_msg = res.get('error', 'unknown error') if res else 'no response'
-                                                logger.debug(
-                                                    f"🔬 Skipping expansion '{cand.name}' - {error_msg}"
-                                                )
-                            
-
-                            # Launch expansion research tasks (bounded by semaphore)
-                            # Only schedule research for expansions that were activated
-                            active_expansions = [
-                                item for item in created_expansions 
-                                if item["topic"].get("is_active_research", False)
-                            ]
-                            inactive_expansions = [
-                                item for item in created_expansions 
-                                if not item["topic"].get("is_active_research", False)
-                            ]
-                            
-                            logger.info(
-                                "🔬 Prepared %d research task(s) for user %s on '%s' (root=1, active_expansions=%d, inactive_expansions=%d)",
-                                1 + len(active_expansions), user_id, root_name, len(active_expansions), len(inactive_expansions),
-                            )
-                            
-                            if inactive_expansions:
-                                inactive_names = [item["topic"].get("topic_name") for item in inactive_expansions]
-                                logger.info(
-                                    f"🔬 Created {len(inactive_expansions)} inactive expansion(s) awaiting manual activation: {', '.join(inactive_names)}"
-                                )
-                            
-                            for item in active_expansions:
-                                exp_topic = item["topic"]
-                                async def _run_expansion(t=exp_topic) -> Optional[Dict[str, Any]]:
-                                    async with self._expansion_semaphore:
-                                        return await self._research_topic_with_langgraph(user_id, t)
-                                tasks.append(asyncio.create_task(_run_expansion()))
-
-                            results = await asyncio.gather(*tasks, return_exceptions=True)
-                            logger.info("🔬 Executed %d research task(s) for user %s on '%s'", len(results), user_id, root_name)
-
-                            for res in results:
-                                if isinstance(res, Exception):
-                                    logger.error(f"🔬 Error in research task: {res}")
-                                    continue
+                            # Run root research immediately
+                            root_result = await self._research_topic_with_langgraph(user_id, topic)
+                            if root_result:
                                 total_topics_researched += 1
-                                if res and res.get("stored", False):
+                                if root_result.get("stored", False):
                                     total_findings_stored += 1
-                                if res and res.get("quality_score"):
-                                    quality_scores.append(res.get("quality_score"))
+                                if root_result.get("quality_score"):
+                                    quality_scores.append(root_result.get("quality_score"))
+
+                            # Process expansions via reusable helper
+                            try:
+                                child_runs = await process_expansions_for_root(user_id, topic, self.research_manager)
+                                if child_runs:
+                                    logger.info("🔬 Executed %d expansion child research task(s) for user %s on '%s'", len(child_runs), user_id, root_name)
+                                    for cr in child_runs:
+                                        cres = cr.get("result") or {}
+                                        total_topics_researched += 1
+                                        if cres.get("stored", False):
+                                            total_findings_stored += 1
+                                        if cres.get("quality_score"):
+                                            quality_scores.append(cres.get("quality_score"))
+                            except Exception as ex:
+                                logger.debug(f"Expansion processing failed for '{root_name}': {ex}")
 
                             # Small delay between topics to avoid overwhelming APIs
                             await asyncio.sleep(config.RESEARCH_TOPIC_DELAY)
@@ -847,3 +694,86 @@ async def run_langgraph_research(user_id: str, topic: Dict[str, Any]) -> Optiona
             exc_info=True,
         )
         return {"success": False, "error": str(e), "stored": False}
+
+
+# Reusable helper to generate and process expansions for a root topic
+async def process_expansions_for_root(
+    user_id: str,
+    root_topic: Dict[str, Any],
+    research_manager: ResearchManager,
+) -> List[Dict[str, Any]]:
+    """Generate expansion candidates for a root topic, create child topics
+    respecting breadth limits, and research active children.
+
+    Returns a list of {"topic": child_topic_dict, "result": research_result} for
+    each researched active child. This helper does not perform DB writes for
+    last_researched or dual-write findings; callers can persist as needed.
+    """
+    results: List[Dict[str, Any]] = []
+    try:
+        # Initialize TopicExpansionService similar to engine init
+        try:
+            from dependencies import zep_manager as _zep_manager_singleton  # type: ignore
+            topic_expansion_service = TopicExpansionService(_zep_manager_singleton, research_manager)
+        except Exception:
+            topic_expansion_service = TopicExpansionService(None, research_manager)  # type: ignore[arg-type]
+
+        # Generate candidates
+        candidates = await topic_expansion_service.generate_candidates(user_id, root_topic)
+        if not candidates:
+            return results
+
+        k = min(getattr(config, 'EXPLORATION_PER_ROOT_MAX', 2), len(candidates))
+        selected = candidates[:k]
+        active_children: List[Dict[str, Any]] = []
+
+        for cand in selected:
+            # Breadth control: allow activation only if within limits
+            limit_check = research_manager.check_active_topics_limit(user_id, enabling_new=True)
+            enable_research = bool(limit_check.get("allowed", False))
+
+            # Build child metadata
+            parent_depth = int(root_topic.get('expansion_depth', 0) or 0)
+            child_depth = min(parent_depth + 1, getattr(config, 'EXPANSION_MAX_DEPTH', 2))
+            desc = getattr(cand, 'description', None) or (
+                f"Research into {cand.name.lower()} and its relationship to {root_topic.get('topic_name','').lower()}"
+            )
+            extra_meta = {
+                "is_expansion": True,
+                "origin": {
+                    "type": "expansion",
+                    "parent_topic": root_topic.get('topic_name'),
+                    "method": getattr(cand, 'source', None),
+                    "similarity": getattr(cand, 'similarity', None),
+                    "rationale": getattr(cand, 'rationale', None),
+                },
+                "expansion_depth": child_depth,
+                "child_expansion_enabled": True,
+                "expansion_status": "active" if enable_research else "inactive",
+                "last_evaluated_at": time.time(),
+            }
+
+            res = research_manager.add_custom_topic(
+                user_id=user_id,
+                topic_name=cand.name,
+                description=desc,
+                confidence_score=0.8,
+                enable_research=enable_research,
+                extra=extra_meta,
+            )
+            if res and res.get('success') and res.get('topic', {}).get('is_active_research', False):
+                active_children.append(res['topic'])
+
+        # Research active children immediately
+        for child in active_children:
+            try:
+                child_result = await run_langgraph_research(user_id, child)
+                results.append({"topic": child, "result": child_result})
+            except Exception as e:
+                logger.error(f"Error researching expansion child {child.get('topic_name')}: {e}")
+                continue
+
+        return results
+    except Exception as e:
+        logger.debug(f"process_expansions_for_root failed: {e}")
+        return results

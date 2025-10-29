@@ -9,7 +9,8 @@ from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import update, func
+from sqlalchemy import update, func, select
+import sqlalchemy as sa
 from services.logging_config import get_logger
 from database.motivation_repository import MotivationRepository
 from storage.profile_manager import ProfileManager
@@ -177,14 +178,14 @@ class MotivationSystem:
 
             # Build a CTE that aggregates findings per user/topic
             findings_agg = (
-                self.session.query(
+                select(
                     ResearchFinding.user_id.label('user_id'),
                     ResearchFinding.topic_name.label('topic_name'),
-                    func.avg(func.cast(ResearchFinding.read, sa.Float)).label('engagement_reads'),
+                    func.avg(func.cast(ResearchFinding.read, sa.Integer)).label('engagement_reads'),
                     func.avg(ResearchFinding.quality_score).label('avg_quality'),
                     func.sum(func.cast(ResearchFinding.bookmarked, sa.Integer)).label('bookmarks'),
                     func.sum(func.cast(ResearchFinding.integrated, sa.Integer)).label('integrations'),
-                    func.count().label('total')
+                    func.count().label('total'),
                 )
                 .group_by(ResearchFinding.user_id, ResearchFinding.topic_name)
                 .cte('findings_agg')
@@ -232,6 +233,10 @@ class MotivationSystem:
             logger.debug(f"🎯 Updated motivation scores for {updated_count} topics")
             
         except Exception as e:
+            try:
+                await self.session.rollback()
+            except Exception:
+                pass
             logger.error(f"Error in update_scores: {str(e)}", exc_info=True)
 
     async def check_for_research_needed(self) -> bool:
@@ -463,6 +468,54 @@ class MotivationSystem:
                                     )
                             except Exception as e:
                                 logger.debug(f"Dual-write finding failed for {topic_name}: {e}")
+
+                            # --- Topic expansion wiring ---
+                            try:
+                                from services.autonomous_research_engine import process_expansions_for_root
+                                child_runs = await process_expansions_for_root(user_id, topic_data, self.research_manager)
+                                if child_runs:
+                                    for cr in child_runs:
+                                        child = cr.get("topic", {})
+                                        child_res = cr.get("result", {})
+                                        child_name = child.get('topic_name')
+                                        if not child_name:
+                                            continue
+                                        logger.info(f"🎯 Researched expansion topic: {child_name} for user {user_id}")
+                                        total_topics_researched += 1
+                                        if child_res and child_res.get("stored", False):
+                                            total_findings_stored += 1
+                                        if child_res and child_res.get("quality_score"):
+                                            quality_scores.append(child_res.get("quality_score"))
+
+                                        # Update last_researched for child
+                                        await self.db_service.create_or_update_topic_score(
+                                            user_id=user_uuid,
+                                            topic_name=child_name,
+                                            last_researched=time.time()
+                                        )
+
+                                        # Dual-write for child
+                                        try:
+                                            storage_results = child_res if child_res else {}
+                                            if storage_results.get("stored"):
+                                                finding_id = storage_results.get("finding_id")
+                                                quality = storage_results.get("quality_score")
+                                                self.session.add(
+                                                    ResearchFinding(
+                                                        user_id=user_uuid,
+                                                        topic_name=child_name,
+                                                        finding_id=finding_id,
+                                                        read=False,
+                                                        bookmarked=False,
+                                                        integrated=False,
+                                                        research_time=time.time(),
+                                                        quality_score=quality,
+                                                    )
+                                                )
+                                        except Exception as ee:
+                                            logger.debug(f"Dual-write finding failed for child {child_name}: {ee}")
+                            except Exception as ex:
+                                logger.debug(f"Expansion wiring failed for {topic_name}: {ex}")
                             
                             # Small delay between topics
                             await asyncio.sleep(config.RESEARCH_TOPIC_DELAY)
