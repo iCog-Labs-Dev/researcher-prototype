@@ -6,7 +6,7 @@ from typing import List, Optional, Dict
 
 class QueryVaguenessAnalysis(BaseModel):
     """Structured output for query analysis."""
-    is_vague: bool = Field(description="True if the query is vague or ambiguous")
+    query_clarity: str = Field(description="Query clarity classification: Broad, Ambiguous, Vague, Clear")
 
 class MultiSourceAnalysis(BaseModel):
     """Structured output for multi-source search analysis."""

@@ -47,14 +47,14 @@ def create_chat_graph():
         setup_tracing()
 
     def clarification_router(state:ChatState) -> str:
-        """Route to clarifying node if query is vague, otherwise to multi-source analyzer."""
-        vagueness = state["is_vague"]
-        if vagueness is True:
-            logger.info("⚡ Flow: Routing to Clarifying due to vague query")
-            return "clarifying_node"
-        else:
+        """Route to clarifying node if query is not Clear, otherwise to multi-source analyzer."""
+        query_clarity = state["query_clarity"]
+        if query_clarity == "Clear":
             logger.info("⚡ Flow: Routing to Multi-Source Analyzer for clear query")
             return "multi_source_analyzer"
+        else:
+            logger.info("⚡ Flow: Routing to Clarifying node due to vague/ambiguous query")
+            return "clarifying_node"
     
     # Define the intent router function
     def intent_router(state: ChatState) -> str:

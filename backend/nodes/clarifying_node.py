@@ -10,7 +10,9 @@ from nodes.base import (
     HumanMessage,
     AIMessage,
     SystemMessage,
-    CLARIFICATION_PROMPT
+    VAGUENESS_CLARIFICATION_PROMPT,
+    DISAMBIGUIATION_PROMPT,
+    SCOPE_NARROWING_PROMPT
 )
 from utils import get_last_user_message
 
@@ -42,8 +44,19 @@ async def clarifying_node(state: ChatState) -> ChatState:
             logger.debug("❓ Clarification Node: No memory context available")
 
         # Create system message with clarification instructions
+
+        query_clarity = state["query_clarity"]
+
+        prompt_dict = {
+            "Vague": VAGUENESS_CLARIFICATION_PROMPT,
+            "Broad": SCOPE_NARROWING_PROMPT,
+            "Ambiguous": DISAMBIGUIATION_PROMPT
+        }
+
+        mapped_prompt = prompt_dict[query_clarity]
+
         system_message = SystemMessage(
-            content=CLARIFICATION_PROMPT.format(
+            content=mapped_prompt.format(
                 memory_context_section=memory_context_section,
                 last_message=last_message)
             )

@@ -30,7 +30,9 @@ from prompts import (
     # Query vagueness analysis prompts
     QUERY_VAGUENESS_ANALYSIS_PROMPT,
     # Clarification prompts
-    CLARIFICATION_PROMPT,
+    DISAMBIGUIATION_PROMPT,
+    SCOPE_NARROWING_PROMPT,
+    VAGUENESS_CLARIFICATION_PROMPT,
     # Multi-source analyzer prompts
     MULTI_SOURCE_SYSTEM_PROMPT,
     # Search prompts
@@ -71,7 +73,7 @@ class ChatState(TypedDict):
     """Type definition for the chat state that flows through the graph."""
 
     messages: Annotated[List[BaseMessage], "The messages in the conversation using LangChain core message types"]
-    is_vague: Annotated[Optional[bool], "Indicates if the user's query is clear or vague"]
+    query_clarity: Annotated[Optional[str], "Indicates if the user's query is clear or vague"]
     model: Annotated[str, "The model to use for the conversation"]
     temperature: Annotated[float, "The temperature to use for generation"]
     max_tokens: Annotated[int, "The maximum number of tokens to generate"]

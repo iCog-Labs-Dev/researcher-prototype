@@ -68,20 +68,26 @@ async def query_vagueness_analyzer_node(state: ChatState) -> ChatState:
         analysis_result = structured_analyzer.invoke(analyzer_messages)
 
         # Extract results
-        query_is_vague = analysis_result.is_vague
-
-        if query_is_vague:
-            state["is_vague"] = True
-            logger.info("❓ Query Analysis: Query is vague or ambiguous, heading to clarification")
-
-        else:
-            state["is_vague"] = False
+        query_clarity = analysis_result.query_clarity
+        state["query_clarity"] = query_clarity
+        if query_clarity == "Clear":
             logger.info("❓ Query Analysis: Query is clear and specific, skipping clarification")
 
+        elif query_clarity == "Broad":
+                        logger.info("❓ Query Analysis: Query is Broad, heading to clarification")
+
+        elif query_clarity == "Vague":
+                logger.info("❓ Query Analysis: Query is Vague, heading to clarification")
+
+        elif query_clarity == "Ambiguous":
+                        logger.info("❓ Query Analysis: Query is Ambiguous, heading to clarification")
+        else:
+            logger.info("❓ Query Analysis: Query is vague or ambiguous, heading to clarification")
+
     except Exception as e:
-        # Error handling with fallback to is_vague = True
+        # Error handling with fallback to query_clarity = True
         logger.error(f"Error in query_vagueness_analyzer_node: {str(e)}")
-        state["is_vague"] = True
+        state["query_clarity"] = "Clear"
         logger.info("❓ Query Analysis: Exception occurred, defaulting to chat")
     
     return state
