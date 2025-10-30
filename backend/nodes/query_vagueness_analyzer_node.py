@@ -73,9 +73,6 @@ async def query_vagueness_analyzer_node(state: ChatState) -> ChatState:
         if query_clarity == "Clear":
             logger.info("❓ Query Analysis: Query is clear and specific, skipping clarification")
 
-        elif query_clarity == "Broad":
-                        logger.info("❓ Query Analysis: Query is Broad, heading to clarification")
-
         elif query_clarity == "Vague":
                 logger.info("❓ Query Analysis: Query is Vague, heading to clarification")
 

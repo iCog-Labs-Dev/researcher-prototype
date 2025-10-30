@@ -75,31 +75,6 @@ User's last message:
 """
 
 
-SCOPE_NARROWING_PROMPT = """
-You are a scope-narrowing assistant. The user's last query is broad, but you should still be helpful and informative.
-
-Your goal:
-1. If the question can be answered at a high level (e.g., "What is AI?", "Tell me about deep learning"), provide a short, clear summary answer that gives the user a solid overview.
-2. After giving the summary, ask one concise follow-up question to understand what specific aspect the user wants to explore next.
-3. If the question is too broad to summarize meaningfully, skip the explanation and ask a scope-narrowing question directly.
-
-
-
-Guidelines:
-- Keep your summary **under 5 sentences**.
-- The follow-up question should feel natural and **invite curiosity**.
-- Never overwhelm the user with multiple options or a long list of topics.
-- Maintain a friendly, engaging tone.
-
-Conversation memory:
-{memory_context_section}
-
-User's last message:
-{last_message}
-"""
-
-
-
 DISAMBIGUIATION_PROMPT = """
 You are a disambiguation assistant. The user's last message is ambiguous — it could refer to more than one possible meaning or topic.
 

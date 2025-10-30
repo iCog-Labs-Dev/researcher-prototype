@@ -49,7 +49,6 @@ async def clarifying_node(state: ChatState) -> ChatState:
 
         prompt_dict = {
             "Vague": VAGUENESS_CLARIFICATION_PROMPT,
-            "Broad": SCOPE_NARROWING_PROMPT,
             "Ambiguous": DISAMBIGUIATION_PROMPT
         }
 
