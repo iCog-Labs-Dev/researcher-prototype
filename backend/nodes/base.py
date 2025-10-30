@@ -40,6 +40,9 @@ from prompts import (
     RESPONSE_RENDERER_SYSTEM_PROMPT,
     # Topic extractor prompts
     TOPIC_EXTRACTOR_SYSTEM_PROMPT,
+    # Query disambiguation prompts
+    QUERY_DISAMBIGUATION_SYSTEM_PROMPT,
+    CLARIFYING_QUESTION_GENERATION_PROMPT,
 )
 
 # Internal imports - LLM models
@@ -79,3 +82,10 @@ class ChatState(TypedDict):
     memory_context: Annotated[Optional[str], "Memory context retrieved from Zep"]
     intent: Annotated[Optional[str], "The routing intent: chat, search, or analysis"]
     selected_sources: Annotated[Optional[List[str]], "Selected sources for search intent"]
+    
+    # Query disambiguation fields
+    disambiguation_analysis: Annotated[Optional[Dict[str, Any]], "Analysis of query vagueness"]
+    clarifying_questions: Annotated[Optional[List[Dict[str, Any]]], "Generated clarifying questions"]
+    query_refinement_needed: Annotated[Optional[bool], "Whether query needs refinement"]
+    disambiguation_complete: Annotated[Optional[bool], "Whether disambiguation is complete"]
+    suggested_refinements: Annotated[Optional[List[str]], "Suggested query refinements"]
