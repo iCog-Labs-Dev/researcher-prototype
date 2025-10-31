@@ -363,7 +363,10 @@ async def test_conduct_research_cycle_processes_motivated_topics(motivation_syst
     # Mock database service
     with patch.object(motivation_system.db_service, 'get_topics_needing_research', return_value=[mock_topic_score]):
         with patch.object(motivation_system.research_manager, 'get_topic_by_name', return_value={"topic_name": "AI Research"}):
-            with patch('services.autonomous_research_engine.run_langgraph_research', new=AsyncMock(return_value={"success": True, "stored": True, "quality_score": 0.8})):
+            with patch('services.autonomous_research_engine.get_autonomous_researcher') as gar:
+                instance = MagicMock()
+                instance.run_langgraph_research = AsyncMock(return_value={"success": True, "stored": True, "quality_score": 0.8})
+                gar.return_value = instance
                 with patch.object(motivation_system.db_service, 'create_or_update_topic_score'):
                     result = await motivation_system._conduct_research_cycle()
                     
@@ -381,7 +384,7 @@ async def test_research_topic_with_langgraph_invokes_research_workflow():
         "last_researched": 0
     }
 
-    # Call through the helper (Motivation delegates to this in production)
+    # Call the instance helper
     with patch('services.autonomous_research_engine.research_graph') as mock_graph:
         mock_graph.ainvoke = AsyncMock(return_value={
             "module_results": {
@@ -394,8 +397,12 @@ async def test_research_topic_with_langgraph_invokes_research_workflow():
                 }
             }
         })
-        from services.autonomous_research_engine import run_langgraph_research
-        result = await run_langgraph_research(user_id, topic)
+        from services.autonomous_research_engine import initialize_autonomous_researcher
+        pm = MagicMock()
+        pm.storage = MagicMock()
+        rm = MagicMock()
+        researcher = initialize_autonomous_researcher(pm, rm)
+        result = await researcher.run_langgraph_research(user_id, topic)
         assert result["success"] is True
         assert result["stored"] is True
         assert result["quality_score"] >= 0.7
