@@ -430,9 +430,13 @@ class MotivationSystem:
                             if not topic_data:
                                 continue
                             
-                            # Research the topic via research engine helper
-                            from services.autonomous_research_engine import run_langgraph_research
-                            result = await run_langgraph_research(user_id, topic_data)
+                            # Research the topic via research engine instance
+                            from services.autonomous_research_engine import get_autonomous_researcher
+                            researcher = get_autonomous_researcher()
+                            if not researcher:
+                                logger.warning("Autonomous researcher not initialized; skipping research")
+                                continue
+                            result = await researcher.run_langgraph_research(user_id, topic_data)
                             
                             total_topics_researched += 1
                             if result and result.get("stored", False):
@@ -471,8 +475,13 @@ class MotivationSystem:
 
                             # --- Topic expansion wiring ---
                             try:
-                                from services.autonomous_research_engine import process_expansions_for_root
-                                child_runs = await process_expansions_for_root(user_id, topic_data, self.research_manager)
+                                from services.autonomous_research_engine import get_autonomous_researcher
+                                researcher = get_autonomous_researcher()
+                                if not researcher:
+                                    logger.warning("Autonomous researcher not initialized; skipping expansions")
+                                    child_runs = []
+                                else:
+                                    child_runs = await researcher.process_expansions_for_root(user_id, topic_data)
                                 if child_runs:
                                     for cr in child_runs:
                                         child = cr.get("topic", {})
