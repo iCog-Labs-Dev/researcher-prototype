@@ -11,3 +11,8 @@ class TokenOut(BaseModel):
     """Output body for auth."""
     access_token: str
     token_type: str = "bearer"
+
+
+class GoogleLoginIn(BaseModel):
+    """Input body for Google login."""
+    id_token: str
