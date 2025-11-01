@@ -1,24 +1,126 @@
 from __future__ import annotations
 import uuid
-from typing import Optional
+from typing import Optional, Dict, Any
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import IntegrityError
+from google.oauth2 import id_token
+from google.auth.transport import requests as grequests
 
-from exceptions import CommonError, AlreadyExist
+from exceptions import (
+    CommonError,
+    AlreadyExist,
+    AuthError,
+)
 from utils.password import hash_password, verify_password
 from utils.helpers import normalize_provider_user_id, generate_display_name_from_user_id
 from models.user import User
 from models.identity import Identity
+from config import GOOGLE_CLIENT_ID
+
 
 PROVIDER_LOCAL  = "local"
+PROVIDER_GOOGLE  = "google"
 
 
 class AuthService:
     def __init__(self):
         pass
 
-    async def get_identity(
+    async def register_local(
+        self,
+        session: AsyncSession,
+        email: str,
+        password: str,
+    ) -> User:
+        if await self._get_identity(session, PROVIDER_LOCAL, email):
+            raise AlreadyExist("User with this email already exists")
+
+        user = User()
+        session.add(user)
+        await session.flush()
+
+        user.meta_data = {
+            "display_name": generate_display_name_from_user_id(str(user.id)),
+            "email": email,
+        }
+
+        await self._link_identity(
+            session, user.id, PROVIDER_LOCAL, email, password_plain=password
+        )
+
+        await session.commit()
+
+        return user
+
+    async def login_local(
+        self,
+        session: AsyncSession,
+        email: str,
+        password: str,
+    ) -> User:
+        identity = await self._get_identity(session, PROVIDER_LOCAL, email)
+        if not identity or not identity.password_hash:
+            raise AuthError("Invalid credentials")
+        if not verify_password(password, identity.password_hash):
+            raise AuthError("Invalid credentials")
+
+        user = await session.get(User, identity.user_id)
+        if not user:
+            raise AuthError("Invalid credentials")
+
+        return user
+
+    async def login_google(
+        self,
+        session: AsyncSession,
+        raw_id_token: str,
+    ) -> User:
+        google_info = await self._verify_google_id_token(raw_id_token)
+
+        google_sub = google_info.get("sub")
+        google_email = google_info.get("email")
+        is_verified = google_info.get("email_verified")
+        google_name = google_info.get("name")
+
+        if not is_verified:
+            raise AuthError("Google account email is not verified")
+
+        identity = await self._get_identity(session, PROVIDER_GOOGLE, google_sub)
+        if identity:
+            user = await session.get(User, identity.user_id)
+
+            return user
+
+        local_identity = await self._get_identity(session, PROVIDER_LOCAL, google_email)
+        if local_identity:
+            user = await session.get(User, local_identity.user_id)
+
+            await self._link_identity(
+                session, user.id, PROVIDER_GOOGLE, google_sub
+            )
+
+            await session.commit()
+
+            return user
+
+        user = User()
+        session.add(user)
+        await session.flush()
+
+        user.meta_data = {
+            "display_name": google_name if google_name else generate_display_name_from_user_id(str(user.id)),
+            "email": google_email,
+        }
+
+        await self._link_identity(
+            session, user.id, PROVIDER_GOOGLE, google_sub
+        )
+
+        await session.commit()
+
+        return user
+
+    async def _get_identity(
         self,
         session: AsyncSession,
         provider: str,
@@ -33,7 +135,7 @@ class AuthService:
 
         return res.scalar_one_or_none()
 
-    async def link_identity(
+    async def _link_identity(
         self,
         session: AsyncSession,
         user_id: uuid.UUID,
@@ -60,52 +162,29 @@ class AuthService:
         )
         session.add(identity)
 
-        try:
-            await session.commit()
-        except IntegrityError:
-            await session.rollback()
-            raise AlreadyExist("This identity is already linked")
-        except Exception:
-            await session.rollback()
-            raise
-
         return identity
 
-    async def register_local_user(
+    async def _verify_google_id_token(
         self,
-        session: AsyncSession,
-        email: str,
-        password: str,
-    ) -> User:
-        if await self.get_identity(session, PROVIDER_LOCAL, email):
-            raise AlreadyExist("User with this email already exists")
+        raw_id_token: str
+    ) -> Dict[str, Any]:
+        try:
+            request = grequests.Request()
+            payload = id_token.verify_oauth2_token(raw_id_token, request, GOOGLE_CLIENT_ID)
+        except Exception as e:
+            raise AuthError("Invalid Google token") from e
 
-        user = User()
-        session.add(user)
-        await session.flush()
+        sub = payload.get("sub")
+        email = payload.get("email", "").lower().strip()
+        email_verified = bool(payload.get("email_verified", False))
+        name = payload.get("name", "").strip()
 
-        user.meta_data = {
-            "display_name": generate_display_name_from_user_id(str(user.id)),
+        if not sub or not email:
+            raise AuthError("Google token missing required claims")
+
+        return {
+            "sub": sub,
             "email": email,
+            "email_verified": email_verified,
+            "name": name,
         }
-
-        await self.link_identity(
-            session, user.id, PROVIDER_LOCAL, email, password_plain=password
-        )
-
-        return user
-
-    async def authenticate_local_user(
-        self,
-        session: AsyncSession,
-        email: str,
-        password: str,
-    ) -> Optional[User]:
-        identity = await self.get_identity(session, PROVIDER_LOCAL, email)
-        if not identity or not identity.password_hash:
-            return None
-        if not verify_password(password, identity.password_hash):
-            return None
-
-        user = await session.get(User, identity.user_id)
-        return user

@@ -1,7 +1,7 @@
 import os
 from typing import Optional, Annotated
 from uuid import UUID
-from fastapi import Header, Depends
+from fastapi import Request, Header, Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -109,10 +109,9 @@ def get_or_create_user_id(user_id: Optional[str] = Header(None)) -> str:
 ensure_guest_user_exists()
 
 
-async def get_current_user_id(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(HTTPBearer())]
-) -> UUID:
-    token = credentials.credentials
+def extract_user_id_from_raw_token(token: str) -> UUID:
+    if not token:
+        raise AuthError("Missing token")
 
     try:
         payload = decode_jwt_token(token)
@@ -123,15 +122,43 @@ async def get_current_user_id(
     if not user_id:
         raise AuthError("Invalid token payload")
 
-    return UUID(user_id)
+    try:
+        return UUID(user_id)
+    except ValueError:
+        raise AuthError("Invalid user id format in token")
 
-async def get_current_admin_id(
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
-    session: Annotated[AsyncSession, Depends(get_session)],
+async def get_user_id_from_token(
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(HTTPBearer())]
 ) -> UUID:
+    return extract_user_id_from_raw_token(credentials.credentials)
+
+async def inject_user_id(
+    request: Request,
+    user_id: Annotated[UUID, Depends(get_user_id_from_token)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    service = UserService()
+    await service.get_user(session, user_id)
+
+    request.state.user_id = user_id
+
+async def inject_admin_id(
+    request: Request,
+    user_id: Annotated[UUID, Depends(get_user_id_from_token)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
     service = UserService()
     user = await service.get_user(session, user_id)
+
     if user.role != "admin":
         raise Forbidden("Admin role required")
 
-    return user_id
+    request.state.user_id = user_id
+
+async def resolve_ws_user(token: str, session: AsyncSession) -> str:
+    user_id = extract_user_id_from_raw_token(token)
+
+    service = UserService()
+    await service.get_user(session, user_id)
+
+    return str(user_id)
