@@ -44,8 +44,7 @@ from services.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-@pytest.mark.skip(reason="Manual test script - run directly with: python tests/integration/test_zep_manual.py --user <user_id> --query <query>")
-async def test_zep_search(
+async def manual_zep_search(
     user_id: str,
     query: str,
     scope: str = "both",
@@ -371,8 +370,7 @@ async def test_zep_search(
             traceback.print_exc()
 
 
-@pytest.mark.skip(reason="Manual test script - run directly with: python tests/integration/test_zep_manual.py --user <user_id> --store-test-conversation")
-async def test_conversation_storage(user_id: str, verbose: bool = False) -> None:
+async def manual_conversation_storage(user_id: str, verbose: bool = False) -> None:
     """Test storing a conversation and checking if it creates graph data."""
     
     print("=" * 80)
@@ -424,6 +422,16 @@ async def test_conversation_storage(user_id: str, verbose: bool = False) -> None
         if verbose:
             import traceback
             traceback.print_exc()
+
+
+def test_zep_disabled_mode_behaves_safely():
+    """When Zep is disabled, manager should report disabled and not throw."""
+    zm = ZepManager()
+    if not zm.is_enabled():
+        assert zm.is_enabled() is False
+    else:
+        # If enabled in env, at least the client object should exist
+        assert hasattr(zm, "client")
 
 
 async def list_all_user_data(user_id: str, verbose: bool = False) -> None:

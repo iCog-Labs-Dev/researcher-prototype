@@ -8,7 +8,6 @@ A full-stack prototype that pairs a conversational AI with an autonomous backgro
 * **Privacy-preserving AI personalization system**
 * Knowledge Graph visualization (powered by Zep)
 * JWT-secured admin console & prompt editor
-* Local JSON storage – no external DB needed
 
 ## Quick Start (dev)
 

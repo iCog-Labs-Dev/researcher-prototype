@@ -48,28 +48,27 @@ Once the engine is active you can:
 
 ### What motivates the engine?
 
-The system models four internal "drives":
+The system uses per-topic motivation scoring to prioritize research:
 
-| Drive | Increases | Decreases |
-|-------|-----------|-----------|
-| **Boredom**      | Time since last research | Each research run |
-| **Curiosity**    | User activity (chatting) | Gradual decay |
-| **Tiredness**    | Each research run | Time / rest |
-| **Satisfaction** | High-quality findings | Time / rest |
+| Factor | How It's Calculated | Impact |
+|--------|-------------------|--------|
+| **Staleness** | Time since last research × urgency coefficient | Higher for older topics |
+| **Engagement** | User interaction with findings (reads, bookmarks) | Higher for engaged topics |
+| **Quality** | Research success rate and finding quality | Higher for successful topics |
 
-Research is launched when **boredom + curiosity ≥ threshold** (default 2.0).
+Research is launched when **topic_score ≥ threshold** (default 0.5).
 
-You can inspect and tweak these in real time:
+You can inspect and manage topics:
 
-1. **💡 View Drives** – shows current values.
-2. **⏰ Research Timing** – open presets or fine-tune parameters.
+1. **💡 View Priorities** – shows current topic scores and reasons.
+2. **⏰ Research Timing** – configure topic scoring parameters.
 
 Key parameters (Engine Settings modal):
 
-* **Threshold** – motivation required to start a run (lower = more frequent).
-* **Boredom rate** – speed boredom rises (per second).
-* **Curiosity decay** – how fast curiosity fades when idle.
-* **Tiredness & Satisfaction decay** – recovery rates after research.
+* **Topic Threshold** – minimum score for research (lower = more topics).
+* **Engagement Weight** – how much user interaction matters.
+* **Quality Weight** – how much research success matters.
+* **Staleness Scale** – how quickly topics become urgent.
 
 Preset buttons (*Balanced*, *Conservative*, *Very Patient*) apply sensible combos.
 

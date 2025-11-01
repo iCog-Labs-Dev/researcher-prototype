@@ -17,25 +17,20 @@ def sample_state():
     }
 
 @pytest.mark.integration
-@pytest.mark.skipif(not os.getenv("OPENAI_API_KEY"), 
-                   reason="No OpenAI API key found")
-def test_openai_integration(chat_graph):
-    """Test that the chat graph works with the real OpenAI API."""
-    # Create a test state
+@pytest.mark.skipif(not os.getenv("OPENAI_API_KEY"), reason="No OpenAI API key found")
+def test_openai_integration():
+    """Test that the chat graph works with the real OpenAI API when key is available."""
+    graph = create_chat_graph()
     state = {
         "messages": [
             {"role": "user", "content": "Say 'This is a test' and nothing else"}
         ],
         "model": "gpt-4o-mini",
-        "temperature": 0.0,  # Use 0 for deterministic results
-        "max_tokens": 20
+        "temperature": 0.0,
+        "max_tokens": 20,
     }
-    
-    # Run the graph with the real API
-    result = chat_graph.invoke(state)
-    
-    # Check the result
+    result = graph.invoke(state)
+
     assert "messages" in result
     assert len(result["messages"]) == 2
     assert result["messages"][1]["role"] == "assistant"
-    print(f"API Response: {result['messages'][1]['content']}")

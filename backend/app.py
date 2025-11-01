@@ -96,6 +96,8 @@ from api.admin import router as admin_router
 from api.graph import router as graph_router
 from api.status import router as status_router
 from api.notifications import router as notifications_router
+from api.motivation import router as motivation_router
+from api.v2 import router as v2_router
 
 app.include_router(chat_router)
 app.include_router(users_router)
@@ -105,10 +107,8 @@ app.include_router(admin_router)
 app.include_router(graph_router)
 app.include_router(status_router)
 app.include_router(notifications_router)
-
-from api.v2 import router
-app.include_router(router)
-
+app.include_router(motivation_router)
+app.include_router(v2_router)
 
 @app.exception_handler(CommonError)
 async def common_error_handler(request: Request, e: CommonError):

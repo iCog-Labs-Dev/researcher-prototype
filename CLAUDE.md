@@ -71,14 +71,6 @@ cd frontend && npm start
 
 The intelligent motivation system can be fine-tuned via environment variables in `.env`:
 
-### Global Motivation Settings
-```env
-MOTIVATION_CHECK_INTERVAL=60        # Seconds between motivation checks
-MOTIVATION_THRESHOLD=2.0            # Global threshold for research activity
-MOTIVATION_BOREDOM_RATE=0.0005      # Rate at which boredom increases
-MOTIVATION_CURIOSITY_DECAY=0.0002   # Rate at which curiosity decreases
-```
-
 ### Per-Topic Motivation Settings  
 ```env
 TOPIC_MOTIVATION_THRESHOLD=0.5      # Minimum score for individual topic research
@@ -88,10 +80,10 @@ TOPIC_STALENESS_SCALE=0.0001       # Scale factor converting time to staleness p
 ```
 
 **How It Works:**
-1. **Global Gate**: System checks if overall motivation exceeds threshold (boredom, curiosity vs tiredness, satisfaction)
-2. **Topic Evaluation**: If motivated globally, evaluates each topic using: `staleness_pressure + (engagement_score * weight) + (quality_score * weight)`
-3. **Staleness Pressure**: `time_since_last_research * topic.staleness_coefficient * TOPIC_STALENESS_SCALE`
-4. **Research Priority**: Topics above `TOPIC_MOTIVATION_THRESHOLD` are prioritized by combined score
+1. **Topic Evaluation**: System evaluates each active topic using: `staleness_pressure + (engagement_score * weight) + (quality_score * weight)`
+2. **Staleness Pressure**: `time_since_last_research * topic.staleness_coefficient * TOPIC_STALENESS_SCALE`
+3. **Research Priority**: Topics above `TOPIC_MOTIVATION_THRESHOLD` are prioritized by combined score
+4. **Research Loop**: Motivation module owns the background research loop
 
 ## Code Conventions
 
@@ -137,10 +129,10 @@ TOPIC_STALENESS_SCALE=0.0001       # Scale factor converting time to staleness p
 
 - **Chat Pipeline**: LangGraph orchestration in `graph_builder.py`
 - **Research Engine**: Autonomous background research via `research_graph_builder.py`
-- **Intelligent Motivation System**: Two-tier hierarchical motivation with research findings engagement (`motivation.py`)
-  - **Tier 1**: Global motivation drives (boredom, curiosity, tiredness, satisfaction) gate overall research activity
-  - **Tier 2**: Among user-activated topics, prioritize by research findings interaction (heavily weighted)
+- **Intelligent Motivation System**: Per-topic motivation with research findings engagement (`motivation.py`)
+  - **Topic Prioritization**: Among user-activated topics, prioritize by research findings interaction (heavily weighted)
   - Research engagement scoring: % of findings read + recent reads bonus + volume bonus
+  - Research loop owned by Motivation module
   - LLM-assessed staleness coefficients (2.0=breaking news, 1.0=normal, 0.1=reference material)
   - Respects user intent: only researches topics explicitly marked for active research
 - **Knowledge Graph**: Zep-powered memory and visualization

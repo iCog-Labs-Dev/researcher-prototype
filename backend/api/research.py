@@ -388,6 +388,19 @@ async def clear_config_override():
     return {"success": True, "message": "Config override cleared"}
 
 
+# Back-compat aliases used by tests
+@router.get("/research/debug/config/override")
+async def get_config_override_alias():
+    return {"success": True, "override": _motivation_config_override}
+
+
+@router.delete("/research/debug/config/override")
+async def clear_config_override_alias():
+    global _motivation_config_override
+    _motivation_config_override = {}
+    return {"success": True, "message": "Cleared config override"}
+
+
 @router.get("/research/debug/motivation")
 async def get_motivation_status(request: Request):
     """Debug endpoint to check motivation system status."""

@@ -1,162 +1,333 @@
-"""Simple motivation system for the autonomous researcher."""
+"""
+Motivation System with database persistence and main research loop.
+"""
 
-from __future__ import annotations
-
-import logging
+import asyncio
 import time
-from dataclasses import dataclass
-from typing import List, Dict, Any, Optional
+import uuid
+from typing import List, Dict, Any, Optional, Union
+from datetime import datetime
 
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import update, func, select
+import sqlalchemy as sa
+from services.logging_config import get_logger
+from database.motivation_repository import MotivationRepository
+from storage.profile_manager import ProfileManager
+from storage.research_manager import ResearchManager
+from services.personalization_manager import PersonalizationManager
+from services.topic_expansion_service import TopicExpansionService
+from models.motivation import TopicScore
+from models.research_finding import ResearchFinding
 import config
 
-logger = logging.getLogger(__name__)
-
-
-@dataclass
-class DriveConfig:
-    boredom_rate: float = config.MOTIVATION_BOREDOM_RATE
-    curiosity_decay: float = config.MOTIVATION_CURIOSITY_DECAY
-    tiredness_decay: float = config.MOTIVATION_TIREDNESS_DECAY
-    satisfaction_decay: float = config.MOTIVATION_SATISFACTION_DECAY
-    threshold: float = config.MOTIVATION_THRESHOLD
-    topic_threshold: float = config.TOPIC_MOTIVATION_THRESHOLD
-    engagement_weight: float = config.TOPIC_ENGAGEMENT_WEIGHT
-    quality_weight: float = config.TOPIC_QUALITY_WEIGHT
-    staleness_scale: float = config.TOPIC_STALENESS_SCALE
+logger = get_logger(__name__)
 
 
 class MotivationSystem:
-    """Track motivation drives and decide when research should occur."""
+    """
+    Motivation system with database persistence and integrated research loop.
+    
+    Features:
+    - Database persistence for motivation state and topic scores
+    - Integrated main research loop
+    - Per-topic scoring with database updates
+    - Engagement-based motivation tracking
+    """
 
-    def __init__(self, drives: DriveConfig | None = None, personalization_manager=None) -> None:
-        self.drives = drives or DriveConfig()
+    def __init__(
+        self, 
+        session: AsyncSession,
+        profile_manager: ProfileManager,
+        research_manager: ResearchManager,
+        personalization_manager: Optional[PersonalizationManager] = None
+    ):
+        """Initialize the enhanced motivation system."""
+        self.session = session
+        self.db_service = MotivationRepository(session)
+        self.profile_manager = profile_manager
+        self.research_manager = research_manager
         self.personalization_manager = personalization_manager
-        self.boredom = 0.0
-        self.curiosity = 0.0
-        self.tiredness = 0.0
-        self.satisfaction = 0.0
-        self.last_tick = time.time()
-        logger.info(f"Motivation system initialized with threshold: {self.drives.threshold}, topic threshold: {self.drives.topic_threshold}")
-
-    def tick(self) -> None:
-        """Update drive levels based on time since last tick."""
-        now = time.time()
-        dt = now - self.last_tick
-        self.last_tick = now
-
-        old_boredom = self.boredom
-        old_curiosity = self.curiosity
-        old_tiredness = self.tiredness
-        old_satisfaction = self.satisfaction
-
-        self.boredom = min(1.0, self.boredom + dt * self.drives.boredom_rate)
-        self.curiosity = max(0.0, self.curiosity - dt * self.drives.curiosity_decay)
-        self.tiredness = max(0.0, self.tiredness - dt * self.drives.tiredness_decay)
-        self.satisfaction = max(0.0, self.satisfaction - dt * self.drives.satisfaction_decay)
         
-        # Log significant changes (> 0.1) or every 5 minutes
-        if (abs(self.boredom - old_boredom) > 0.1 or 
-            abs(self.curiosity - old_curiosity) > 0.1 or
-            abs(self.tiredness - old_tiredness) > 0.1 or
-            abs(self.satisfaction - old_satisfaction) > 0.1 or
-            dt > 300):  # 5 minutes
-            logger.debug(f"Drive update after {dt:.1f}s - Boredom: {self.boredom:.2f} (+{self.boredom-old_boredom:.2f}), "
-                        f"Curiosity: {self.curiosity:.2f} ({self.curiosity-old_curiosity:+.2f}), "
-                        f"Tiredness: {self.tiredness:.2f} ({self.tiredness-old_tiredness:+.2f}), "
-                        f"Satisfaction: {self.satisfaction:.2f} ({self.satisfaction-old_satisfaction:+.2f}), "
-                        f"Impetus: {self.impetus():.2f}")
-
-    def on_user_activity(self) -> None:
-        """Increase curiosity and reduce boredom when user interacts."""
-        old_curiosity = self.curiosity
-        old_boredom = self.boredom
+        # Research loop state
+        self.is_running = False
+        self.research_task = None
+        self.check_interval = config.MOTIVATION_CHECK_INTERVAL
         
-        self.curiosity = min(1.0, self.curiosity + 0.3)
-        self.boredom = max(0.0, self.boredom - 0.1)
+        # Research parameters
+        self.max_topics_per_user = config.RESEARCH_MAX_TOPICS_PER_USER
+        self.quality_threshold = config.RESEARCH_QUALITY_THRESHOLD
         
-        logger.info(f"User activity detected - Curiosity: {old_curiosity:.2f} → {self.curiosity:.2f}, "
-                   f"Boredom: {old_boredom:.2f} → {self.boredom:.2f}, "
-                   f"New impetus: {self.impetus():.2f}")
-
-    def on_research_completed(self, quality_score: float = 0.5) -> None:
-        """Update drives after research completes."""
-        old_tiredness = self.tiredness
-        old_satisfaction = self.satisfaction
-        old_curiosity = self.curiosity
-        old_boredom = self.boredom
-        
-        # Tiredness increase scales with quality (good research is less tiring)
-        tiredness_increase = 0.4 - (quality_score * 0.2)  # 0.4 for bad, 0.2 for excellent
-        self.tiredness = min(1.0, self.tiredness + tiredness_increase)
-        
-        # Satisfaction scales with quality
-        satisfaction_increase = quality_score * 0.8  # Up to 0.8 for excellent research
-        self.satisfaction = min(1.0, self.satisfaction + satisfaction_increase)
-        
-        # Curiosity reduction scales inversely with quality (good research satisfies more)
-        curiosity_reduction = 0.1 + (quality_score * 0.3)  # 0.1-0.4 based on quality
-        self.curiosity = max(0.0, self.curiosity - curiosity_reduction)
-        
-        # Boredom reduction is consistent (research always reduces boredom)
-        self.boredom = max(0.0, self.boredom - 0.4)
-        
-        logger.info(f"Research completed (quality: {quality_score:.2f}) - "
-                   f"Tiredness: {old_tiredness:.2f} → {self.tiredness:.2f} (+{self.tiredness-old_tiredness:.2f}), "
-                   f"Satisfaction: {old_satisfaction:.2f} → {self.satisfaction:.2f} (+{self.satisfaction-old_satisfaction:.2f}), "
-                   f"Curiosity: {old_curiosity:.2f} → {self.curiosity:.2f} ({self.curiosity-old_curiosity:+.2f}), "
-                   f"Boredom: {old_boredom:.2f} → {self.boredom:.2f} ({self.boredom-old_boredom:+.2f}), "
-                   f"New impetus: {self.impetus():.2f}")
-
-    def impetus(self) -> float:
-        """Compute the overall desire to research."""
-        return self.boredom + self.curiosity + 0.5 * self.satisfaction - self.tiredness
-
-    def should_research(self) -> bool:
-        """Return True if motivation threshold reached."""
-        current_impetus = self.impetus()
-        should_do_research = current_impetus >= self.drives.threshold
-        
-        if should_do_research:
-            logger.info(f"Research triggered! Impetus {current_impetus:.2f} >= threshold {self.drives.threshold:.2f} "
-                       f"(Boredom: {self.boredom:.2f}, Curiosity: {self.curiosity:.2f}, "
-                       f"Satisfaction: {self.satisfaction:.2f}, Tiredness: {self.tiredness:.2f})")
-        
-        return should_do_research
-
-    def _get_topic_engagement_score(self, user_id: str, topic_name: str) -> float:
-        """
-        Extract engagement score focusing heavily on research result interactions.
-        
-        Primary signal: How many research findings for this topic the user has actually read.
-        Secondary signals: General engagement analytics if available.
-        """
-        if not self.personalization_manager:
-            return 0.0
-            
+        # Initialize topic expansion service
         try:
-            engagement_score = 0.0
+            from dependencies import zep_manager as _zep_manager_singleton
+            self.topic_expansion_service = TopicExpansionService(_zep_manager_singleton, self.research_manager)
+        except Exception:
+            self.topic_expansion_service = TopicExpansionService(None, self.research_manager)
+        
+        # Concurrency control
+        self._expansion_semaphore = asyncio.Semaphore(max(1, config.EXPANSION_MAX_PARALLEL))
+        
+        # Configuration
+        self._config = None
+        
+        # Research graph decoupled; execution delegated to Research Engine
+        
+        logger.info("🎯 Motivation System initialized")
+
+    async def initialize(self) -> None:
+        """Initialize the motivation system with default configuration if needed."""
+        try:
+            # Get or create default configuration
+            self._config = await self.db_service.get_default_config()
+            if not self._config:
+                logger.info("Creating default motivation configuration...")
+                self._config = await self.db_service.create_default_config()
             
-            # PRIMARY SIGNAL: Research findings interaction (HEAVILY WEIGHTED)
-            research_findings_score = self._get_research_findings_engagement(user_id, topic_name)
-            engagement_score += research_findings_score * config.ENGAGEMENT_RESEARCH_WEIGHT
-            
-            # SECONDARY SIGNAL: General engagement analytics (if available)
-            analytics_score = self._get_analytics_engagement(user_id, topic_name)  
-            engagement_score += analytics_score * config.ENGAGEMENT_ANALYTICS_WEIGHT
-            
-            # Normalize to 0-1 range but allow research findings to dominate
-            return min(engagement_score / 3.0, 1.0)
+            logger.info(f"🎯 Motivation system initialized with config: {self._config.id}")
             
         except Exception as e:
-            logger.debug(f"Error getting topic engagement score for {topic_name}: {str(e)}")
-            return 0.0
-    
-    def _get_research_findings_engagement(self, user_id: str, topic_name: str) -> float:
+            logger.error(f"Failed to initialize motivation system: {str(e)}", exc_info=True)
+            raise
+
+    async def start(self) -> None:
+        """Start the motivation-driven research loop."""
+        if self.is_running:
+            logger.warning("🎯 Motivation system is already running")
+            return
+        
+        await self.initialize()
+        
+        self.is_running = True
+        logger.info("🎯 Starting motivation-driven research loop...")
+        
+        # Start the main research loop
+        self.research_task = asyncio.create_task(self._motivation_research_loop())
+
+    async def stop(self) -> None:
+        """Stop the motivation-driven research loop."""
+        if not self.is_running:
+            return
+        
+        logger.info("🎯 Stopping motivation-driven research loop...")
+        self.is_running = False
+        
+        if self.research_task:
+            self.research_task.cancel()
+            try:
+                await self.research_task
+            except asyncio.CancelledError:
+                pass
+        
+        logger.info("🎯 Motivation-driven research loop stopped")
+
+    async def _motivation_research_loop(self) -> None:
+        """Main motivation-driven research loop."""
+        while self.is_running:
+            try:
+                await asyncio.sleep(self.check_interval)
+                
+                if not self.is_running:
+                    break
+                
+                # Update motivation scores for all topics
+                await self.update_scores()
+                
+                # Check if research is needed
+                research_needed = await self.check_for_research_needed()
+                
+                if research_needed:
+                    logger.info("🎯 Research needed - starting research cycle")
+                    result = await self._conduct_research_cycle()
+                    
+                    # Update motivation based on research results
+                    topics_researched = result.get("topics_researched", 0)
+                    if topics_researched > 0:
+                        avg_quality = result.get("average_quality", 0.0)
+                        await self._on_research_completed(avg_quality)
+                        logger.info(f"🎯 Research cycle completed: {topics_researched} topics, quality: {avg_quality:.2f}")
+                    else:
+                        logger.info("🎯 Research cycle completed with no qualified topics")
+                
+            except asyncio.CancelledError:
+                logger.info("🎯 Motivation research loop cancelled")
+                break
+            except Exception as e:
+                logger.error(f"🎯 Error in motivation research loop: {str(e)}", exc_info=True)
+                await asyncio.sleep(config.RESEARCH_CYCLE_SLEEP_INTERVAL)
+
+    async def update_scores(self) -> None:
         """
-        Calculate engagement based on research findings interactions.
-        This is the primary signal for per-topic motivation.
+        Update motivation scores for all active topics using optimized bulk query.
+        
+        This function:
+        1. Updates all topic scores in a single database query
+        2. Calculates motivation scores based on:
+           - Staleness pressure (time since last research)
+           - User engagement with research findings
+           - Research success rate
         """
         try:
+            if not self._config:
+                return
+            
+            # Optimized: Single query to update all topic scores at once
+            
+            # Compute engagement and success via DB aggregates from research_findings
+            now_epoch = func.extract('epoch', func.now())
+
+            # Build a CTE that aggregates findings per user/topic
+            findings_agg = (
+                select(
+                    ResearchFinding.user_id.label('user_id'),
+                    ResearchFinding.topic_name.label('topic_name'),
+                    func.avg(func.cast(ResearchFinding.read, sa.Integer)).label('engagement_reads'),
+                    func.avg(ResearchFinding.quality_score).label('avg_quality'),
+                    func.sum(func.cast(ResearchFinding.bookmarked, sa.Integer)).label('bookmarks'),
+                    func.sum(func.cast(ResearchFinding.integrated, sa.Integer)).label('integrations'),
+                    func.count().label('total'),
+                )
+                .group_by(ResearchFinding.user_id, ResearchFinding.topic_name)
+                .cte('findings_agg')
+            )
+
+            # Derive engagement and success on the DB side using the CTE
+            staleness = (now_epoch - func.coalesce(TopicScore.last_researched, 0.0))
+            reads_pct = func.coalesce(findings_agg.c.engagement_reads, 0.0)
+            volume_bonus = func.least(
+                findings_agg.c.total * config.ENGAGEMENT_VOLUME_BONUS_RATE,
+                config.ENGAGEMENT_VOLUME_BONUS_MAX,
+            )
+            bookmark_bonus = func.least(
+                findings_agg.c.bookmarks * config.ENGAGEMENT_BOOKMARK_BONUS_RATE,
+                config.ENGAGEMENT_BOOKMARK_BONUS_MAX,
+            )
+            integration_bonus = func.least(
+                findings_agg.c.integrations * config.ENGAGEMENT_INTEGRATION_BONUS_RATE,
+                config.ENGAGEMENT_INTEGRATION_BONUS_MAX,
+            )
+            engagement_expr = func.least(
+                reads_pct + volume_bonus + bookmark_bonus + integration_bonus,
+                config.ENGAGEMENT_SCORE_MAX,
+            )
+            success_expr = 0.3 + engagement_expr * 0.4
+
+            result = await self.session.execute(
+                update(TopicScore)
+                .where(TopicScore.is_active_research == True)
+                .values(
+                    staleness_pressure=(staleness * TopicScore.staleness_coefficient * self._config.staleness_scale),
+                    engagement_score=engagement_expr,
+                    success_rate=func.coalesce(findings_agg.c.avg_quality, success_expr),
+                    motivation_score=(
+                        staleness * TopicScore.staleness_coefficient * self._config.staleness_scale +
+                        engagement_expr * self._config.engagement_weight +
+                        func.coalesce(findings_agg.c.avg_quality, success_expr) * self._config.quality_weight
+                    ),
+                )
+                .where(TopicScore.user_id == findings_agg.c.user_id)
+                .where(TopicScore.topic_name == findings_agg.c.topic_name)
+            )
+            
+            updated_count = result.rowcount
+            logger.debug(f"🎯 Updated motivation scores for {updated_count} topics")
+            
+        except Exception as e:
+            try:
+                await self.session.rollback()
+            except Exception:
+                pass
+            logger.error(f"Error in update_scores: {str(e)}", exc_info=True)
+
+    async def check_for_research_needed(self) -> bool:
+        """
+        Check if research is needed based on topic motivation scores.
+        
+        Returns:
+            True if there are topics with motivation scores above threshold
+        """
+        try:
+            if not self._config:
+                return False
+            
+            # Get all users
+            users = self.profile_manager.list_users()
+            users_list = list(users) if users else []
+            all_users = users_list or ["guest"]
+            
+            for user_id in all_users:
+                try:
+                    user_uuid = uuid.UUID(user_id) if user_id != "guest" else None
+                    if not user_uuid:
+                        continue
+                    
+                    # Get topics needing research
+                    topics_needing_research = await self.db_service.get_topics_needing_research(
+                        user_uuid, 
+                        threshold=self._config.topic_threshold,
+                        limit=1  # Just check if any exist
+                    )
+                    
+                    if topics_needing_research:
+                        logger.debug(f"🎯 Found {len(topics_needing_research)} topics needing research for user {user_id}")
+                        return True
+                
+                except Exception as e:
+                    logger.error(f"Error checking research need for user {user_id}: {str(e)}")
+                    continue
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error in check_for_research_needed: {str(e)}", exc_info=True)
+            return False
+
+    async def _calculate_topic_motivation_score(
+        self, 
+        user_id: str, 
+        topic: Dict[str, Any]
+    ) -> float:
+        """Calculate motivation score for a specific topic."""
+        try:
+            last_researched = topic.get('last_researched', 0)
+            
+            # NEW TOPICS GET PRIORITY: Never researched topics should be researched immediately
+            if last_researched == 0:
+                return 1.0  # Always above any reasonable threshold
+            
+            # For previously researched topics, calculate based on multiple factors
+            now = time.time()
+            staleness_time = now - last_researched
+            staleness_coefficient = topic.get('staleness_coefficient', 1.0)
+            staleness_pressure = staleness_time * staleness_coefficient * self._config.staleness_scale
+            
+            # Get engagement-based factors
+            engagement_score = await self._get_topic_engagement_score(
+                user_id, topic.get('topic_name', '')
+            )
+            success_rate = await self._get_topic_success_rate(
+                user_id, topic.get('topic_name', '')
+            )
+            
+            # Calculate final motivation score
+            motivation_score = (
+                staleness_pressure + 
+                engagement_score * self._config.engagement_weight +
+                success_rate * self._config.quality_weight
+            )
+            
+            return motivation_score
+            
+        except Exception as e:
+            logger.error(f"Error calculating motivation score for topic {topic.get('topic_name')}: {str(e)}")
+            return 0.0
+
+    async def _get_topic_engagement_score(self, user_id: str, topic_name: str) -> float:
+        """Get engagement score for a topic based on research findings interactions."""
+        try:
+            if not self.personalization_manager:
+                return 0.0
+            
             # Import here to avoid circular dependencies
             from storage.research_manager import ResearchManager
             research_manager = ResearchManager(
@@ -178,7 +349,6 @@ class MotivationSystem:
             read_percentage = read_findings / total_findings if total_findings > 0 else 0.0
             
             # Bonus for recent reads (findings read in last 7 days get extra weight)
-            import time
             recent_threshold = time.time() - (7 * 24 * 3600)  # 7 days ago
             recent_reads = sum(1 for f in all_findings 
                              if f.get('read', False) and 
@@ -196,174 +366,240 @@ class MotivationSystem:
 
             total_score = read_percentage + recent_bonus + volume_bonus + bookmark_bonus + integration_bonus
             
-            logger.debug(f"Research findings engagement for {topic_name}: "
-                        f"{read_findings}/{total_findings} read ({read_percentage:.2f}), "
-                        f"recent_bonus: {recent_bonus:.2f}, volume_bonus: {volume_bonus:.2f}, "
-                        f"bookmark_bonus: {bookmark_bonus:.2f}, integration_bonus: {integration_bonus:.2f}, "
-                        f"total: {total_score:.2f}")
-            
             return min(total_score, config.ENGAGEMENT_SCORE_MAX)
             
         except Exception as e:
-            logger.debug(f"Error calculating research findings engagement for {topic_name}: {str(e)}")
-            return 0.0
-    
-    def _get_analytics_engagement(self, user_id: str, topic_name: str) -> float:
-        """
-        Get engagement from PersonalizationManager tracking (secondary signal).
-        
-        This method looks for indirect signals of topic engagement through
-        the PersonalizationManager's tracking of user interactions.
-        """
-        try:
-            # Get user profile data which contains engagement analytics
-            profile = self.personalization_manager.profile_manager.get_user(user_id)
-            if not profile:
-                return 0.0
-                
-            # Extract engagement data from analytics
-            analytics = profile.get('analytics', {})
-            interaction_signals = analytics.get('interaction_signals', {})
-            
-            if not interaction_signals:
-                return 0.0
-            
-            # Calculate score from tracked engagement signals
-            engagement_score = 0.0
-            
-            # Source type engagement (if user positively engages with research sources)
-            most_engaged_sources = interaction_signals.get('most_engaged_source_types', [])
-            if most_engaged_sources:
-                # Users with source preferences show research engagement
-                engagement_score += min(len(most_engaged_sources) * 0.15, 0.4)
-            
-            # Follow-up question frequency (shows continued engagement)
-            follow_up_freq = interaction_signals.get('follow_up_question_frequency', 0.0)
-            engagement_score += follow_up_freq * 0.3
-            
-            # Link clicks for this topic (direct interest in sources)
-            link_clicks = profile.get('analytics', {}).get('link_clicks_by_topic', {}).get(topic_name, 0)
-            if link_clicks > 0:
-                engagement_score += min(link_clicks * 0.1, 0.5)
-            
-            # NOTE: The PersonalizationManager tracks topic expansions, bookmarks, and mark_read 
-            # actions via engagement_events, but these are not currently stored in a queryable
-            # way by topic. The primary signal remains research findings read status.
-            
-            # Small baseline for users who have any tracked preferences
-            if most_engaged_sources or follow_up_freq > 0 or link_clicks > 0:
-                engagement_score += 0.2
-            
-            return min(engagement_score, 1.0)
-            
-        except Exception as e:
-            logger.debug(f"Error getting analytics engagement for {topic_name}: {str(e)}")
+            logger.debug(f"Error calculating engagement score for {topic_name}: {str(e)}")
             return 0.0
 
-    def _get_topic_success_rate(self, user_id: str, topic_name: str) -> float:
+    async def _get_topic_success_rate(self, user_id: str, topic_name: str) -> float:
         """Calculate research success rate from user engagement patterns."""
-        if not self.personalization_manager:
-            return 0.5  # Default neutral success rate
-            
         try:
-            profile = self.personalization_manager.profile_manager.get_user(user_id)
-            if not profile:
-                return 0.5
-                
-            analytics = profile.get('analytics', {})
-            
-            # High engagement after research indicates successful research
-            engagement_score = self._get_topic_engagement_score(user_id, topic_name)
+            if not self.personalization_manager:
+                return 0.5  # Default neutral success rate
             
             # Use engagement as proxy for success rate
-            # Higher engagement = more successful research
-            success_rate = 0.3 + (engagement_score * 0.4)  # Range: 0.3-0.7 (keep this formula as is)
+            engagement_score = await self._get_topic_engagement_score(user_id, topic_name)
+            success_rate = 0.3 + (engagement_score * 0.4)  # Range: 0.3-0.7
             
             return success_rate
             
         except Exception as e:
-            logger.debug(f"Error getting topic success rate for {topic_name}: {str(e)}")
+            logger.debug(f"Error getting success rate for {topic_name}: {str(e)}")
             return 0.5
 
-    def should_research_topic(self, user_id: str, topic: Dict[str, Any]) -> bool:
-        """Check if specific topic should be researched (after global check)."""
-        if not self.should_research():  # Global motivation gate
-            return False
+    async def _conduct_research_cycle(self) -> Dict[str, Any]:
+        """Conduct a complete research cycle for all users with motivated topics."""
+        try:
+            # Get all users
+            users = self.profile_manager.list_users()
+            users_list = list(users) if users else []
+            all_users = users_list or ["guest"]
             
-        topic_motivation = self._calculate_topic_motivation(user_id, topic)
-        should_research = topic_motivation >= self.drives.topic_threshold
-        
-        topic_name = topic.get('topic_name', 'Unknown')
-        if should_research:
-            logger.info(f"Topic research triggered for '{topic_name}' - motivation: {topic_motivation:.2f} >= threshold: {self.drives.topic_threshold:.2f}")
-        else:
-            logger.debug(f"Topic research blocked for '{topic_name}' - motivation: {topic_motivation:.2f} < threshold: {self.drives.topic_threshold:.2f}")
-        
-        return should_research
+            logger.info(f"🎯 Scanning {len(all_users)} users for motivated research topics...")
+            
+            total_topics_researched = 0
+            total_findings_stored = 0
+            quality_scores: List[float] = []
+            
+            for user_id in all_users:
+                try:
+                    user_uuid = uuid.UUID(user_id) if user_id != "guest" else None
+                    if not user_uuid:
+                        continue
+                    
+                    # Get topics needing research based on motivation scores
+                    topics_needing_research = await self.db_service.get_topics_needing_research(
+                        user_uuid,
+                        threshold=self._config.topic_threshold,
+                        limit=self.max_topics_per_user
+                    )
+                    
+                    if not topics_needing_research:
+                        continue
+                    
+                    logger.info(f"🎯 User {user_id} has {len(topics_needing_research)} motivated topics")
+                    
+                    for topic_score in topics_needing_research:
+                        try:
+                            topic_name = topic_score.topic_name
+                            logger.info(f"🎯 Researching motivated topic: {topic_name} for user {user_id}")
+                            
+                            # Get full topic data from research manager
+                            topic_data = self.research_manager.get_topic_by_name(user_id, topic_name)
+                            if not topic_data:
+                                continue
+                            
+                            # Research the topic via research engine instance
+                            from services.autonomous_research_engine import get_autonomous_researcher
+                            researcher = get_autonomous_researcher()
+                            if not researcher:
+                                logger.warning("Autonomous researcher not initialized; skipping research")
+                                continue
+                            result = await researcher.run_langgraph_research(user_id, topic_data)
+                            
+                            total_topics_researched += 1
+                            if result and result.get("stored", False):
+                                total_findings_stored += 1
+                            if result and result.get("quality_score"):
+                                quality_scores.append(result.get("quality_score"))
+                            
+                            # Update last_researched timestamp
+                            await self.db_service.create_or_update_topic_score(
+                                user_id=user_uuid,
+                                topic_name=topic_name,
+                                last_researched=time.time()
+                            )
 
-    def _calculate_topic_motivation(self, user_id: str, topic: Dict[str, Any]) -> float:
-        """Calculate topic-specific motivation score."""
-        last_researched = topic.get('last_researched', 0)
-        
-        # NEW TOPICS GET PRIORITY: Never researched topics should be researched immediately
-        if last_researched == 0:
-            # Give new topics high motivation to ensure they get researched
-            return 1.0  # Always above any reasonable threshold
-        
-        # For previously researched topics, use engagement-based scoring
-        staleness_time = time.time() - last_researched
-        staleness_coefficient = topic.get('staleness_coefficient', 1.0)
-        staleness_pressure = staleness_time * staleness_coefficient * self.drives.staleness_scale
-        
-        # Get engagement-based factors
-        engagement_score = self._get_topic_engagement_score(user_id, topic.get('topic_name', ''))
-        success_rate = self._get_topic_success_rate(user_id, topic.get('topic_name', ''))
-        
-        # Calculate final motivation score
-        topic_motivation = (staleness_pressure + 
-                          engagement_score * self.drives.engagement_weight +
-                          success_rate * self.drives.quality_weight)
-        
-        return topic_motivation
+                            # Dual-write: persist finding summary into DB when available
+                            try:
+                                from models.research_finding import ResearchFinding
+                                storage_results = result if result else {}
+                                if storage_results.get("stored"):
+                                    finding_id = storage_results.get("finding_id")
+                                    quality = storage_results.get("quality_score")
+                                    self.session.add(
+                                        ResearchFinding(
+                                            user_id=user_uuid,
+                                            topic_name=topic_name,
+                                            finding_id=finding_id,
+                                            read=False,
+                                            bookmarked=False,
+                                            integrated=False,
+                                            research_time=time.time(),
+                                            quality_score=quality,
+                                        )
+                                    )
+                            except Exception as e:
+                                logger.debug(f"Dual-write finding failed for {topic_name}: {e}")
 
-    def evaluate_topics(self, user_id: str, topics: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Return engagement-prioritized topics ready for research.
-        
-        Implements TWO-TIER FILTERING approach:
-        1. Tier 1: Global motivation gates whether ANY research occurs
-        2. Tier 2: Among topics marked for active research, prioritize by:
-           - Research findings interaction (heavily weighted)
-           - Staleness pressure (time × LLM-assessed urgency coefficient)
-           - Research success rate
-        
-        Note: Only evaluates topics already marked as 'is_active_research=True' 
-        by user, respecting explicit user intent as a strong signal.
-        """
-        if not self.should_research():  # Global motivation gate
-            logger.debug(f"Global motivation check failed - no topics will be researched")
-            return []
-        
-        # Filter: Only evaluate topics user has explicitly activated for research
-        active_topics = [t for t in topics if t.get('is_active_research', False)]
-        if not active_topics:
-            logger.debug(f"No active research topics found for user {user_id}")
-            return []
-        
-        logger.debug(f"Evaluating {len(active_topics)}/{len(topics)} topics marked for active research")
-        
-        # Score active topics using comprehensive motivation calculation
-        scored_topics = []
-        for topic in active_topics:
-            if self.should_research_topic(user_id, topic):
-                score = self._calculate_topic_motivation(user_id, topic)
-                scored_topics.append((topic, score))
-        
-        # Sort by motivation score (highest first)
-        sorted_topics = sorted(scored_topics, key=lambda x: x[1], reverse=True)
-        
-        if sorted_topics:
-            topic_names = [topic['topic_name'] for topic, score in sorted_topics[:3]]
-            logger.info(f"Motivated topics for user {user_id}: {', '.join(topic_names)}")
-        
-        return [topic for topic, score in sorted_topics]
+                            # --- Topic expansion wiring ---
+                            try:
+                                from services.autonomous_research_engine import get_autonomous_researcher
+                                researcher = get_autonomous_researcher()
+                                if not researcher:
+                                    logger.warning("Autonomous researcher not initialized; skipping expansions")
+                                    child_runs = []
+                                else:
+                                    child_runs = await researcher.process_expansions_for_root(user_id, topic_data)
+                                if child_runs:
+                                    for cr in child_runs:
+                                        child = cr.get("topic", {})
+                                        child_res = cr.get("result", {})
+                                        child_name = child.get('topic_name')
+                                        if not child_name:
+                                            continue
+                                        logger.info(f"🎯 Researched expansion topic: {child_name} for user {user_id}")
+                                        total_topics_researched += 1
+                                        if child_res and child_res.get("stored", False):
+                                            total_findings_stored += 1
+                                        if child_res and child_res.get("quality_score"):
+                                            quality_scores.append(child_res.get("quality_score"))
+
+                                        # Update last_researched for child
+                                        await self.db_service.create_or_update_topic_score(
+                                            user_id=user_uuid,
+                                            topic_name=child_name,
+                                            last_researched=time.time()
+                                        )
+
+                                        # Dual-write for child
+                                        try:
+                                            storage_results = child_res if child_res else {}
+                                            if storage_results.get("stored"):
+                                                finding_id = storage_results.get("finding_id")
+                                                quality = storage_results.get("quality_score")
+                                                self.session.add(
+                                                    ResearchFinding(
+                                                        user_id=user_uuid,
+                                                        topic_name=child_name,
+                                                        finding_id=finding_id,
+                                                        read=False,
+                                                        bookmarked=False,
+                                                        integrated=False,
+                                                        research_time=time.time(),
+                                                        quality_score=quality,
+                                                    )
+                                                )
+                                        except Exception as ee:
+                                            logger.debug(f"Dual-write finding failed for child {child_name}: {ee}")
+                            except Exception as ex:
+                                logger.debug(f"Expansion wiring failed for {topic_name}: {ex}")
+                            
+                            # Small delay between topics
+                            await asyncio.sleep(config.RESEARCH_TOPIC_DELAY)
+                            
+                        except Exception as e:
+                            logger.error(f"🎯 Error researching topic {topic_name}: {str(e)}")
+                            continue
+                    
+                    # Cleanup old findings for this user
+                    self.research_manager.cleanup_old_research_findings(user_id, config.RESEARCH_FINDINGS_RETENTION_DAYS)
+                
+                except Exception as e:
+                    logger.error(f"🎯 Error processing user {user_id}: {str(e)}")
+                    continue
+            
+            avg_quality = sum(quality_scores) / len(quality_scores) if quality_scores else 0.0
+            
+            logger.info(f"🎯 Research cycle completed: {total_topics_researched} topics, {total_findings_stored} findings, avg quality: {avg_quality:.2f}")
+            
+            return {
+                "topics_researched": total_topics_researched,
+                "findings_stored": total_findings_stored,
+                "average_quality": avg_quality,
+            }
+            
+        except Exception as e:
+            logger.error(f"🎯 Error in research cycle: {str(e)}", exc_info=True)
+            return {
+                "topics_researched": 0,
+                "findings_stored": 0,
+                "average_quality": 0.0,
+            }
+
+    # NOTE: Research execution lives in Research Engine now
+
+    async def _on_research_completed(self, quality_score: float) -> None:
+        """Handle completion of research cycle."""
+        try:
+            # Update topic engagement metrics based on research quality
+            # This could be expanded to update success rates, etc.
+            logger.debug(f"🎯 Research completed with quality score: {quality_score:.2f}")
+            
+            # Future: Could update global motivation state based on research success
+            # For now, we rely on per-topic scoring
+            
+        except Exception as e:
+            logger.error(f"Error in _on_research_completed: {str(e)}")
+
+    async def get_motivation_statistics(self, user_id: str) -> Dict[str, Any]:
+        """Get motivation statistics for a user."""
+        try:
+            user_uuid = uuid.UUID(user_id) if user_id != "guest" else None
+            if not user_uuid:
+                return {}
+            
+            return await self.db_service.get_motivation_statistics(user_uuid)
+            
+        except Exception as e:
+            logger.error(f"Error getting motivation statistics for {user_id}: {str(e)}")
+            return {}
+
+    def get_status(self) -> Dict[str, Any]:
+        """Get the current status of the motivation system."""
+        return {
+            "running": self.is_running,
+            "check_interval": self.check_interval,
+            "max_topics_per_user": self.max_topics_per_user,
+            "quality_threshold": self.quality_threshold,
+            "system_type": "MotivationSystem",
+            "features": [
+                "database_persistence",
+                "per_topic_scoring",
+                "integrated_research_loop",
+                "engagement_based_motivation"
+            ]
+        }
+
+

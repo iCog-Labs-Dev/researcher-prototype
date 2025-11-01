@@ -74,7 +74,7 @@ Click **📊 Dashboards** then **🔍 Research Topics** to open a full dashboard
 
 * **▶️ Enable Engine** – Enable/disable the autonomous researcher.
 * **🚀 Research Now** – trigger immediate research; ignores motivation threshold.
-* **💡 View Drives** -  Monitor the real-time values for the **boredom**, **curiosity**, **tiredness** and **satisfaction** parameters.  When boredom + curiosity ≥ threshold a new research cycle is launched automatically.
+* **💡 View Priorities** -  See which topics are currently prioritized for research and why (staleness, engagement, quality).
 * **⏰ Research timing** – See the current estimated research frequency, or select a quick preset to change it.
 
 * View all topics (active + inactive) per user.
