@@ -210,3 +210,32 @@ class ExpansionRejectedItem(BaseModel):
 class ExpansionSelection(BaseModel):
     """Structured output for adjacent topic generation."""
     topics: List[ExpansionAcceptedItem]
+
+
+# Query Disambiguation Intermediate Models
+class VaguenessDetection(BaseModel):
+    """Result of vagueness detection task."""
+    is_vague: bool = Field(description="Whether the query is too vague and needs clarification")
+    confidence_score: float = Field(description="Confidence in vagueness assessment (0.0-1.0)", ge=0.0, le=1.0)
+    vague_indicators: List[str] = Field(description="Specific reasons why the query is vague", default_factory=list)
+    context_analysis: Optional[str] = Field(description="Brief analysis of conversation context and user intent", default=None)
+
+
+class ClarifyingQuestionsOutput(BaseModel):
+    """Output for clarifying question generation task."""
+    questions: List[str] = Field(
+        description="List of clarifying question texts",
+        default_factory=list
+    )
+    question_types: List[str] = Field(
+        description="List of question types corresponding to each question (multiple_choice, open_ended, contextual)",
+        default_factory=list
+    )
+
+
+class QueryRefinementSuggestions(BaseModel):
+    """Output for query refinement suggestion task."""
+    suggested_refinements: List[str] = Field(
+        description="List of improved, more specific versions of the query",
+        default_factory=list
+    )

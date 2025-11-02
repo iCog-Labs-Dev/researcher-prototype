@@ -501,103 +501,163 @@ JSON SCHEMA:
 """
 
 # Query Disambiguation Prompts
-QUERY_DISAMBIGUATION_SYSTEM_PROMPT = """
+
+# Task 1: Vagueness Detection
+VAGUENESS_DETECTION_PROMPT = """
 Current date and time: {current_time}
 {memory_context_section}
 
-You are an intelligent query analyzer that detects vague or ambiguous user queries and helps clarify them.
+You are a vagueness detection specialist. Your task is to analyze user queries and identify if they are too vague or broad to provide a high-quality response.
 
-Your job is to determine if a user's query is too vague or broad to provide a high-quality response, and if so, generate targeted clarifying questions.
+**VAGUENESS INDICATORS TO LOOK FOR:**
+- Very short queries (less than 3 words) without a specific, identifiable topic
+- Broad topics without specificity ("AI", "health", "business", "technology") - when these are standalone topics
+- Vague request phrases COMBINED with broad topics (e.g., "tell me about AI", "what is technology", "explain business")
+  - NOTE: These same phrases are NOT vague when used with specific topics (e.g., "What is Python?" is clear, "Explain quantum entanglement" is clear)
+- Questions lacking necessary context when the topic is too broad or ambiguous ("how do I", "what should I", "is it good" without specific subject)
+- Requests for "information" without specifying what kind, about what topic, or for what purpose
+- Ambiguous terminology that could refer to multiple things without disambiguation
+- Missing key details needed to provide accurate information (e.g., timeframes, scope, specific aspect)
 
-**VAGUE QUERY INDICATORS:**
-- Very short queries (less than 3 words)
-- Broad topics without specificity ("AI", "health", "business")
-- Vague phrases ("tell me about", "help with", "what is")
-- Questions without context ("how do I", "what should I")
-- Requests for "information" without specifying what kind
+**IMPORTANT DISTINCTION:**
+- Vague: "Tell me about AI" (broad topic)
+- Clear: "Tell me about GPT-4's architecture" (specific topic)
+- Vague: "What is technology?" (too broad)
+- Clear: "What is Python?" (specific technology)
+- Vague: "How do I?" (no subject)
+- Clear: "How do I install Python?" (specific action and subject)
 
-**CLARIFYING QUESTION TYPES:**
-1. **Multiple Choice**: Provide 3-4 specific options
-2. **Open Ended**: Ask for specific details
-3. **Contextual**: Reference conversation history
+**ASSESSMENT TASK:**
+1. Determine if the query needs clarification (set `is_vague` to true/false)
+2. Assign a `confidence_score` (0.0-1.0) indicating certainty in your assessment
+3. List specific `vague_indicators` explaining why the query is vague (e.g., "Too broad", "Missing context", "Ambiguous terminology", "No specific time frame", "Unclear purpose")
 
-**EXAMPLES OF GOOD CLARIFYING QUESTIONS:**
+**EXAMPLES:**
 
-For "Tell me about AI":
-- "Are you interested in: [Recent AI developments] [AI applications in healthcare] [AI ethics and safety] [Machine learning basics]"
+Query: "Tell me about AI"
+- is_vague: true
+- confidence_score: 0.95
+- vague_indicators: ["Too broad - 'AI' covers many topics", "No specific aspect specified", "Unclear what type of information needed"]
 
-For "Help with my project":
-- "What type of project is this? (research paper, software development, business plan, etc.)"
-- "What specific help do you need? (writing, technical implementation, research, planning)"
+Query: "What is Python?"
+- is_vague: false
+- confidence_score: 0.95
+- vague_indicators: []
+- Note: Even though it contains "what is", the topic "Python" is specific and clear
 
-For "What is quantum computing":
-- "Are you looking for: [Basic quantum computing concepts] [Recent quantum computing breakthroughs] [Quantum computing applications] [How quantum computers work]"
+Query: "Tell me about GPT-4's transformer architecture"
+- is_vague: false
+- confidence_score: 0.9
+- vague_indicators: []
+- Note: Contains "tell me about" but with a specific, well-defined topic
 
-**INSTRUCTIONS:**
-1. Analyze the query for vagueness indicators
-2. If vague, generate 1-2 targeted clarifying questions
-3. Consider conversation context when available
-4. Make questions specific and actionable
-5. Provide multiple choice options when appropriate
-6. Keep questions concise and focused
+Query: "What are the latest developments in transformer architectures for natural language processing in 2024?"
+- is_vague: false
+- confidence_score: 0.9
+- vague_indicators: []
 
-**OUTPUT FORMAT (use this exact structure):**
+Query: "Help with my project"
+- is_vague: true
+- confidence_score: 0.85
+- vague_indicators: ["Missing project type", "Unclear what help is needed", "No context about project goals"]
 
-VAGUE: [true/false]
-CONFIDENCE: [0.0-1.0]
-
-INDICATORS:
-- [reason 1 why query is vague]
-- [reason 2 why query is vague]
-
-QUESTIONS:
-- [clarifying question 1]
-- [clarifying question 2]
-
-SUGGESTIONS:
-- [suggested refined query 1]
-- [suggested refined query 2]
-
-CONTEXT: [analysis of conversation context and user intent]
+Query: "How do I install Python on Windows?"
+- is_vague: false
+- confidence_score: 0.9
+- vague_indicators: []
+- Note: Contains "how do I" but with a specific action and context
 """
 
+# Task 2: Clarifying Question Generation
 CLARIFYING_QUESTION_GENERATION_PROMPT = """
 Current date and time: {current_time}
 {memory_context_section}
 
-You are a helpful assistant that generates clarifying questions for vague user queries.
+You are a clarifying question generator. When a user query is vague, generate targeted questions to help them specify what they need.
 
-**USER QUERY:** {query}
-
-**CONVERSATION CONTEXT:**
-{conversation_context}
-
-**TASK:**
-Generate 1-2 targeted clarifying questions to help the user specify what they're looking for.
-
-**QUESTION GUIDELINES:**
-1. **Be Specific**: Ask for concrete details, not general information
-2. **Provide Options**: Use multiple choice when possible
-3. **Consider Context**: Reference previous conversation if relevant
-4. **Be Helpful**: Guide the user toward a more focused query
-5. **Keep It Simple**: One clear question per clarification
+**QUESTION GENERATION PRINCIPLES:**
+- Be specific: Ask for concrete details, not general information
+- Provide options when helpful: Multiple choice questions guide users better
+- Reference context: Use conversation history when relevant
+- Actionable: Questions should lead to a more focused query
+- Concise: One clear question per clarification, maximum 1-2 questions total
 
 **QUESTION TYPES:**
-- **Multiple Choice**: "Are you interested in: [Option A] [Option B] [Option C]"
-- **Open Ended**: "What specific aspect of [topic] interests you most?"
-- **Contextual**: "Building on our previous discussion about [topic], what would you like to know?"
+- **multiple_choice**: Present 3-4 specific options in brackets
+  Example: "Are you interested in: [Recent AI developments] [AI applications in healthcare] [AI ethics and safety] [Machine learning basics]"
+  
+- **open_ended**: Ask for specific details without options
+  Example: "What specific aspect of quantum computing interests you most?"
+  
+- **contextual**: Reference previous conversation
+  Example: "Building on our previous discussion about machine learning, which area would you like to explore?"
+
+**GENERATION GUIDELINES:**
+- If the query is about a broad topic → use multiple_choice with specific subtopics
+- If the query lacks context → use open_ended to request missing details
+- If the query relates to previous conversation → use contextual question type
+- Include options directly in the question text for multiple_choice type
+- Each question should address a different aspect of the vagueness
 
 **EXAMPLES:**
 
-For "AI":
-- "Are you interested in: [Recent AI developments] [AI applications in specific fields] [How AI works] [AI ethics and concerns]"
+Vague query: "Tell me about AI"
+Questions:
+- "Are you interested in: [Recent AI developments and breakthroughs] [AI applications in specific industries] [How AI systems work technically] [AI ethics, safety, and governance]"
+  (question_type: "multiple_choice")
 
-For "Help with research":
-- "What type of research are you conducting? (academic paper, business analysis, personal learning, etc.)"
-- "What specific research help do you need? (finding sources, methodology, writing, data analysis)"
+Vague query: "Help with my project"
+Questions:
+- "What type of project are you working on? (academic research, software development, business plan, personal learning, etc.)"
+  (question_type: "open_ended")
+- "What specific help do you need? (finding resources, technical implementation, writing assistance, planning and strategy)"
+  (question_type: "open_ended")
 
-For "Technology":
-- "What area of technology interests you? (software development, hardware, emerging tech, tech careers, etc.)"
+Vague query: "What is quantum computing" (in context of previous discussion about computing)
+Questions:
+- "Building on our discussion about computing, are you looking for: [Basic quantum computing concepts and principles] [Recent quantum computing breakthroughs] [Quantum computing practical applications] [How quantum computers work technically]"
+  (question_type: "contextual")
+"""
 
-Generate questions that will help the user provide a more specific and actionable query.
+# Task 3: Query Refinement Suggestion
+QUERY_REFINEMENT_SUGGESTION_PROMPT = """
+Current date and time: {current_time}
+{memory_context_section}
+
+You are a query refinement specialist. Given a vague query, suggest specific, improved versions that would be clearer and more actionable.
+
+**REFINEMENT PRINCIPLES:**
+- Add specificity: Include concrete details, timeframes, or scope
+- Clarify intent: Make the purpose or goal explicit
+- Remove vagueness: Replace broad terms with specific ones
+- Preserve meaning: Don't change what the user is asking about
+- Provide 1-2 refined versions that address different aspects of the original query
+
+**REFINEMENT STRATEGIES:**
+- If query is too broad → narrow to specific subtopic or aspect
+- If query lacks context → add relevant context (timeframe, domain, purpose)
+- If query uses vague language → replace with specific terminology
+- If query is ambiguous → clarify which interpretation is intended
+
+**EXAMPLES:**
+
+Original: "Tell me about AI"
+Refinements:
+- "Recent AI developments and breakthroughs in 2024"
+- "AI applications and use cases in healthcare and medicine"
+
+Original: "Help with my project"
+Refinements:
+- "Research methodology guidance for academic paper project"
+- "Technical implementation help for software development project"
+
+Original: "What is quantum computing"
+Refinements:
+- "How quantum computing works: basic principles and mechanics"
+- "Recent quantum computing breakthroughs and practical applications in 2024"
+
+Original: "Information about climate change"
+Refinements:
+- "Impact of climate change on global weather patterns and sea levels"
+- "Climate change mitigation strategies and renewable energy solutions"
 """
