@@ -78,38 +78,3 @@ async def query_disambiguation_node(state: ChatState) -> ChatState:
 
     return state
 
-
-async def process_clarification_response(state: ChatState, clarification: str) -> ChatState:
-    """Process user's clarification response and refine the original query."""
-    logger.info("Query Disambiguation: processing clarification response")
-
-    try:
-        original_query = get_last_user_message(state.get("messages", []))
-        if not original_query:
-            logger.warning("No original query found for clarification")
-            return state
-
-        service = QueryDisambiguationService()
-        refinement = await service.refine_query_with_clarification(
-            original_query, clarification, _build_context(state)
-        )
-
-        workflow = state.setdefault("workflow_context", {})
-        workflow["refined_search_query"] = refinement.refined_query
-        workflow["query_refinement"] = refinement
-
-        state.update({
-            "disambiguation_complete": True,
-            "query_refinement_needed": False
-        })
-
-        logger.info(f"Query refined from '{original_query}' to '{refinement.refined_query}'")
-
-    except Exception as e:
-        logger.error(f"Error processing clarification: {str(e)}")
-        state.update({
-            "disambiguation_complete": True,
-            "query_refinement_needed": False
-        })
-
-    return state

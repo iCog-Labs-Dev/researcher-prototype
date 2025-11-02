@@ -42,7 +42,9 @@ from prompts import (
     TOPIC_EXTRACTOR_SYSTEM_PROMPT,
     # Query disambiguation prompts
     QUERY_DISAMBIGUATION_SYSTEM_PROMPT,
+    VAGUENESS_DETECTION_PROMPT,
     CLARIFYING_QUESTION_GENERATION_PROMPT,
+    QUERY_REFINEMENT_SUGGESTION_PROMPT,
 )
 
 # Internal imports - LLM models
@@ -54,6 +56,9 @@ from llm_models import (
     TopicSuggestionItem,
     ResearchQualityAssessment,
     ResearchDeduplicationResult,
+    VaguenessDetection,
+    ClarifyingQuestionsOutput,
+    QueryRefinementSuggestions,
 )
 
 # Initialize storage components - use backend directory storage
