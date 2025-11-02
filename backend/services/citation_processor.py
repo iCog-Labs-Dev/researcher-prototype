@@ -9,6 +9,11 @@ import re
 from typing import Dict, List, Any, Optional, Tuple
 from nodes.base import logger
 
+from datetime import datetime, timezone
+from typing import Optional
+import math
+from dateutil import parser
+from backend.nodes.base import logger
 
 class CitationProcessor:
     """Handles citation processing and formatting for response rendering."""
@@ -330,3 +335,46 @@ class CitationProcessor:
 
 # Global instance for easy import
 citation_processor = CitationProcessor()
+
+
+def _parse_date_string(date_str: Optional[str]) -> Optional[datetime]:
+    """
+    Safely parse a date string from any format into a timezone-aware datetime.
+    """
+    if not date_str:
+        return None
+    try:
+        dt = parser.parse(date_str)
+        
+        # If no timezone info, assume UTC
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except (ValueError, OverflowError):
+        logger.warning(f"Could not parse date string: {date_str}")
+        return None
+
+def calculate_freshness_score(
+    published_at_str: Optional[str], 
+    half_life_days: int = 365
+    ) -> Optional[float]:
+    """
+    Calculates a freshness score from 0.0 (old) to 1.0 (new) based on exponential decay.
+    Returns:
+        A score from 0.0 to 1.0, or None if the date is invalid.
+    """
+    published_at = _parse_date_string(published_at_str)
+    if not published_at:
+        return None
+        
+    now = datetime.now(timezone.utc)
+    age_in_days = (now - published_at).days
+    
+    if age_in_days < 0:
+        return 1.0
+    try:
+        score = (0.5) ** (age_in_days / half_life_days)
+    except OverflowError:
+        return 0.0 
+    
+    return round(score, 2)
