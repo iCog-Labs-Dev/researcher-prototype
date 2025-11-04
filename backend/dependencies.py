@@ -21,7 +21,6 @@ _motivation_config_override = {}
 GUEST_USER_ID = "guest"
 GUEST_DISPLAY_NAME = "Guest User"
 
-
 def ensure_guest_user_exists() -> None:
     """Ensure the default guest user exists, create it if not."""
     if not profile_manager.user_exists(GUEST_USER_ID):
@@ -46,7 +45,6 @@ def ensure_guest_user_exists() -> None:
             logger.info(f"Created default guest user: {GUEST_USER_ID}")
         else:
             logger.error(f"Failed to create default guest user: {GUEST_USER_ID}")
-
 
 def generate_display_name_from_user_id(user_id: str) -> str:
     """Generate a display name from a user ID."""
@@ -77,13 +75,11 @@ def generate_display_name_from_user_id(user_id: str) -> str:
     # Ultimate fallback
     return f"User {user_id}"
 
-
 def get_existing_user_id(user_id: Optional[str] = Header(None)) -> Optional[str]:
     """Extract user ID from headers if it exists and is valid."""
     if user_id and profile_manager.user_exists(user_id):
         return user_id
     return None
-
 
 def get_or_create_user_id(user_id: Optional[str] = Header(None)) -> str:
     """Extract user ID from headers or return the default guest user."""
@@ -96,7 +92,6 @@ def get_or_create_user_id(user_id: Optional[str] = Header(None)) -> str:
     # Return guest user instead of creating a new user
     logger.info(f"Using default guest user: {GUEST_USER_ID}")
     return GUEST_USER_ID
-
 
 # Initialize guest user on startup
 ensure_guest_user_exists()

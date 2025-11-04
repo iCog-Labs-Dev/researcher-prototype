@@ -6,11 +6,9 @@ import os
 import json
 import time
 import shutil
-# import fcntl
+import fcntl
 from pathlib import Path
 from typing import Dict, Any, Optional, Union, List
-
-import portalocker
 
 # Import the centralized logging configuration
 from services.logging_config import get_logger
@@ -53,14 +51,12 @@ class StorageManager:
         try:
             with open(file_path, 'r') as f:
                 # Acquire a shared lock for reading
-                # fcntl.flock(f, fcntl.LOCK_SH)
-                portalocker.lock(f, portalocker.LOCK_SH)
+                fcntl.flock(f, fcntl.LOCK_SH)
                 try:
                     return json.load(f)
                 finally:
                     # Release the lock
-                    # fcntl.flock(f, fcntl.LOCK_UN)
-                    portalocker.lock(f, portalocker.LOCK_UN)
+                    fcntl.flock(f, fcntl.LOCK_UN)
         except Exception as e:
             logger.error(f"Error reading file {path}: {str(e)}")
             return {}
@@ -78,16 +74,14 @@ class StorageManager:
         try:
             with open(tmp_path, 'w') as f:
                 # Acquire an exclusive lock for writing
-                # fcntl.flock(f, fcntl.LOCK_EX)
-                portalocker.lock(f, portalocker.LOCK_EX)
+                fcntl.flock(f, fcntl.LOCK_EX)
                 try:
                     json.dump(data, f, indent=2)
                     f.flush()
                     os.fsync(f.fileno())  # Ensure data is written to disk
                 finally:
                     # Release the lock
-                    # fcntl.flock(f, fcntl.LOCK_UN)
-                    portalocker.lock(f, portalocker.LOCK_UN)
+                    fcntl.flock(f, fcntl.LOCK_UN)
             
             # Rename the temporary file to the target file (atomic operation)
             shutil.move(str(tmp_path), str(file_path))

@@ -628,7 +628,6 @@ class HackerNewsSearchService(BaseSearchService):
         
         return "\n".join(lines)
 
-
 class PubMedSearchService(BaseSearchService):
     """Service for PubMed medical search."""
     

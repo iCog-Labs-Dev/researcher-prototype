@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Optional
 import math
 from dateutil import parser
-from backend.nodes.base import logger
+from nodes.base import logger
 
 class CitationProcessor:
     """Handles citation processing and formatting for response rendering."""
@@ -335,7 +335,6 @@ class CitationProcessor:
 
 # Global instance for easy import
 citation_processor = CitationProcessor()
-
 
 def _parse_date_string(date_str: Optional[str]) -> Optional[datetime]:
     """
