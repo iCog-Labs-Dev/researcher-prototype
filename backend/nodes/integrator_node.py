@@ -16,9 +16,11 @@ from nodes.base import (
 )
 from utils import get_last_user_message
 
+# Import citation freshness calculation as they are needed in future
+from services.citation_processor import calculate_freshness_score
+from dateutil import parser
 # Remove the context template imports
 # from prompts import SEARCH_CONTEXT_TEMPLATE, ANALYSIS_CONTEXT_TEMPLATE, MEMORY_CONTEXT_TEMPLATE
-
 
 async def integrator_node(state: ChatState) -> ChatState:
     """Core thinking component that integrates all available context and generates a response."""
@@ -141,11 +143,19 @@ async def integrator_node(state: ChatState) -> ChatState:
                         url = source_item.get("url", "")
                         title = source_item.get("title", "Web Search Result")
                         if url and url not in [c.get("url") for c in unified_citations]:
+                            
+                            # Get the Published date for freshness score calculation
+                            published_at_str = source_item.get("publishedDate") 
+                            # 2. Calculate freshness score
+                            freshness = calculate_freshness_score(published_at_str)
+                            
                             unified_citations.append({
                                 "title": title,
                                 "url": url,
                                 "source": "Web Search",
-                                "type": "web"
+                                "type": "web",
+                                "published_at_str": published_at_str,  
+                                "freshness_score": freshness        
                             })
                 else:
                     # Fallback to citations URLs only (no titles available)
@@ -191,12 +201,27 @@ async def integrator_node(state: ChatState) -> ChatState:
                             
                             if url:
                                 if url not in [c.get("url") for c in unified_citations]:
+                                    # Date Specific Handling
+                                    published_at_str = None
+                                    if source == "academic_search":
+                                        published_at_str = item.get("publication_date")
+                                    elif source == "social_search":
+                                        published_at_str = item.get("created_at")
+                                    elif source == "medical_search":
+                                        published_at_str = item.get("published_at")
+                                    
+                                    # Freshness Score Calculation function call
+                                    freshness = calculate_freshness_score(published_at_str)
                                     # Build citation metadata based on source type
+                                    
                                     citation = {
                                         "title": title,
                                         "url": url,
                                         "source": source_info["name"],
-                                        "type": source_info["type"]
+                                        "type": source_info["type"],
+                                        # Date and freshness
+                                        "published_at_str": published_at_str, 
+                                        "freshness_score": freshness
                                     }
                                 
                                     # Add source-specific metadata
