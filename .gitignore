@@ -57,3 +57,7 @@ yarn-error.log*
 
 # Cursor files
 .cursor/
+
+# Static files
+/static
+/static/*
