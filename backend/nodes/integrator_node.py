@@ -17,6 +17,7 @@ from nodes.base import (
 from utils import get_last_user_message
 
 # Import citation freshness calculation as they are needed in future
+from models import SearchSource
 from services.citation_processor import calculate_freshness_score
 from dateutil import parser
 # Remove the context template imports
@@ -143,20 +144,29 @@ async def integrator_node(state: ChatState) -> ChatState:
                         url = source_item.get("url", "")
                         title = source_item.get("title", "Web Search Result")
                         if url and url not in [c.get("url") for c in unified_citations]:
-                            
                             # Get the Published date for freshness score calculation
                             published_at_str = source_item.get("publishedDate") 
                             # 2. Calculate freshness score
                             freshness = calculate_freshness_score(published_at_str)
                             
-                            unified_citations.append({
-                                "title": title,
-                                "url": url,
-                                "source": "Web Search",
-                                "type": "web",
-                                "published_at_str": published_at_str,  
-                                "freshness_score": freshness        
-                            })
+                            
+                            citation_obj = SearchSource(
+                            source_name="Web Search",
+                            url=url,
+                            title=title,
+                            content=source_item.get("snippet", ""),
+                            published_at=parser.parse(published_at_str) if published_at_str else None,
+                            freshness_score=freshness,
+                            )
+                            unified_citations.append(citation_obj)
+                            # unified_citations.append({
+                            #     "title": title,
+                            #     "url": url,
+                            #     "source": "Web Search",
+                            #     "type": "web",
+                            #     "published_at_str": published_at_str,  
+                            #     "freshness_score": freshness        
+                            # })
                 else:
                     # Fallback to citations URLs only (no titles available)
                     for citation_url in citations:
@@ -203,15 +213,42 @@ async def integrator_node(state: ChatState) -> ChatState:
                                 if url not in [c.get("url") for c in unified_citations]:
                                     # Date Specific Handling
                                     published_at_str = None
+                                    content_snippet = item.get("abstract", "") or item.get("comment_text", "")
+                                    
+                                    citation_obj = SearchSource(
+                title=title,
+                url=url,
+                source_name=source_info["name"],
+                content=content_snippet, 
+                # We will fill in the details below
+            )
+                                    # Add source-specific metadata
                                     if source == "academic_search":
-                                        published_at_str = item.get("publication_date")
+                                        citation_obj.published_at = parser.parse(item.get("publication_date")) if item.get("publication_date") else None
+                                        citation_obj.published_at_str = item.get("publication_date") 
+
                                     elif source == "social_search":
-                                        published_at_str = item.get("created_at")
+                                        citation_obj.published_at = parser.parse(item.get("created_at")) if item.get("created_at") else None
+                                        citation_obj.published_at_str = item.get("created_at")
+
                                     elif source == "medical_search":
                                         published_at_str = item.get("published_at")
+                                        citation_obj.published_at = parser.parse(published_at_str) if published_at_str else None
+                                        citation_obj.published_at_str = published_at_str
+
+                                    # Calculate freshness score
+                                    citation_obj.freshness_score = calculate_freshness_score(citation_obj.published_at_str)
+
+                                    unified_citations.append(citation_obj)
+                                    # if source == "academic_search":
+                                    #     published_at_str = item.get("publication_date")
+                                    # elif source == "social_search":
+                                    #     published_at_str = item.get("created_at")
+                                    # elif source == "medical_search":
+                                    #     published_at_str = item.get("published_at")
                                     
                                     # Freshness Score Calculation function call
-                                    freshness = calculate_freshness_score(published_at_str)
+                                    # freshness = calculate_freshness_score(published_at_str)
                                     # Build citation metadata based on source type
                                     
                                     citation = {
@@ -370,6 +407,27 @@ When synthesizing, cross-reference information between sources and highlight are
             successful_sources.append({"name": source_name, "type": source_type})
             logger.info(f"🧠 Integrator: ✅ Added renumbered {source_name} summary to context")
 
+    else:
+        # Fallback if no evidence summaries were generated
+        logger.info("Integrator Node: No evidence summaries. Building context from scored citations.")
+        
+        # Sort sources by freshness
+        unified_citations.sort(key=lambda s: s.freshness_score or 0.0, reverse=True)
+
+        for i, citation in enumerate(unified_citations, 1):
+            context_parts = [f"--- Source {i} ({citation.source_name}) ---"]
+            context_parts.append(f"Title: {citation.title}")
+            context_parts.append(f"URL: {citation.url}")
+            
+            # Add the new metadata to the prompt
+            if hasattr(citation, 'published_at_str') and citation.published_at_str:
+                context_parts.append(f"Published At: {citation.published_at_str}")
+            if citation.freshness_score is not None:
+                context_parts.append(f"Freshness Score: {citation.freshness_score:.2f} (0.0=old, 1.0=new)")
+            
+            context_parts.append(f"Content: {citation.content}\n")
+            
+            context_sections.append("\n".join(context_parts))
     # Add analysis results to context if available
     analysis_results = state.get("module_results", {}).get("analyzer", {})
     if analysis_results.get("success", False):
@@ -378,7 +436,7 @@ When synthesizing, cross-reference information between sources and highlight are
             # Directly construct the analysis context string
             analysis_context = f"ANALYTICAL INSIGHTS:\nThe following analysis was performed related to the user's query:\n\n{analysis_result_text}\n\nIncorporate these insights naturally into your response where relevant."
             context_sections.append(analysis_context)
-            logger.info("🧠 Integrator: ✅ Added analysis results to system context")
+            logger.info("Integrator Node: Added analysis results to system context")
 
     # Combine all context sections
     context_section = "\n\n".join(context_sections) if context_sections else ""
