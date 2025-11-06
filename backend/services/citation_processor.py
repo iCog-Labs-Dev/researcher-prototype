@@ -9,6 +9,11 @@ import re
 from typing import Dict, List, Any, Optional, Tuple
 from nodes.base import logger
 
+from datetime import datetime, timezone
+from typing import Optional
+import math
+from dateutil import parser
+from nodes.base import logger
 
 class CitationProcessor:
     """Handles citation processing and formatting for response rendering."""
@@ -84,6 +89,10 @@ class CitationProcessor:
         title = citation.get("title", "Unknown Title")
         url = citation.get("url", "")
         
+        # Get the new scores we in the next step
+        freshness = citation.get("freshness_score")
+        published_at_str = citation.get("published_at_str", "")
+        
         citation_parts = [f"[{citation_counter}]. [{title}]({url})"]
         
         # Add academic-specific metadata
@@ -96,10 +105,28 @@ class CitationProcessor:
             author_names = [a.get("name", "") for a in authors[:2]]  # First 2 authors
             if author_names:
                 metadata_parts.append(f"Authors: {', '.join(author_names)}")
+                
+        # Use the full date if available, fall back to year
+        if published_at_str:
+             try:
+                date_obj = parser.parse(published_at_str)
+                metadata_parts.append(f"Date: {date_obj.strftime('%Y-%m-%d')}")
+             except Exception:
+                if year:
+                    metadata_parts.append(f"Year: {year}")
+        elif year:
+            metadata_parts.append(f"Year: {year}")
+            
+        if venue:
+            metadata_parts.append(f"Venue: {venue}")
         if year:
             metadata_parts.append(f"Year: {year}")
         if venue:
             metadata_parts.append(f"Venue: {venue}")
+        
+        # Appending freshness score if available
+        if freshness is not None:
+             metadata_parts.append(f"Freshness: {int(freshness * 100)}%")
         
         if metadata_parts:
             citation_parts.append(f" — {'; '.join(metadata_parts)}")
@@ -110,6 +137,10 @@ class CitationProcessor:
         """Format a clinical/medical citation with metadata."""
         title = citation.get("title", "Unknown Title")
         url = citation.get("url", "")
+        
+        # Freshness score and published date
+        freshness = citation.get("freshness_score")
+        published_at_str = citation.get("published_at_str", "")
         
         citation_parts = [f"[{citation_counter}]. [{title}]({url})"]
         
@@ -125,9 +156,22 @@ class CitationProcessor:
                 metadata_parts.append(f"Authors: {', '.join(author_names)}")
         if journal:
             metadata_parts.append(f"Journal: {journal}")
-        if pubdate:
+        
+        # Using new full date field
+        if published_at_str:
+             try:
+                date_obj = parser.parse(published_at_str)
+                metadata_parts.append(f"Published: {date_obj.strftime('%Y-%m-%d')}")
+             except Exception:
+                 if pubdate:
+                    metadata_parts.append(f"Published: {pubdate}")
+        elif pubdate:
             metadata_parts.append(f"Published: {pubdate}")
         
+        # Use freshness score if available
+        if freshness is not None:
+             metadata_parts.append(f"Freshness: {int(freshness * 100)}%")
+                    
         if metadata_parts:
             citation_parts.append(f" — {'; '.join(metadata_parts)}")
         
@@ -137,6 +181,10 @@ class CitationProcessor:
         """Format a social media citation with metadata."""
         title = citation.get("title", "Unknown Title")
         url = citation.get("url", "")
+        
+        # Freshness score and published date
+        freshness = citation.get("freshness_score")
+        published_at_str = citation.get("published_at_str", "")
         
         citation_parts = [f"[{citation_counter}]. [{title}]({url})"]
         
@@ -152,6 +200,17 @@ class CitationProcessor:
             metadata_parts.append(f"Points: {points}")
         if comments:
             metadata_parts.append(f"Comments: {comments}")
+            
+        if published_at_str:
+             try:
+                date_obj = parser.parse(published_at_str)
+                metadata_parts.append(f"Posted: {date_obj.strftime('%Y-%m-%d')}")
+             except Exception:
+                pass
+        
+        # Added freshness score
+        if freshness is not None:
+             metadata_parts.append(f"Freshness: {int(freshness * 100)}%")
         
         if metadata_parts:
             citation_parts.append(f" — {'; '.join(metadata_parts)}")
@@ -163,7 +222,28 @@ class CitationProcessor:
         title = citation.get("title", "Unknown Title")
         url = citation.get("url", "")
         
-        return f"[{citation_counter}]. [{title}]({url})"
+        # Freshness score and published date
+        freshness = citation.get("freshness_score")
+        published_at_str = citation.get("published_at_str", "")
+        
+        citation_parts = [f"[{citation_counter}]. [{title}]({url})"]
+        metadata_parts = []
+        
+        # Freshness and date
+        if published_at_str:
+             try:
+                date_obj = parser.parse(published_at_str)
+                metadata_parts.append(f"Date: {date_obj.strftime('%Y-%m-%d')}")
+             except Exception:
+                pass 
+                
+        if freshness is not None:
+             metadata_parts.append(f"Freshness: {int(freshness * 100)}%")
+        
+        if metadata_parts:
+            citation_parts.append(f" — {'; '.join(metadata_parts)}")
+        
+        return "".join(citation_parts)
     
     def _group_citations_by_type(self, unified_citations: List[Dict[str, Any]]) -> Tuple[List[str], List[str], List[str], List[str]]:
         """
@@ -327,6 +407,47 @@ class CitationProcessor:
         
         return processed_text + sources_section
 
-
 # Global instance for easy import
 citation_processor = CitationProcessor()
+
+def _parse_date_string(date_str: Optional[str]) -> Optional[datetime]:
+    """
+    Safely parse a date string from any format into a timezone-aware datetime.
+    """
+    if not date_str:
+        return None
+    try:
+        dt = parser.parse(date_str)
+        
+        # If no timezone info, assume UTC
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except (ValueError, OverflowError):
+        logger.warning(f"Could not parse date string: {date_str}")
+        return None
+
+def calculate_freshness_score(
+    published_at_str: Optional[str], 
+    half_life_days: int = 365
+    ) -> Optional[float]:
+    """
+    Calculates a freshness score from 0.0 (old) to 1.0 (new) based on exponential decay.
+    Returns:
+        A score from 0.0 to 1.0, or None if the date is invalid.
+    """
+    published_at = _parse_date_string(published_at_str)
+    if not published_at:
+        return None
+        
+    now = datetime.now(timezone.utc)
+    age_in_days = (now - published_at).days
+    
+    if age_in_days < 0:
+        return 1.0
+    try:
+        score = (0.5) ** (age_in_days / half_life_days)
+    except OverflowError:
+        return 0.0 
+    
+    return round(score, 2)

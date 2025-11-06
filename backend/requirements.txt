@@ -22,3 +22,5 @@ httpx  # For TestClient
 # Code quality tools
 black
 flake8
+python-dateutil
+langchain-google-genai

@@ -1,14 +1,14 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, Dict, Any, List
 from config import DEFAULT_MODEL
-
+from datetime import datetime
+from typing import Optional, List
 
 class PersonalityConfig(BaseModel):
     """Configuration for AI personality."""
     style: str = "helpful"
     tone: str = "friendly"
     additional_traits: Optional[Dict[str, Any]] = {}
-
 
 class ContentPreferences(BaseModel):
     """User content preferences."""
@@ -21,7 +21,6 @@ class ContentPreferences(BaseModel):
         "industry_reports": 0.6
     }
     topic_categories: Dict[str, float] = {}
-
 
 class FormatPreferences(BaseModel):
     """User format preferences."""
@@ -92,7 +91,6 @@ class PersonalizationHistory(BaseModel):
     adaptation_log: List[AdaptationLogEntry] = []
     preference_evolution: PreferenceEvolution = PreferenceEvolution()
 
-
 class PersonalizationContext(BaseModel):
     """Personalization context for request processing."""
     content_preferences: ContentPreferences
@@ -101,19 +99,16 @@ class PersonalizationContext(BaseModel):
     learned_adaptations: LearnedAdaptations
     engagement_patterns: Dict[str, Any]
 
-
 class PreferenceOverride(BaseModel):
     """Request to override a learned preference."""
     preference_type: str
     override_value: Any
     disable_learning: bool = False
 
-
 class Message(BaseModel):
     """A chat message."""
     role: str
     content: str
-
 
 class TopicSuggestion(BaseModel):
     """A suggested research topic extracted from conversation."""
@@ -131,7 +126,6 @@ class ChatRequest(BaseModel):
     personality: Optional[PersonalityConfig] = None
     session_id: Optional[str] = None  # Optional session ID for conversation continuity
 
-
 class ChatResponse(BaseModel):
     """Response model for chat endpoint."""
     response: str
@@ -144,7 +138,6 @@ class ChatResponse(BaseModel):
     suggested_topics: List[TopicSuggestion] = []  # Research-worthy topics from conversation
     follow_up_questions: List[str] = []  # Optional follow up questions
 
-
 class UserSummary(BaseModel):
     """Summary of a user profile for list views."""
     user_id: str
@@ -153,7 +146,6 @@ class UserSummary(BaseModel):
     display_name: Optional[str] = None  # Keep this at the top-level for convenience
     # Any additional metadata can be included as needed
 
-
 class UserProfile(BaseModel):
     """Complete user profile information."""
     user_id: str
@@ -161,3 +153,36 @@ class UserProfile(BaseModel):
     metadata: Optional[Dict[str, Any]] = {}
     personality: PersonalityConfig
     preferences: Optional[PreferencesConfig] = None
+    
+class SearchSource(BaseModel):
+    """A source for searching information."""
+    source_name: str
+    url: str
+    title: str
+    content: str
+    published_at: Optional[datetime] = None  
+    freshness_score: Optional[float] = None   
+    confidence_score: Optional[float] = None  
+    # Assuming the fabrication risk: "High", "Medium", "Low"
+    fabrication_risk: str = "High"
+    corroboration: List[str] = []
+    
+class VerificationResult(BaseModel):
+    """Structured output for a cross-verification check"""
+    confidence_score: float = Field(
+        description="A score from 0.0 (no support) to 1.0 (fully supported) "
+                    "on whether the evidence supports the primary claim.",
+        ge=0.0, 
+        le=1.0
+    )
+    fabrication_risk: str = Field(
+        description="Estimated risk of fabrication: 'Low', 'Medium', or 'High'."
+    )
+    reasoning: str = Field(
+        description="A brief, one-sentence explanation for the score."
+    )
+    @field_validator('fabrication_risk')
+    def validate_fabrication_risk(cls, v):
+        if v not in ['Low', 'Medium', 'High']:
+            raise ValueError("Fabrication risk must be 'Low', 'Medium', or 'High'")
+        return v

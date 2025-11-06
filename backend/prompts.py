@@ -2,8 +2,7 @@
 Contains all prompts used by LLMs throughout the system.
 Each prompt is defined as a string template that can be formatted with dynamic values.
 """
-
-
+from langchain_core.prompts import ChatPromptTemplate
 # Multi-source analyzer prompts
 MULTI_SOURCE_SYSTEM_PROMPT = """
 Current date and time: {current_time}
@@ -499,3 +498,25 @@ JSON SCHEMA:
   ]
 }}
 """
+CROSS_VERIFICATION_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            """You are a meticulous fact-checker. Your job is to verify a "Primary Claim" against a set of "Evidence".
+You must determine if the evidence supports or contradicts the primary claim.
+
+-   If the evidence supports the claim, confidence is high and fabrication risk is low.
+-   If the evidence contradicts the claim, confidence is low and fabrication risk is high.
+-   If the evidence does not mention the claim, confidence is low and fabrication risk is 'Medium'.
+
+You must provide your answer in the requested JSON format.""",
+        ),
+        (
+            "human",
+            """Here is the Primary Claim to verify: PRIMARY CLAIM (from {source_name}): {primary_claim_content}
+          Here is the Evidence to check against (from other sources):
+        EVIDENCE: {evidence_content}
+        Please assess the primary claim based *only* on the evidence provided.""",
+        ),
+    ]
+)

@@ -20,14 +20,12 @@ logger = configure_logging()
 from models import PersonalityConfig, UserSummary, UserProfile, TopicSuggestion
 from pydantic import BaseModel
 
-
 class MotivationConfigUpdate(BaseModel):
     threshold: Optional[float] = None
     boredom_rate: Optional[float] = None
     curiosity_decay: Optional[float] = None
     tiredness_decay: Optional[float] = None
     satisfaction_decay: Optional[float] = None
-
 
 from dependencies import (
     storage_manager,
@@ -38,9 +36,7 @@ from dependencies import (
     _motivation_config_override,
 )
 from services.autonomous_research_engine import initialize_autonomous_researcher
-
 # Global motivation config override (persists across reinitializations)
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -75,7 +71,6 @@ async def lifespan(app: FastAPI):
             logger.info("🔬 Autonomous Research Engine stopped successfully")
         except Exception as e:
             logger.error(f"🔬 Error stopping Autonomous Research Engine: {str(e)}")
-
 
 app = FastAPI(title="AI Chatbot API", version="1.0.0", lifespan=lifespan)
 
@@ -112,7 +107,6 @@ if not os.path.exists(static_dir):
     os.makedirs(static_dir, exist_ok=True)
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
-
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
@@ -138,7 +132,6 @@ async def health_check():
 
     return health_status
 
-
 @app.get("/zep/status")
 async def zep_status():
     """Get Zep memory status."""
@@ -151,7 +144,6 @@ async def zep_status():
     except Exception as e:
         logger.error(f"Error getting Zep status: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error getting Zep status: {str(e)}")
-
 
 if __name__ == "__main__":
     import uvicorn

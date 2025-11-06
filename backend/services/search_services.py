@@ -7,7 +7,8 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 import requests
 from datetime import datetime
-
+from pydantic import BaseModel, Field
+from typing import Optional, List
 from nodes.base import logger, config, get_current_datetime_str, PERPLEXITY_SYSTEM_PROMPT
 from utils import get_last_user_message
 
@@ -140,6 +141,10 @@ class PerplexitySearchService(BaseSearchService):
 
             if response.status_code == 200:
                 response_data = response.json()
+                
+                # This logger is to add functionalities to the output format of Perplexity
+                logger.info(f"Perplexity DEBUG RESPONSE: {response_data}")
+                
                 search_result = response_data["choices"][0]["message"]["content"]
                 citations = response_data.get("citations", [])
                 search_results = response_data.get("search_results", [])
@@ -623,7 +628,6 @@ class HackerNewsSearchService(BaseSearchService):
         
         return "\n".join(lines)
 
-
 class PubMedSearchService(BaseSearchService):
     """Service for PubMed medical search."""
     
@@ -759,7 +763,31 @@ class PubMedSearchService(BaseSearchService):
                 abstract_elem = article.find(".//Abstract/AbstractText")
                 pmid_elem = article.find(".//PMID")
                 journal_elem = article.find(".//Journal/Title")
-                pub_date_elem = article.find(".//PubDate/Year")
+                # pub_date_elem = article.find(".//PubDate/Year")
+                
+                # Date specific Attributes
+                pub_date_elem = article.find(".//PubDate")
+                year = pub_date_elem.findtext("Year", "Unknown year")
+                month_str = pub_date_elem.findtext("Month", "01")
+                day = pub_date_elem.findtext("Day", "01")
+                
+                # Convert month strings to number
+                try:
+                    month = datetime.strptime(month_str, "%b").month
+                except ValueError:
+                    try:
+                        month = int(month_str)
+                    except ValueError:
+                        month = 1
+                        
+                published_at_str = None
+                if year != "Unknown year":
+                    try:
+                        pub_date = datetime(int(year), month, int(day))
+                        published_at_str = pub_date.isoformat()
+                    except ValueError:
+                        # Handle cases like invalid day
+                        published_at_str = f"{year}-{month:02d}-01T00:00:00"
                 
                 # Extract authors
                 authors = []
@@ -774,7 +802,9 @@ class PubMedSearchService(BaseSearchService):
                     "abstract": abstract_elem.text if abstract_elem is not None else "",
                     "pmid": pmid_elem.text if pmid_elem is not None else "",
                     "journal": journal_elem.text if journal_elem is not None else "Unknown journal",
-                    "year": pub_date_elem.text if pub_date_elem is not None else "Unknown year",
+                    # "year": pub_date_elem.text if pub_date_elem is not None else "Unknown year",
+                    "year": year, # This is to keep the old formatings
+                    "published_at": published_at_str,
                     "authors": authors[:3]  # Limit to first 3 authors
                 }
                 articles.append(article_data)
