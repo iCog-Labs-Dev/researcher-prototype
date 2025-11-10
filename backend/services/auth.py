@@ -14,6 +14,7 @@ from exceptions import (
 from utils.password import hash_password, verify_password
 from utils.helpers import normalize_provider_user_id, generate_display_name_from_user_id
 from models.user import User
+from models.user_profile import UserProfile
 from models.identity import Identity
 from config import GOOGLE_CLIENT_ID
 
@@ -39,10 +40,14 @@ class AuthService:
         session.add(user)
         await session.flush()
 
-        user.meta_data = {
-            "display_name": generate_display_name_from_user_id(str(user.id)),
-            "email": email,
-        }
+        profile = UserProfile(
+            user_id=user.id,
+            meta_data={
+                "display_name": generate_display_name_from_user_id(str(user.id)),
+                "email": email,
+            },
+        )
+        session.add(profile)
 
         await self._link_identity(
             session, user.id, PROVIDER_LOCAL, email, password_plain=password
@@ -107,10 +112,14 @@ class AuthService:
         session.add(user)
         await session.flush()
 
-        user.meta_data = {
-            "display_name": google_name if google_name else generate_display_name_from_user_id(str(user.id)),
-            "email": google_email,
-        }
+        profile = UserProfile(
+            user_id=user.id,
+            meta_data={
+                "display_name": google_name if google_name else generate_display_name_from_user_id(str(user.id)),
+                "email": google_email,
+            },
+        )
+        session.add(profile)
 
         await self._link_identity(
             session, user.id, PROVIDER_GOOGLE, google_sub

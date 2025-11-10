@@ -25,16 +25,18 @@ async def get_me(
     user_id = str(request.state.user_id)
 
     service = UserService()
-    user = await service.get_user(session, user_id)
+    user = await service.get_user(session, user_id, True)
+
+    profile = user.profile
 
     return UserProfile(
         id=user.id,
         created_at=user.created_at,
-        metadata=user.meta_data or {},
-        personality=PersonalityConfig.model_validate(user.additional_traits or {}),
+        metadata=(profile.meta_data if profile and profile.meta_data else {}),
+        personality=PersonalityConfig.model_validate(profile.personality or {} if profile else {}),
         preferences=(
-            PreferencesConfig.model_validate(user.preferences)
-            if user.preferences is not None
+            PreferencesConfig.model_validate(profile.preferences)
+            if profile and profile.preferences is not None
             else None
         ),
     )

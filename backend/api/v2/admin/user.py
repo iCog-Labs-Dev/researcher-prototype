@@ -25,12 +25,19 @@ async def list_users(
     items: list[UserSummary] = []
 
     for user in users:
+        profile = user.profile
+
         display_name = ""
-        meta = user.meta_data or {}
-        if isinstance(meta, dict):
-            value = meta.get("display_name")
+        if profile and isinstance(profile.meta_data, dict):
+            value = profile.meta_data.get("display_name")
             if isinstance(value, str):
                 display_name = value
+
+        personality = (
+            PersonalityConfig.model_validate(profile.personality)
+            if profile and profile.personality
+            else PersonalityConfig()
+        )
 
         items.append(
             UserSummary(
@@ -38,7 +45,7 @@ async def list_users(
                 created_at=user.created_at,
                 display_name=display_name,
                 role=user.role,
-                personality=PersonalityConfig.model_validate(user.additional_traits or {}),
+                personality=personality,
             )
         )
 

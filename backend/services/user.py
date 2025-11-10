@@ -2,21 +2,35 @@ from __future__ import annotations
 from uuid import UUID
 from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlalchemy import select
 
 from exceptions import NotFound, CommonError
 from models.user import User
+from models.user_profile import UserProfile
 
 
 class UserService:
     async def get_user(
         self,
         session: AsyncSession,
-        user_id: UUID
-) -> User:
-        user = await session.get(User, user_id)
+        user_id: UUID,
+        with_profile: bool = False,
+    ) -> User:
+        if with_profile:
+            query = (
+                select(User)
+                .options(selectinload(User.profile))
+                .where(User.id == user_id)
+            )
+            res = await session.execute(query)
+            user = res.scalar_one_or_none()
+        else:
+            user = await session.get(User, user_id)
+
         if not user:
             raise NotFound("User not found")
+
         return user
 
     async def update_display_name(
@@ -29,15 +43,19 @@ class UserService:
         if not value:
             raise CommonError("Display name cannot be empty")
 
-        user = await self.get_user(session, user_id)
+        user = await self.get_user(session, user_id, True)
+        profile = self._ensure_profile(session, user)
 
-        if not isinstance(user.meta_data, dict):
-            user.meta_data = {}
+        meta = profile.meta_data or {}
+        if not isinstance(meta, dict):
+            meta = {}
 
-        user.meta_data["display_name"] = value
+        meta["display_name"] = value
+        profile.meta_data = meta
+
         await session.commit()
 
-        return user.meta_data["display_name"]
+        return user.profile.meta_data["display_name"]
 
     async def update_email(
         self,
@@ -49,15 +67,19 @@ class UserService:
         if not value:
             raise CommonError("Email cannot be empty")
 
-        user = await self.get_user(session, user_id)
+        user = await self.get_user(session, user_id, True)
+        profile = self._ensure_profile(session, user)
 
-        if not isinstance(user.meta_data, dict):
-            user.meta_data = {}
+        meta = profile.meta_data or {}
+        if not isinstance(meta, dict):
+            meta = {}
 
-        user.meta_data["email"] = value
+        meta["email"] = value
+        profile.meta_data = meta
+
         await session.commit()
 
-        return user.meta_data["email"]
+        return user.profile.meta_data["email"]
 
     async def update_preferences(
         self,
@@ -65,12 +87,13 @@ class UserService:
         user_id: UUID,
         preferences: dict[str, Any],
     ) -> dict[str, Any]:
-        user = await self.get_user(session, user_id)
+        user = await self.get_user(session, user_id, True)
+        profile = self._ensure_profile(session, user)
 
-        user.preferences = preferences
+        profile.preferences = preferences
         await session.commit()
 
-        return user.preferences
+        return user.profile.preferences or {}
 
     async def update_personality(
         self,
@@ -78,21 +101,23 @@ class UserService:
         user_id: UUID,
         personality: dict[str, Any],
     ) -> dict[str, Any]:
-        user = await self.get_user(session, user_id)
+        user = await self.get_user(session, user_id, True)
+        profile = self._ensure_profile(session, user)
 
-        user.additional_traits = personality
+        profile.personality = personality
         await session.commit()
 
-        return user.additional_traits
+        return user.profile.personality or {}
 
     async def list_users(
         self,
         session: AsyncSession,
         limit: int,
         offset: int,
-    ):
+    ) -> list[User]:
         res = await session.execute(
             select(User)
+            .options(selectinload(User.profile))
             .order_by(User.created_at.desc())
             .limit(limit)
             .offset(offset)
@@ -112,3 +137,16 @@ class UserService:
         await session.commit()
 
         return user.role
+
+    def _ensure_profile(
+        self,
+        session: AsyncSession,
+        user: User,
+    ) -> UserProfile:
+        if user.profile is not None:
+            return user.profile
+
+        profile = UserProfile(user_id=user.id, meta_data={})
+        session.add(profile)
+
+        return profile
