@@ -327,7 +327,6 @@ const ChatPage = () => {
 
       {/* Conversation Topics Sidebar */}
       <ConversationTopics
-        sessionId={sessionId}
         isCollapsed={isTopicsSidebarCollapsed}
         onToggleCollapse={handleToggleTopicsSidebar}
         onTopicUpdate={handleTopicUpdate}

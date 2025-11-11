@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { useSession } from '../context/SessionContext';
 import { useNotifications } from '../context/NotificationContext';
-import { 
+import {
   getResearchFindings,
   markFindingAsRead,
   deleteResearchFinding,
@@ -19,7 +19,7 @@ const ResearchResultsDashboard = () => {
   const { userId } = useSession();
   const { markResearchNotificationsRead } = useNotifications();
   const { trackInteraction } = useEngagementTracking();
-  
+
   const [researchData, setResearchData] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -85,13 +85,13 @@ const ResearchResultsDashboard = () => {
         }
       }
       setError(null);
-      
+
       const findingsResponse = await getResearchFindings(userId, null, filters.unreadOnly);
-      
+        console.log(111111)
       // Group findings by topic
       const groupedFindings = {};
       const findings = findingsResponse.findings || [];
-      
+
       findings.forEach(finding => {
         const topicName = finding.topic_name;
         if (!groupedFindings[topicName]) {
@@ -102,7 +102,7 @@ const ResearchResultsDashboard = () => {
 
       // Sort findings within each topic by date
       Object.keys(groupedFindings).forEach(topic => {
-        groupedFindings[topic].sort((a, b) => 
+        groupedFindings[topic].sort((a, b) =>
           (b.research_time || 0) - (a.research_time || 0)
         );
       });
@@ -162,11 +162,11 @@ const ResearchResultsDashboard = () => {
     // Search filter
     if (filters.searchTerm) {
       const searchLower = filters.searchTerm.toLowerCase();
-      topics = topics.filter(topic => 
+      topics = topics.filter(topic =>
         topic.toLowerCase().includes(searchLower) ||
-        researchData[topic].some(finding => 
+        researchData[topic].some(finding =>
           finding.findings_summary?.toLowerCase().includes(searchLower) ||
-          finding.key_insights?.some(insight => 
+          finding.key_insights?.some(insight =>
             insight.toLowerCase().includes(searchLower)
           )
         )
@@ -184,7 +184,7 @@ const ResearchResultsDashboard = () => {
       const cutoff = now - ranges[filters.dateRange];
 
       topics = topics.filter(topic =>
-        researchData[topic].some(finding => 
+        researchData[topic].some(finding =>
           (finding.research_time || 0) >= cutoff
         )
       );
@@ -207,10 +207,10 @@ const ResearchResultsDashboard = () => {
           const aMaxQuality = Math.max(...aFindings.map(f => f.quality_score || 0));
           const bMaxQuality = Math.max(...bFindings.map(f => f.quality_score || 0));
           return filters.sortOrder === 'desc' ? bMaxQuality - aMaxQuality : aMaxQuality - bMaxQuality;
-        
+
         case 'topic':
           return filters.sortOrder === 'desc' ? b.localeCompare(a) : a.localeCompare(b);
-        
+
         case 'date':
         default:
           const aLatest = Math.max(...aFindings.map(f => f.research_time || 0));
@@ -280,7 +280,7 @@ const ResearchResultsDashboard = () => {
   const toggleBookmark = async (findingId, topicName) => {
     const newBookmarked = new Set(bookmarkedFindings);
     const isBookmarking = !newBookmarked.has(findingId);
-    
+
     if (newBookmarked.has(findingId)) {
       newBookmarked.delete(findingId);
     } else {
@@ -318,7 +318,7 @@ const ResearchResultsDashboard = () => {
       newShowSources.add(findingId);
     }
     setShowSourcesForFinding(newShowSources);
-    
+
     if (!showSourcesForFinding.has(findingId)) {
       // Track source exploration
       trackInteraction(`finding_${findingId}`, 'source_exploration', {
@@ -368,13 +368,13 @@ const ResearchResultsDashboard = () => {
 
     try {
       setIntegratingFindings(prev => new Set(prev).add(findingId));
-      
+
       const result = await integrateResearchFinding(findingId);
-      
+
       if (result.success) {
         // Refresh data to show updated integrated status
         await loadResearchData(true);
-        
+
         // Track integration interaction
         trackInteraction(`finding_${findingId}`, 'integrate_to_knowledge_graph', {
           findingId,
@@ -384,7 +384,7 @@ const ResearchResultsDashboard = () => {
           wasAlreadyIntegrated: result.was_already_integrated
         });
       }
-      
+
     } catch (err) {
       console.error('Error integrating finding:', err);
       setError('Failed to integrate finding to knowledge graph. Please try again.');
@@ -401,16 +401,16 @@ const ResearchResultsDashboard = () => {
   const exportFindings = (format = 'text') => {
     if (format === 'text') {
       let content = `Research Findings Export\n${'='.repeat(50)}\n\n`;
-      
+
       filteredTopics.forEach(topic => {
         content += `${topic}\n${'-'.repeat(topic.length)}\n\n`;
-        
+
         researchData[topic].forEach((finding, index) => {
           content += `Finding ${index + 1}:\n`;
           content += `Date: ${new Date(finding.research_time * 1000).toLocaleDateString()}\n`;
           content += `Quality Score: ${finding.quality_score?.toFixed(2) || 'N/A'}\n`;
           content += `Summary: ${finding.findings_summary || 'No summary'}\n\n`;
-          
+
           if (finding.key_insights?.length > 0) {
             content += `Key Insights:\n`;
             finding.key_insights.forEach(insight => {
@@ -418,10 +418,10 @@ const ResearchResultsDashboard = () => {
             });
             content += '\n';
           }
-          
+
           content += `${'-'.repeat(40)}\n\n`;
         });
-        
+
         content += '\n';
       });
 
@@ -490,7 +490,7 @@ const ResearchResultsDashboard = () => {
 
   const totalFindings = Object.values(researchData).reduce((sum, findings) => sum + findings.length, 0);
   const totalTopics = filteredTopics.length;
-  const unreadCount = Object.values(researchData).reduce((sum, findings) => 
+  const unreadCount = Object.values(researchData).reduce((sum, findings) =>
     sum + findings.filter(f => !f.read).length, 0
   );
   const hasActiveFilters = filters.searchTerm || filters.dateRange !== 'all' || filters.unreadOnly || filters.bookmarkedOnly;
@@ -503,7 +503,7 @@ const ResearchResultsDashboard = () => {
         {isBackgroundRefreshing && <div className="background-refresh-indicator">Updating...</div>}
         <p>Explore findings from the autonomous research engine.</p>
       </header>
-      
+
       {/* Stats Overview */}
       <div className="stats-overview">
         <div className="stat-card highlight">
@@ -522,7 +522,7 @@ const ResearchResultsDashboard = () => {
 
       {/* Header Actions */}
       <div className="header-actions">
-        <button 
+        <button
           className="export-btn"
           onClick={() => exportFindings('text')}
           disabled={totalFindings === 0}
@@ -555,7 +555,7 @@ const ResearchResultsDashboard = () => {
                 className="search-input"
               />
               {filters.searchTerm && (
-                <button 
+                <button
                   className="clear-search"
                   onClick={() => setFilters(prev => ({ ...prev, searchTerm: '' }))}
                   title="Clear search"
@@ -565,7 +565,7 @@ const ResearchResultsDashboard = () => {
               )}
             </div>
           </div>
-          
+
           {/* Date Range */}
           <div className="filter-group">
             <label htmlFor="date-range">Time Period</label>
@@ -637,7 +637,7 @@ const ResearchResultsDashboard = () => {
             <div className="empty-icon">🔍</div>
             <h3>No Research Results Found</h3>
             <p>
-              {totalFindings === 0 
+              {totalFindings === 0
                 ? "No research has been conducted yet. Start by enabling research on some topics!"
                 : "No results match your current filters. Try adjusting your search criteria."
               }
@@ -657,7 +657,7 @@ const ResearchResultsDashboard = () => {
 
               return (
                 <div key={topicName} className="topic-card">
-                  <div 
+                  <div
                     className="topic-header"
                     onClick={() => toggleTopic(topicName)}
                   >
@@ -699,8 +699,8 @@ const ResearchResultsDashboard = () => {
                   {isExpanded && (
                   <div className="findings-list">
                       {findings.map((finding, index) => (
-                        <div 
-                          key={finding.finding_id || index} 
+                        <div
+                          key={finding.finding_id || index}
                           className={`finding-item ${!finding.read ? 'unread' : ''}`}
                         >
                           <div className="finding-header">
@@ -713,7 +713,7 @@ const ResearchResultsDashboard = () => {
                               </span>
                               {/* new indicator moved into the title for better visibility */}
                             </div>
-                            <div 
+                            <div
                               className="finding-title"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -729,7 +729,7 @@ const ResearchResultsDashboard = () => {
                               </span>
                               <span className={`finding-toggle ${expandedFindings.has(finding.finding_id) ? 'expanded' : ''}`}>▼</span>
                             </div>
-                            
+
                             <div className="finding-actions">
                               <button
                                 className={`bookmark-btn ${bookmarkedFindings.has(finding.finding_id) ? 'bookmarked' : ''}`}
@@ -741,8 +741,8 @@ const ResearchResultsDashboard = () => {
                               >
                                 {bookmarkedFindings.has(finding.finding_id) ? '⭐' : '☆'}
                               </button>
-                              
-                              
+
+
                               {!finding.integrated && (
                                 <button
                                   className={`integrate-btn ${integratingFindings.has(finding.finding_id) ? 'integrating' : ''}`}
@@ -756,13 +756,13 @@ const ResearchResultsDashboard = () => {
                                   {integratingFindings.has(finding.finding_id) ? '⏳' : '🧠'}
                                 </button>
                               )}
-                              
+
                               {finding.integrated && (
                                 <span className="integrated-indicator" title="Already integrated to Knowledge Graph">
                                   ✅
                                 </span>
                               )}
-                              
+
                               <button
                                 className="delete-finding-btn"
                                 onClick={(e) => {
@@ -785,7 +785,7 @@ const ResearchResultsDashboard = () => {
                                 const parts = finding.formatted_content.split('\n\n**Sources:**');
                                 const mainContent = parts[0];
                                 const sourcesContent = parts.length > 1 ? parts[1] : null;
-                                
+
                                 // Build link renderer with context for this finding
                                 const linkRenderer = createFindingLinkRenderer(topicName, finding.finding_id);
                                 const components = { a: linkRenderer };
@@ -795,7 +795,7 @@ const ResearchResultsDashboard = () => {
                                     <ReactMarkdown components={components}>{mainContent}</ReactMarkdown>
                                     {sourcesContent && (
                                       <div className="sources-container">
-                                        <button 
+                                        <button
                                           className="sources-toggle"
                                           onClick={(e) => {
                                             e.stopPropagation();
@@ -844,4 +844,4 @@ const ResearchResultsDashboard = () => {
   );
 };
 
-export default ResearchResultsDashboard; 
+export default ResearchResultsDashboard;

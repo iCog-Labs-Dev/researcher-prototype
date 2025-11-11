@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getUsers, createUser, updateUserDisplayName } from '../services/api';
+import { getCurrentUser, updateUserDisplayName } from '../services/api';
 import '../styles/UserSelector.css';
 
 const UserSelector = ({ onUserSelected }) => {
@@ -19,35 +19,29 @@ const UserSelector = ({ onUserSelected }) => {
     onUserSelected(userId);
   }, [onUserSelected]);
 
-  // Load users only once when component mounts
+  // Load current user only once when component mounts
   useEffect(() => {
     let isMounted = true;
     
-    const loadUsers = async () => {
+    const loadCurrentUser = async () => {
       try {
         setIsLoading(true);
         setError(null);
         
-        const userData = await getUsers();
+        const userData = await getCurrentUser();
         
         // Only update state if component is still mounted
         if (isMounted) {
-          setUsers(userData);
-          
-          // Check if there's a previously selected user in localStorage
-          const savedUserId = localStorage.getItem('user_id');
-          if (savedUserId && userData.some(user => user.user_id === savedUserId)) {
-            setSelectedUserId(savedUserId);
-            handleUserSelect(savedUserId);
-          } else if (userData.length > 0) {
-            // Select the first user if none is saved
-            handleUserSelect(userData[0].user_id);
+          if (userData && userData.user_id) {
+            setUsers([userData]);
+            setSelectedUserId(userData.user_id);
+            handleUserSelect(userData.user_id);
           }
         }
       } catch (error) {
-        console.error('Error loading users:', error);
+        console.error('Error loading current user:', error);
         if (isMounted) {
-          setError('Failed to load users. Please try again.');
+          setError('Failed to load user. Please try again.');
         }
       } finally {
         if (isMounted) {
@@ -56,7 +50,7 @@ const UserSelector = ({ onUserSelected }) => {
       }
     };
     
-    loadUsers();
+    loadCurrentUser();
     
     // Cleanup function to prevent state updates after unmount
     return () => {
@@ -64,34 +58,10 @@ const UserSelector = ({ onUserSelected }) => {
     };
   }, [handleUserSelect]); // Include handleUserSelect in dependency array
 
+  // Note: User creation is now handled through registration in AuthModal
   const handleCreateUser = async () => {
-    if (!newUserName.trim()) {
-      alert('Please enter a name for the new user');
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      const newUser = await createUser({ display_name: newUserName.trim()});
-      setUsers(prevUsers => [...prevUsers, {
-        user_id: newUser.user_id,
-        created_at: newUser.created_at,
-        personality: {
-          style: 'helpful',
-          tone: 'friendly'
-        },
-        display_name: newUserName
-      }]);
-      
-      setNewUserName('');
-      setIsCreatingUser(false);
-      handleUserSelect(newUser.user_id);
-    } catch (error) {
-      console.error('Error creating user:', error);
-      alert('Failed to create user');
-    } finally {
-      setIsLoading(false);
-    }
+    alert('Please use the Login/Register button to create a new account.');
+    setIsCreatingUser(false);
   };
 
   const handleEditName = async (userId) => {
@@ -137,33 +107,8 @@ const UserSelector = ({ onUserSelected }) => {
   return (
     <div className="user-selector">
       <div className="user-selector-header">
-        <h3>Select User</h3>
-        <button 
-          className="create-user-btn"
-          onClick={() => setIsCreatingUser(!isCreatingUser)}
-          disabled={isLoading}
-        >
-          {isCreatingUser ? 'Cancel' : 'New User'}
-        </button>
+        <h3>Current User</h3>
       </div>
-      
-      {isCreatingUser && (
-        <div className="create-user-form">
-          <input
-            type="text"
-            placeholder="Enter user name"
-            value={newUserName}
-            onChange={(e) => setNewUserName(e.target.value)}
-            disabled={isLoading}
-          />
-          <button 
-            onClick={handleCreateUser}
-            disabled={isLoading}
-          >
-            Create
-          </button>
-        </div>
-      )}
       
       <div className="user-list">
         {users.length === 0 ? (

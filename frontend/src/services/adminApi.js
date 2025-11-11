@@ -4,7 +4,7 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 // Create axios instance for admin requests
 const adminApi = axios.create({
-  baseURL: `${API_BASE_URL}/admin`,
+  baseURL: `${API_BASE_URL}/v2/admin`,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -230,4 +230,4 @@ export const isAuthenticated = () => {
 export const getAuthHeaders = () => {
   const token = tokenManager.getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
-}; 
+};
