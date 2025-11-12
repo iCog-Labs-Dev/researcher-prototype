@@ -65,12 +65,20 @@ const AuthModal = ({ isOpen, onRequestClose, onAuthenticated, preventClose = fal
 
     // Initialize Google Sign-In
     useEffect(() => {
+        if (!isOpen || !isLoginMode) {
+            return;
+        }
+
         const initGoogleSignIn = () => {
-            if (isOpen && window.google && window.google.accounts) {
+            if (!googleButtonRef.current) {
+                return false;
+            }
+
+            if (window.google && window.google.accounts) {
                 const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
                 if (!clientId) {
                     console.warn('REACT_APP_GOOGLE_CLIENT_ID is not set. Google Sign-In will not work.');
-                    return;
+                    return false;
                 }
 
                 window.google.accounts.id.initialize({
@@ -79,49 +87,70 @@ const AuthModal = ({ isOpen, onRequestClose, onAuthenticated, preventClose = fal
                 });
 
                 // Clear previous button if exists
-                if (googleButtonRef.current) {
-                    googleButtonRef.current.innerHTML = '';
-                }
+                googleButtonRef.current.innerHTML = '';
 
-                if (googleButtonRef.current && isLoginMode) {
-                    window.google.accounts.id.renderButton(
-                        googleButtonRef.current,
-                        {
-                            theme: 'outline',
-                            size: 'large',
-                            width: '100%',
-                            text: 'signin_with',
-                        }
-                    );
+                // Render button
+                window.google.accounts.id.renderButton(
+                    googleButtonRef.current,
+                    {
+                        theme: 'outline',
+                        size: 'large',
+                        width: '100%',
+                        text: 'signin_with',
+                    }
+                );
+                return true;
+            }
+            return false;
+        };
+
+        // Check if Google script is loaded and ref is available
+        let checkInterval = null;
+        let timeoutId = null;
+
+        const tryInit = () => {
+            if (initGoogleSignIn()) {
+                // Successfully initialized
+                if (checkInterval) {
+                    clearInterval(checkInterval);
+                    checkInterval = null;
                 }
+                return;
+            }
+
+            // If not initialized, set up polling
+            if (!checkInterval) {
+                checkInterval = setInterval(() => {
+                    if (initGoogleSignIn()) {
+                        clearInterval(checkInterval);
+                        checkInterval = null;
+                    }
+                }, 50);
+
+                // Cleanup interval after 5 seconds to avoid infinite polling
+                timeoutId = setTimeout(() => {
+                    if (checkInterval) {
+                        clearInterval(checkInterval);
+                        checkInterval = null;
+                    }
+                }, 5000);
             }
         };
 
-        // Check if Google script is loaded
-        let checkGoogleInterval = null;
-        if (window.google && window.google.accounts) {
-            initGoogleSignIn();
-        } else {
-            // Wait for Google script to load
-            checkGoogleInterval = setInterval(() => {
-                if (window.google && window.google.accounts) {
-                    clearInterval(checkGoogleInterval);
-                    initGoogleSignIn();
-                }
-            }, 100);
-
-            // Cleanup interval after 10 seconds
-            setTimeout(() => {
-                if (checkGoogleInterval) {
-                    clearInterval(checkGoogleInterval);
-                }
-            }, 10000);
-        }
+        // Use requestAnimationFrame to ensure DOM is ready
+        const rafId = requestAnimationFrame(() => {
+            // Use setTimeout to ensure React has committed the render
+            setTimeout(tryInit, 0);
+        });
 
         // Cleanup function
         return () => {
-            if (checkGoogleInterval) {
-                clearInterval(checkGoogleInterval);
+            cancelAnimationFrame(rafId);
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+            }
+            if (checkInterval) {
+                clearInterval(checkInterval);
             }
         };
     }, [isOpen, isLoginMode, handleGoogleSignIn]);
