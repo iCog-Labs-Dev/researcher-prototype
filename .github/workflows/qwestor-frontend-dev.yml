@@ -40,8 +40,8 @@ jobs:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
       run: |
         cat << EOF >> ./.env
-          ${{ secrets.FRONTEND_ENV_DEV}}
-          EOF
+        ${{ secrets.FRONTEND_ENV_DEV}}
+        EOF
         git submodule init
         git submodule update
         docker build -t $ECR_REGISTRY/${{ env.ECR_REPOSITORY_QWESTOR_FRONTEND }}:$IMAGE_TAG -f frontend/Dockerfile frontend/
