@@ -1,11 +1,9 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useSession } from '../context/SessionContext';
 import AuthModal from './AuthModal';
 
 const ProtectedRoute = ({ children }) => {
     const { isAuthenticated, loading } = useAuth();
-    const { updateUserId, updateUserDisplayName } = useSession();
 
     // Show loading state while checking authentication
     if (loading) {
@@ -38,12 +36,6 @@ const ProtectedRoute = ({ children }) => {
             <AuthModal
                 isOpen={true}
                 onRequestClose={() => {}}
-                onAuthenticated={(userId, displayName) => {
-                    if (userId) {
-                        updateUserId(userId);
-                        if (displayName) updateUserDisplayName(displayName);
-                    }
-                }}
                 preventClose={true}
             />
         );

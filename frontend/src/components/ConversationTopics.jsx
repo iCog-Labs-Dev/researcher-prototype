@@ -7,7 +7,7 @@ import ErrorModal from './ErrorModal';
 import '../styles/ConversationTopics.css';
 
 const ConversationTopics = ({ isCollapsed, onToggleCollapse, onTopicUpdate }) => {
-  const { userId, sessionId } = useSession();
+  const { userId } = useSession();
   const [topics, setTopics] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -61,7 +61,7 @@ const ConversationTopics = ({ isCollapsed, onToggleCollapse, onTopicUpdate }) =>
     }
   }, [userId, onTopicUpdate]);
 
-  // Initial fetch when sessionId changes
+  // Initial fetch when component mounts or dependencies change
   useEffect(() => {
     fetchTopics();
   }, [fetchTopics]);
@@ -221,17 +221,10 @@ const ConversationTopics = ({ isCollapsed, onToggleCollapse, onTopicUpdate }) =>
           </div>
         ) : topics.length === 0 ? (
           <div className="empty-state">
-            {!sessionId ? (
-              <>
-                <p>Start a conversation to discover research topics!</p>
-                <small>AI will automatically suggest interesting research topics as you chat.</small>
-              </>
-            ) : (
-              <>
-                <p>No research topics yet.</p>
-                <small>Topics will appear as we discuss research-worthy subjects.</small>
-              </>
-            )}
+            <>
+              <p>No research topics yet.</p>
+              <small>Topics will appear as we continue the conversation.</small>
+            </>
           </div>
         ) : (
           <div className="topics-list">

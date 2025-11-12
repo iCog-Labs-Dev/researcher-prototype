@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import { useSession } from './SessionContext';
 
 const NotificationContext = createContext();
 
@@ -21,11 +22,7 @@ export const NotificationProvider = ({ children }) => {
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
   const baseReconnectDelay = 1000; // 1 second
-
-  // Get user ID from localStorage (matches the pattern used in api.js)
-  const getUserId = () => {
-    return localStorage.getItem('user_id') || 'anonymous';
-  };
+  const { userId } = useSession();
 
   const showToast = useCallback((notification) => {
     // This will be handled by the toast component
@@ -146,13 +143,18 @@ export const NotificationProvider = ({ children }) => {
   }, []);
 
   const connectWebSocket = useCallback(() => {
-    const userId = getUserId();
+    if (!userId) {
+      console.log('📡 No authenticated user, skipping notifications connection');
+      return;
+    }
+
+    const activeUserId = userId;
     
     // Determine WebSocket URL based on current location
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.hostname;
     const port = process.env.NODE_ENV === 'production' ? '' : ':8000';
-    const wsUrl = `${protocol}//${host}${port}/ws/notifications?user-id=${userId}`;
+    const wsUrl = `${protocol}//${host}${port}/ws/notifications?user-id=${activeUserId}`;
     
     console.log('📡 Connecting to notifications WebSocket:', wsUrl);
     
@@ -196,7 +198,7 @@ export const NotificationProvider = ({ children }) => {
       setConnectionStatus('error');
       scheduleReconnectRef.current?.();
     }
-  }, [handleNotificationMessage]);
+  }, [handleNotificationMessage, userId]);
 
   // Update refs when functions change
   connectWebSocketRef.current = connectWebSocket;

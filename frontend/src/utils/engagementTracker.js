@@ -64,17 +64,22 @@ class EngagementTracker {
   /**
    * Track session continuation
    */
-  trackSessionContinuation(sessionId, continuationType = 'new_message') {
+  trackSessionContinuation(identifier, continuationType = 'new_message') {
     if (!this.isEnabled) return;
 
-    console.log('👤 EngagementTracker: ✅ Session continuation tracked:', sessionId, continuationType);
+    console.log('👤 EngagementTracker: ✅ Session continuation tracked:', identifier, continuationType);
     
-    this.trackEngagementEvent({
+    const payload = {
       type: 'session_continuation',
-      sessionId,
       continuationType,
       timestamp: Date.now()
-    });
+    };
+
+    if (identifier) {
+      payload.sessionId = identifier;
+    }
+
+    this.trackEngagementEvent(payload);
   }
 
   /**

@@ -42,12 +42,6 @@ jest.mock('./TypingIndicator', () => {
   };
 });
 
-jest.mock('./SessionHistory', () => {
-  return function MockSessionHistory() {
-    return <div data-testid="session-history">Session History</div>;
-  };
-});
-
 jest.mock('./ConversationTopics', () => {
   return function MockConversationTopics({ onToggleCollapse, onTopicUpdate }) {
     return (
@@ -75,17 +69,15 @@ describe('ChatPage Comprehensive Tests', () => {
     
     mockSessionContext = {
       userId: 'test-user',
-      sessionId: 'test-session',
       messages: [
         { role: 'system', content: 'Hello! I\'m your AI assistant.' }
       ],
       personality: { style: 'helpful', tone: 'friendly' },
       userDisplayName: 'Test User',
       conversationTopics: [],
-      sessionHistory: [],
-      updateSessionId: jest.fn(),
       updateMessages: jest.fn(),
       updateConversationTopics: jest.fn(),
+      resetSession: jest.fn(),
     };
     
     useSession.mockReturnValue(mockSessionContext);
@@ -165,20 +157,21 @@ describe('ChatPage Comprehensive Tests', () => {
       fireEvent.click(sendButton);
 
       await waitFor(() => {
-        expect(api.sendChatMessage).toHaveBeenCalledWith(
-          expect.arrayContaining([
-          expect.objectContaining({ 
-            role: 'system', 
-            content: 'You are a helpful assistant.' 
-          })
-        ]),
-        expect.any(String),
-        expect.any(Number),
-        expect.any(Number),
-        null,
-        expect.any(String)
-        );
+        expect(api.sendChatMessage).toHaveBeenCalled();
       });
+
+      const callArgs = api.sendChatMessage.mock.calls[0];
+      expect(callArgs[0]).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: 'system',
+            content: 'You are a helpful assistant.'
+          })
+        ])
+      );
+      expect(callArgs[1]).toBe(0.7);
+      expect(callArgs[2]).toBe(1000);
+      expect(callArgs[3]).toBeNull();
     });
 
     test('generates personality-based system message', async () => {
@@ -195,41 +188,23 @@ describe('ChatPage Comprehensive Tests', () => {
       fireEvent.click(sendButton);
 
       await waitFor(() => {
-        expect(api.sendChatMessage).toHaveBeenCalledWith(
-          expect.arrayContaining([
-            expect.objectContaining({ 
-              role: 'system', 
-              content: expect.stringContaining('professional')
-            })
-          ]),
-          expect.any(String),
-          expect.any(Number),
-          expect.any(Number),
-          expect.any(Object),
-          expect.any(String)
-        );
+        expect(api.sendChatMessage).toHaveBeenCalled();
       });
+
+      const callArgs = api.sendChatMessage.mock.calls[0];
+      expect(callArgs[0]).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: 'system',
+            content: expect.stringContaining('professional')
+          })
+        ])
+      );
+      expect(callArgs[3]).toEqual(expect.objectContaining({ style: 'professional' }));
     });
   });
 
   describe('Session Management', () => {
-    test('updates session ID from API response', async () => {
-      api.sendChatMessage.mockResolvedValue({
-        response: 'Test response',
-        session_id: 'updated-session-789'
-      });
-      
-      render(<ChatPage />);
-      
-      const sendButton = screen.getByTestId('send-button');
-      
-      fireEvent.click(sendButton);
-
-      await waitFor(() => {
-        expect(mockSessionContext.updateSessionId).toHaveBeenCalledWith('updated-session-789');
-      });
-    });
-
     test('updates conversation topics from API response', async () => {
       api.sendChatMessage.mockResolvedValue({
         response: 'Test response',

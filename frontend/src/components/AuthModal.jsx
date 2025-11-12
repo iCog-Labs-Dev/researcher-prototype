@@ -43,7 +43,7 @@ const AuthModal = ({ isOpen, onRequestClose, onAuthenticated, preventClose = fal
                         login(authResponse.access_token, userData);
 
                         if (onAuthenticated) {
-                            onAuthenticated(userData.user_id, userData.metadata?.display_name || userData.display_name || userData.email);
+                            onAuthenticated(userData.id, userData.metadata?.display_name || userData.display_name || userData.email);
                         }
                     }
                 } catch (userError) {
@@ -149,7 +149,7 @@ const AuthModal = ({ isOpen, onRequestClose, onAuthenticated, preventClose = fal
 
                         // Notify parent component about successful authentication
                         if (onAuthenticated) {
-                            onAuthenticated(userData.user_id, userData.display_name || userData.email);
+                            onAuthenticated(userData.id, userData.display_name || userData.email);
                         }
                     }
                 } catch (userError) {
@@ -206,7 +206,7 @@ const AuthModal = ({ isOpen, onRequestClose, onAuthenticated, preventClose = fal
 
                         // Notify parent component about successful authentication
                         if (onAuthenticated) {
-                            onAuthenticated(userData.user_id, userData.display_name || displayName || registerEmail);
+                            onAuthenticated(userData.id, userData.display_name || displayName || registerEmail);
                         }
                     }
                 } catch (userError) {

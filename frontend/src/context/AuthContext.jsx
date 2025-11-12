@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { setAuthTokenHeader } from '../services/api';
 
 const AuthContext = createContext();
@@ -35,6 +35,8 @@ export const AuthProvider = ({ children }) => {
                     console.error('Failed to parse stored user:', e);
                 }
             }
+        } else {
+            setAuthTokenHeader(null);
         }
 
         setLoading(false);
@@ -56,20 +58,24 @@ export const AuthProvider = ({ children }) => {
         setIsAuthenticated(false);
         localStorage.removeItem('auth_token');
         localStorage.removeItem('auth_user');
-        setAuthTokenHeader('');
+        setAuthTokenHeader(null);
         setError('');
     }, []);
 
-    const value = {
+    const setErrorCallback = useCallback((errorMessage) => {
+        setError(errorMessage);
+    }, []);
+
+    const value = useMemo(() => ({
         isAuthenticated,
         token,
         user,
         loading,
         error,
-        setError,
+        setError: setErrorCallback,
         login,
         logout,
-    };
+    }), [isAuthenticated, token, user, loading, error, setErrorCallback, login, logout]);
 
     return (
         <AuthContext.Provider value={value}>
