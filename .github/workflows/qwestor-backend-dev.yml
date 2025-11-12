@@ -59,8 +59,8 @@ jobs:
             export ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }} && \
             export IMAGE_TAG=${{ github.sha }} && \
             aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin \$ECR_REGISTRY && \
-            docker compose -f docker-compose.deploy.yml pull --quiet && \
-            docker compose -f docker-compose.deploy.yml backend up -d \"
+            docker compose -f docker-compose.yml pull --quiet && \
+            docker compose -f docker-compose.yml backend up -d \"
           ]")
         if [ -z "$COMMAND_ID" ]; then
           echo "::error::Failed to send command to SSM."
