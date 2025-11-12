@@ -42,6 +42,7 @@ jobs:
         cat << EOF >> frontend/.env
         ${{ secrets.FRONTEND_ENV_DEV}}
         EOF
+        cat frontend/.env
         git submodule init
         git submodule update
         docker build -t $ECR_REGISTRY/${{ env.ECR_REPOSITORY_QWESTOR_FRONTEND }}:$IMAGE_TAG -f frontend/Dockerfile frontend/
