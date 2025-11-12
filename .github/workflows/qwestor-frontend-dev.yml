@@ -39,6 +39,7 @@ jobs:
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
       run: |
+        rm frontend/.env.development frontend/.env.example frontend/.env.production
         cat << EOF >> frontend/.env
         ${{ secrets.FRONTEND_ENV_DEV}}
         EOF
