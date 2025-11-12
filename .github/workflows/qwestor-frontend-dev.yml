@@ -39,7 +39,7 @@ jobs:
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
       run: |
-        cat << EOF >> ./.env
+        cat << EOF >> frontend/.env
         ${{ secrets.FRONTEND_ENV_DEV}}
         EOF
         git submodule init
