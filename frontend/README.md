@@ -17,6 +17,7 @@ cp .env.example .env.local
 
 - `REACT_APP_API_URL`: Backend API URL (default: `http://localhost:8000`)
 - `REACT_APP_DEBUG`: Enable debug logging (default: `true`)
+- `REACT_APP_GOOGLE_CLIENT_ID`: Google OAuth Client ID for Google Sign-In (required for Google authentication)
 
 #### Environment Files
 

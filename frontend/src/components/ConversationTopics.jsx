@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getSessionTopicSuggestions, deleteTopicById, enableTopicResearchById, disableTopicResearchById } from '../services/api';
+import { getUserTopicSuggestions, deleteTopicById, enableTopicResearchById, disableTopicResearchById } from '../services/api';
+import { useSession } from '../context/SessionContext';
 import { trackEngagement } from '../utils/engagementTracker';
 import TopicSidebarItem from './TopicSidebarItem';
 import ErrorModal from './ErrorModal';
 import '../styles/ConversationTopics.css';
 
-const ConversationTopics = ({ sessionId, isCollapsed, onToggleCollapse, onTopicUpdate }) => {
+const ConversationTopics = ({ isCollapsed, onToggleCollapse, onTopicUpdate }) => {
+  const { userId } = useSession();
   const [topics, setTopics] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -13,7 +15,7 @@ const ConversationTopics = ({ sessionId, isCollapsed, onToggleCollapse, onTopicU
 
   // Fetch topics for the current session
   const fetchTopics = useCallback(async (preserveError = false) => {
-    if (!sessionId) {
+    if (!userId) {
       setTopics([]);
       return;
     }
@@ -24,7 +26,7 @@ const ConversationTopics = ({ sessionId, isCollapsed, onToggleCollapse, onTopicU
         setError(null);
       }
       
-      const response = await getSessionTopicSuggestions(sessionId);
+      const response = await getUserTopicSuggestions(userId);
       const allTopics = response.topic_suggestions || [];
       
       // Get the 3 latest topics
@@ -57,23 +59,23 @@ const ConversationTopics = ({ sessionId, isCollapsed, onToggleCollapse, onTopicU
     } finally {
       setLoading(false);
     }
-  }, [sessionId, onTopicUpdate]);
+  }, [userId, onTopicUpdate]);
 
-  // Initial fetch when sessionId changes
+  // Initial fetch when component mounts or dependencies change
   useEffect(() => {
     fetchTopics();
   }, [fetchTopics]);
 
   // Auto-refresh topics every 15 seconds when session is active
   useEffect(() => {
-    if (!sessionId) return;
+    if (!userId) return;
 
     const interval = setInterval(() => {
       fetchTopics(true); // Preserve error during auto-refresh
     }, 15000); // Refresh every 15 seconds
 
     return () => clearInterval(interval);
-  }, [sessionId, fetchTopics]);
+  }, [userId, fetchTopics]);
 
   // Handle enabling research for a topic
   const handleEnableResearch = async (topic) => {
@@ -219,17 +221,10 @@ const ConversationTopics = ({ sessionId, isCollapsed, onToggleCollapse, onTopicU
           </div>
         ) : topics.length === 0 ? (
           <div className="empty-state">
-            {!sessionId ? (
-              <>
-                <p>Start a conversation to discover research topics!</p>
-                <small>AI will automatically suggest interesting research topics as you chat.</small>
-              </>
-            ) : (
-              <>
-                <p>No research topics yet.</p>
-                <small>Topics will appear as we discuss research-worthy subjects.</small>
-              </>
-            )}
+            <>
+              <p>No research topics yet.</p>
+              <small>Topics will appear as we continue the conversation.</small>
+            </>
           </div>
         ) : (
           <div className="topics-list">

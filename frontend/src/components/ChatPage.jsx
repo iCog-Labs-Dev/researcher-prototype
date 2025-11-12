@@ -3,23 +3,18 @@ import { useSession } from '../context/SessionContext';
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import TypingIndicator from './TypingIndicator';
-import SessionHistory from './SessionHistory';
 import ConversationTopics from './ConversationTopics';
-import { sendChatMessage, triggerUserActivity, API_URL } from '../services/api';
+import { sendChatMessage, triggerUserActivity } from '../services/api';
 import { useEngagementTracking } from '../utils/engagementTracker';
 import '../App.css';
 
 const ChatPage = () => {
   // Use SessionContext for shared state
   const {
-    sessionId,
     messages,
     personality,
-    updateSessionId,
     updateMessages,
     updateConversationTopics,
-    sessionTitles,
-    setSessionTitle,
   } = useSession();
 
   const { trackSessionContinuation } = useEngagementTracking();
@@ -28,29 +23,12 @@ const ChatPage = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [chatInputValue, setChatInputValue] = useState('');
-  const [statusMessage, setStatusMessage] = useState('');
-  
   // Topics sidebar state
   const [isTopicsSidebarCollapsed, setIsTopicsSidebarCollapsed] = useState(false);
   
   const messagesEndRef = useRef(null);
 
 
-
-  // Subscribe to backend status updates via SSE
-  useEffect(() => {
-    if (!sessionId) return;
-    const es = new EventSource(`${API_URL}/status/${sessionId}`);
-    es.onmessage = (e) => {
-      const message = e.data;
-      setStatusMessage(message);
-      
-      // Note: Status is now cleared immediately when response is displayed,
-      // so we don't need to handle "Complete" messages specially here
-    };
-    es.onerror = () => es.close();
-    return () => es.close();
-  }, [sessionId]);
 
   // Generate a system message based on personality
   const getSystemMessage = useCallback(() => {
@@ -113,29 +91,10 @@ const ChatPage = () => {
         apiMessages, 
         0.7,  // temperature
         1000,  // max tokens
-        personality, // Include personality in the request
-        sessionId // Include session ID in the request
+        personality // Include personality in the request
       );
       
       console.log('Chat response:', response);
-      
-      // Store session ID for conversation continuity
-      if (response.session_id) {
-        const newSid = response.session_id;
-        updateSessionId(newSid);
-        // Auto-name on first user message
-        try {
-          const existing = sessionTitles?.[newSid];
-          if (!existing) {
-            const firstUser = updatedMessages.find(m => m.role === 'user');
-            if (firstUser && firstUser.content) {
-              const raw = String(firstUser.content).trim();
-              const title = raw.length > 60 ? raw.slice(0, 57) + '…' : raw;
-              if (title) setSessionTitle(newSid, title);
-            }
-          }
-        } catch {}
-      }
       
       // Combine routing_analysis (detailed metrics) with module_used (fallback)
       const routingInfo = {
@@ -154,12 +113,9 @@ const ChatPage = () => {
       updateMessages(prev => [...prev, assistantMessage]);
       
       // Track session continuation (user continuing conversation)
-      if (sessionId && messages.length > 0) {
-        trackSessionContinuation(sessionId, 'new_message');
+      if (messages.length > 0) {
+        trackSessionContinuation(null, 'new_message');
       }
-      
-      // Clear status message immediately when response is displayed
-      setStatusMessage('');
       
       // Update conversation topics if they exist in the response
       if (response.topics && response.topics.length > 0) {
@@ -167,9 +123,6 @@ const ChatPage = () => {
       }
     } catch (error) {
       console.error('Error sending message:', error);
-      
-      // Clear status message on error
-      setStatusMessage('');
       
       // Add error message to chat
       const errorMessage = { 
@@ -281,13 +234,11 @@ const ChatPage = () => {
 
   return (
     <div className="chat-container">
-      <SessionHistory />
-
       <div
-        className={`chat-content ${!isTopicsSidebarCollapsed ? 'with-sidebar' : ''} with-left-panel`}
+        className={`chat-content ${!isTopicsSidebarCollapsed ? 'with-sidebar' : ''}`}
       >
         <div className="chat-messages" id="chat-messages" ref={chatContainerRef}>
-          {messages.map((msg, index) => (
+      {messages.map((msg, index) => (
             <ChatMessage 
               key={index} 
               role={msg.role} 
@@ -295,14 +246,11 @@ const ChatPage = () => {
               routingInfo={msg.routingInfo}
               followUpQuestions={msg.follow_up_questions}
               onFollowUpClick={handleFollowUpClick}
-              messageId={`${sessionId}_${index}`}
+              messageId={`message_${index}`}
             />
           ))}
           {isTyping && <TypingIndicator />}
           <div ref={messagesEndRef} />
-          {statusMessage && (
-            <div className="status-update" role="status">{statusMessage}</div>
-          )}
 
           {userScrolling && (
             <button
@@ -327,7 +275,6 @@ const ChatPage = () => {
 
       {/* Conversation Topics Sidebar */}
       <ConversationTopics
-        sessionId={sessionId}
         isCollapsed={isTopicsSidebarCollapsed}
         onToggleCollapse={handleToggleTopicsSidebar}
         onTopicUpdate={handleTopicUpdate}

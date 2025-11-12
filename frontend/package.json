@@ -7,13 +7,17 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^13.5.0",
+    "ajv": "^6.12.6",
+    "ajv-keywords": "^3.5.2",
     "axios": "^1.9.0",
     "d3": "^7.9.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-markdown": "^9.0.1",
+    "react-modal": "^3.16.3",
     "react-router-dom": "^6.28.1",
     "react-scripts": "5.0.1",
+    "schema-utils": "^2.7.1",
     "web-vitals": "^2.1.4"
   },
   "scripts": {

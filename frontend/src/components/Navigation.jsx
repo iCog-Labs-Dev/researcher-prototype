@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
+import { useAuth } from '../context/AuthContext';
 // Removed unused useNotifications import
-import UserDropdown from './UserDropdown';
-import TestUserInitializer from './TestUserInitializer';
 import UserProfile from './UserProfile';
-import UserSelector from './UserSelector';
 import KnowledgeGraphViewer from './graph/KnowledgeGraphViewer';
 import NotificationBadge from './NotificationBadge';
 import NotificationPanel from './NotificationPanel';
+import AuthModal from './AuthModal';
 import { getCurrentUser } from '../services/api';
 import { generateDisplayName } from '../utils/userUtils';
 import '../styles/Navigation.css';
@@ -16,25 +15,53 @@ import '../styles/Navigation.css';
 const Navigation = () => {
   const location = useLocation();
   const dropdownRef = useRef(null);
-  const { 
-    userDisplayName, 
+  const {
+    userDisplayName,
     userId,
-    updateUserId,
     updateUserDisplayName,
     updatePersonality,
-    updateMessages
+    updateMessages,
+    resetSession
   } = useSession();
+  const { isAuthenticated, user: authUser, logout } = useAuth();
 
   // Chat-specific state (only used on chat page)
-  const [showUserSelector, setShowUserSelector] = useState(false);
   const [showUserProfile, setShowUserProfile] = useState(false);
   const [showKnowledgeGraph, setShowKnowledgeGraph] = useState(false);
-  const [profileUpdateTime, setProfileUpdateTime] = useState(0);
   const [isDashboardsOpen, setIsDashboardsOpen] = useState(false);
 
   const isOnChatPage = location.pathname === '/';
   const appMode = process.env.REACT_APP_MODE || 'dev';
   const isTestMode = appMode === 'test';
+
+  const handleLogout = () => {
+    logout();
+    resetSession();
+  };
+
+  // Sync display name and personality from AuthContext user data
+  // Use id instead of whole user object to prevent rerender loops
+  const authUserId = authUser?.id || '';
+  const prevPersonalityRef = useRef(null);
+
+  useEffect(() => {
+    if (!isAuthenticated || !authUser) {
+      return;
+    }
+
+    const displayName = authUser.metadata?.display_name || authUser.display_name || authUser.email;
+    if (displayName && displayName !== userDisplayName) {
+      updateUserDisplayName(displayName);
+    }
+
+    // Only update personality if it actually changed
+    const currentPersonalityStr = JSON.stringify(authUser.personality);
+    const prevPersonalityStr = JSON.stringify(prevPersonalityRef.current);
+    if (authUser.personality && currentPersonalityStr !== prevPersonalityStr) {
+      updatePersonality(authUser.personality);
+      prevPersonalityRef.current = authUser.personality;
+    }
+  }, [isAuthenticated, authUserId, authUser?.metadata?.display_name, authUser?.display_name, authUser?.email, authUser?.personality, userDisplayName, updateUserDisplayName, updatePersonality]);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -50,108 +77,60 @@ const Navigation = () => {
     };
   }, []);
 
-  // Load user data when userId changes (for chat page)
+  // Load fresh user data when authenticated and on chat page
   useEffect(() => {
-    if (!isOnChatPage) return;
-    
+    if (!isOnChatPage || !isAuthenticated || !authUserId) return;
+
     const loadUserData = async () => {
-      console.log('Loading user data for userId:', userId);
-      
-      if (!userId) {
-        console.log('No userId, resetting personality and display name');
-        updatePersonality(null);
-        updateUserDisplayName('');
-        return;
-      }
-      
       try {
         const userData = await getCurrentUser();
-        console.log('User data loaded:', userData);
-        
-        // Set personality with fallback to default values
+
         updatePersonality(userData?.personality || {
           style: 'helpful',
-          tone: 'friendly'
+          tone: 'friendly',
         });
-        
-        // Set display name with fallback to user ID
-        if (userData?.display_name) {
-          console.log('Setting display name:', userData.display_name);
-          updateUserDisplayName(userData.display_name);
-        } else {
-          const fallbackDisplayName = generateDisplayName(userId);
-          console.log('No display name found, using generated name:', fallbackDisplayName);
-          updateUserDisplayName(fallbackDisplayName);
+
+        const displayName =
+          userData?.metadata?.display_name ||
+          userData?.display_name ||
+          userData?.email ||
+          generateDisplayName(userData?.id || authUserId);
+
+        if (displayName) {
+          updateUserDisplayName(displayName);
         }
       } catch (error) {
         console.error('Error loading user data:', error);
-        
-        // If we get a 404, it means the user no longer exists
-        if (error.response && error.response.status === 404) {
-          console.log('User no longer exists, clearing localStorage and resetting state');
-          localStorage.removeItem('user_id');
-          updateUserId('');
-          updateUserDisplayName('');
-          updatePersonality(null);
-          return;
+
+        if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+          logout();
+          resetSession();
         }
-        
-        // For other errors, set default values
-        updatePersonality({
-          style: 'helpful',
-          tone: 'friendly'
-        });
-        
-        const fallbackDisplayName = generateDisplayName(userId);
-        updateUserDisplayName(fallbackDisplayName);
       }
     };
-    
+
     loadUserData();
-  }, [userId, isOnChatPage, updateUserId, updateUserDisplayName, updatePersonality]);
-
-  const handleUserSelected = useCallback((selectedUserId, displayName) => {
-    console.log('User selected:', selectedUserId, 'Display name:', displayName);
-
-    if (selectedUserId) {
-      updateUserId(selectedUserId);
-      // Update display name if provided
-      if (displayName) {
-        updateUserDisplayName(displayName);
-      }
-    } else {
-      updateUserId('');
-      updateUserDisplayName('');
-    }
-    
-    // Hide the user selector after selection
-    setShowUserSelector(false);
-  }, [updateUserId, updateUserDisplayName]);
+  }, [isOnChatPage, isAuthenticated, authUserId, updatePersonality, updateUserDisplayName, logout, resetSession]);
 
   const handleToggleUserProfile = useCallback(() => {
     setShowUserProfile(prevState => {
-      // If we're showing the profile, hide the user selector
       const newState = !prevState;
-      if (newState) setShowUserSelector(false);
       return newState;
     });
   }, []);
 
   const handleProfileUpdated = useCallback((updatedPersonality) => {
     console.log('Profile updated with new personality:', updatedPersonality);
-    
+
     // Update personality in state
     updatePersonality(updatedPersonality);
-    
-    // Trigger UserDropdown reload
-    setProfileUpdateTime(Date.now());
-    
+
     // Update the system message immediately
     const systemMessage = {
-      role: 'system', 
+      role: 'system',
       content: `You are a ${updatedPersonality.style || 'helpful'} assistant. Please respond in a ${updatedPersonality.tone || 'friendly'} tone.`
     };
-    
+
     // Update the first message if it's a system message
     updateMessages(prevMessages => {
       if (prevMessages.length > 0 && prevMessages[0].role === 'system') {
@@ -170,19 +149,19 @@ const Navigation = () => {
           <div className="nav-brand">
             <h2>AI Research Assistant</h2>
           </div>
-          
+
           <div className="nav-center">
             <div className="nav-links">
-              <Link 
-                to="/" 
+              <Link
+                to="/"
                 className={`nav-link ${location.pathname === '/' ? 'active' : ''}`}
               >
                 💬 Chat
               </Link>
-              
+
               <div className="nav-dropdown" ref={dropdownRef}>
-                <button 
-                  className={`nav-link dropdown-toggle ${isDashboardsOpen ? 'active' : ''}`} 
+                <button
+                  className={`nav-link dropdown-toggle ${isDashboardsOpen ? 'active' : ''}`}
                   onClick={() => setIsDashboardsOpen(prev => !prev)}
                 >
                   <span>📊 Dashboards</span>
@@ -210,8 +189,8 @@ const Navigation = () => {
                 )}
               </div>
 
-              <Link 
-                to="/admin" 
+              <Link
+                to="/admin"
                 className={`nav-link admin-link ${location.pathname.startsWith('/admin') ? 'active' : ''}`}
                 title="Admin Panel - Prompt Management"
               >
@@ -222,29 +201,38 @@ const Navigation = () => {
 
           <div className="nav-right">
             <NotificationPanel />
-            
-            {isOnChatPage && !isTestMode && (
-              <div className="chat-controls">
-                <UserDropdown 
-                  onUserSelected={handleUserSelected} 
-                  currentUserId={userId} 
-                  currentDisplayName={userDisplayName || 'Anonymous User'}
-                  profileUpdateTime={profileUpdateTime}
-                />
-                {userId && (
-                  <button 
-                    className="profile-button"
-                    onClick={handleToggleUserProfile}
-                  >
-                    {showUserProfile ? 'Hide Settings' : 'User Settings'}
-                  </button>
-                )}
+
+            {/* Authentication Button */}
+            {isAuthenticated ? (
+              <div className="auth-controls">
+                <span className="auth-user-info">
+                  {authUser?.metadata?.display_name || authUser?.display_name || authUser?.email || 'User'}
+                </span>
+                <button
+                  className="logout-button"
+                  onClick={handleLogout}
+                  title="Logout"
+                >
+                  Logout
+                </button>
               </div>
+            ) : (
+              !isOnChatPage && (
+                <button
+                  className="login-button"
+                  onClick={() => {
+                    // Show auth modal for non-chat pages
+                    // For chat page, it's already shown automatically
+                  }}
+                >
+                  Login
+                </button>
+              )
             )}
 
-            {isOnChatPage && isTestMode && userId && (
+            {isOnChatPage && isAuthenticated && userId && (
               <div className="chat-controls">
-                <button 
+                <button
                   className="profile-button"
                   onClick={handleToggleUserProfile}
                 >
@@ -255,29 +243,23 @@ const Navigation = () => {
           </div>
         </div>
       </nav>
-      
-      {isOnChatPage && showUserSelector && (
-        <div className="selector-container">
-          <UserSelector onUserSelected={handleUserSelected} />
-        </div>
-      )}
-      
+
       {isOnChatPage && showUserProfile && userId && (
         <div className="profile-modal-overlay" onClick={handleToggleUserProfile}>
           <div className="profile-modal-content" onClick={(e) => e.stopPropagation()}>
-            <UserProfile 
-              userId={userId} 
-              onProfileUpdated={handleProfileUpdated} 
+            <UserProfile
+              userId={userId}
+              onProfileUpdated={handleProfileUpdated}
             />
           </div>
         </div>
       )}
-      
+
       {showKnowledgeGraph && userId && (
         <div className="profile-modal-overlay" onClick={() => setShowKnowledgeGraph(false)}>
           <div className="profile-modal-content knowledge-graph-modal" onClick={(e) => e.stopPropagation()}>
-            <KnowledgeGraphViewer 
-              userId={userId} 
+            <KnowledgeGraphViewer
+              userId={userId}
               userName={userDisplayName || 'User'}
               onClose={() => setShowKnowledgeGraph(false)}
             />
@@ -285,32 +267,10 @@ const Navigation = () => {
         </div>
       )}
 
-      {isOnChatPage && isTestMode && !userId && (
-        <div className="profile-modal-overlay">
-          <div className="profile-modal-content" onClick={(e) => e.stopPropagation()}>
-            <TestUserInitializer onInitialized={(id, displayName) => {
-              if (id) {
-                updateUserId(id);
-                if (displayName) updateUserDisplayName(displayName);
-                setShowUserProfile(true);
-              }
-            }} />
-          </div>
-        </div>
-      )}
+      {/* Auth modal is now handled by ProtectedRoute globally */}
 
-      {isOnChatPage && isTestMode && showUserProfile && userId && (
-        <div className="profile-modal-overlay" onClick={handleToggleUserProfile}>
-          <div className="profile-modal-content" onClick={(e) => e.stopPropagation()}>
-            <UserProfile 
-              userId={userId} 
-              onProfileUpdated={handleProfileUpdated} 
-            />
-          </div>
-        </div>
-      )}
     </>
   );
 };
 
-export default Navigation; 
+export default Navigation;

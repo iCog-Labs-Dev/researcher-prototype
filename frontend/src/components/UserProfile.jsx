@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  getCurrentUser, 
-  updateUserPersonality, 
+import {
+  getCurrentUser,
+  updateUserPersonality,
   getPersonalityPresets,
   getUserPreferences,
   updateUserPreferences,
@@ -28,7 +28,7 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
     const loadData = async () => {
       try {
         setIsLoading(true);
-        
+
         // Load user profile, preferences, and personalization data in parallel
         const [userData, presetsData, preferencesData, personalizationDataResponse] = await Promise.all([
           getCurrentUser(),
@@ -36,12 +36,12 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
           getUserPreferences().catch(() => null),
           getUserPersonalizationData().catch(() => null)
         ]);
-        
+
         setProfile(userData);
         setPresets(presetsData.presets || {});
         setPreferences(preferencesData);
         setPersonalizationData(personalizationDataResponse);
-        
+
         // Initialize editing form with current values
         setEditedStyle(userData.personality.style);
         setEditedTone(userData.personality.tone);
@@ -54,7 +54,7 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
         setIsLoading(false);
       }
     };
-    
+
     if (userId) {
       loadData();
     }
@@ -75,25 +75,25 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
   const handleSavePersonality = async () => {
     try {
       console.log('👤 UserProfile: Saving personality changes for user:', userId);
-      
+
       const updatedPersonality = {
         style: editedStyle,
         tone: editedTone,
         additional_traits: profile.personality.additional_traits || {}
       };
-      
+
       console.log('👤 UserProfile: Updated personality data:', updatedPersonality);
-      
+
       await updateUserPersonality(updatedPersonality);
-      
+
       // Update email if changed
       if (editedEmail !== (profile.metadata?.email || '')) {
         console.log('👤 UserProfile: Updating email for user:', userId);
         await updateUserEmail(editedEmail);
       }
-      
+
       console.log('👤 UserProfile: ✅ Successfully saved personality changes for user:', userId);
-      
+
       // Update local state
       setProfile({
         ...profile,
@@ -103,9 +103,9 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
           email: editedEmail
         }
       });
-      
+
       setIsEditing(false);
-      
+
       // Notify parent component
       if (onProfileUpdated) {
         onProfileUpdated(updatedPersonality);
@@ -121,23 +121,23 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
     try {
       console.log('👤 UserProfile: Saving preferences for user:', userId);
       console.log('👤 UserProfile: New preferences data:', editedPreferences);
-      
+
       await updateUserPreferences(editedPreferences);
-      
+
       console.log('👤 UserProfile: ✅ Successfully saved preferences for user:', userId);
-      
+
       // Update local state
       setPreferences(editedPreferences);
       setIsEditing(false);
-      
+
       // Reload personalization data to show updates
       const newPersonalizationData = await getUserPersonalizationData().catch(() => null);
       setPersonalizationData(newPersonalizationData);
-      
+
       if (newPersonalizationData) {
         console.log('👤 UserProfile: 🔄 Refreshed personalization data after preference update');
       }
-      
+
     } catch (error) {
       console.error('👤 UserProfile: ❌ Error updating preferences for user:', userId, error);
       console.error('👤 UserProfile: ❌ Failed preferences update data:', editedPreferences);
@@ -182,14 +182,14 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
     <div className="tab-content">
       <div className="profile-info-item">
         <span className="profile-info-label">Username:</span>
-        <span className="profile-info-value">{profile.display_name || profile.user_id}</span>
+        <span className="profile-info-value">{profile.metadata.display_name || profile.id}</span>
       </div>
-      
+
       <div className="profile-info-item">
         <span className="profile-info-label">Email:</span>
         <span className="profile-info-value">{profile.metadata?.email || 'Not provided'}</span>
       </div>
-      
+
       {isEditing && activeTab === 'personality' ? (
         <div className="profile-edit-form">
           <div className="form-group">
@@ -201,10 +201,10 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
               placeholder="Enter email (optional)"
             />
           </div>
-          
+
           <div className="form-group">
             <label>Communication Style:</label>
-            <select 
+            <select
               value={editedStyle}
               onChange={(e) => setEditedStyle(e.target.value)}
             >
@@ -215,10 +215,10 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
               <option value="friendly">Friendly</option>
             </select>
           </div>
-          
+
           <div className="form-group">
             <label>Tone:</label>
-            <select 
+            <select
               value={editedTone}
               onChange={(e) => setEditedTone(e.target.value)}
             >
@@ -229,13 +229,13 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
               <option value="direct">Direct</option>
             </select>
           </div>
-          
+
           <div className="preset-buttons">
             <label>Quick Presets:</label>
             <div className="presets">
               {Object.keys(presets).map(key => (
-                <button 
-                  key={key} 
+                <button
+                  key={key}
                   onClick={() => handleApplyPreset(key)}
                   className="preset-btn"
                 >
@@ -244,8 +244,8 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
               ))}
             </div>
           </div>
-          
-          <button 
+
+          <button
             className="save-profile-btn"
             onClick={handleSavePersonality}
           >
@@ -258,7 +258,7 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
             <span className="profile-info-label">Communication Style:</span>
             <span className="profile-info-value">{profile.personality.style}</span>
           </div>
-          
+
           <div className="profile-info-item">
             <span className="profile-info-label">Tone:</span>
             <span className="profile-info-value">{profile.personality.tone}</span>
@@ -279,7 +279,7 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
           <div className="preferences-edit-form">
             <div className="preferences-section">
               <h4>Content Preferences</h4>
-              
+
               <div className="form-group">
                 <label>Research Depth:</label>
                 <select
@@ -313,7 +313,7 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
 
             <div className="preferences-section">
               <h4>Format Preferences</h4>
-              
+
               <div className="form-group">
                 <label>Response Length:</label>
                 <select
@@ -338,11 +338,11 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
                 </select>
               </div>
 
-              
+
 
               <div className="form-group">
                 <label>Formatting Style:</label>
-                <select 
+                <select
                   value={editedPreferences?.format_preferences?.formatting_style || 'structured'}
                   onChange={(e) => handlePreferenceChange('format_preferences', 'formatting_style', e.target.value)}
                 >
@@ -364,7 +364,7 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
               </div>
             </div>
 
-            <button 
+            <button
               className="save-profile-btn"
               onClick={handleSavePreferences}
             >
@@ -379,7 +379,7 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
                 <span className="profile-info-label">Research Depth:</span>
                 <span className="profile-info-value">{preferences.content_preferences?.research_depth}</span>
               </div>
-              
+
               <div className="source-preferences-display">
                 <h5>Source Type Preferences</h5>
                 {Object.entries(preferences.content_preferences?.source_types || {}).map(([sourceType, value]) => (
@@ -401,7 +401,7 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
                 <span className="profile-info-label">Detail Level:</span>
                 <span className="profile-info-value">{preferences.format_preferences?.detail_level}</span>
               </div>
-              
+
             </div>
           </div>
         )}
@@ -415,14 +415,14 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
         <h3>User Settings</h3>
         <div className="header-actions">
           {!isEditing ? (
-            <button 
+            <button
               className="edit-profile-btn"
               onClick={() => setIsEditing(true)}
             >
               Edit
             </button>
           ) : (
-            <button 
+            <button
               className="cancel-edit-btn"
               onClick={() => {
                 setIsEditing(false);
@@ -438,31 +438,31 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
       </div>
 
       <div className="user-profile-tabs">
-        <button 
+        <button
           className={`tab-button ${activeTab === 'personality' ? 'active' : ''}`}
           onClick={() => setActiveTab('personality')}
         >
           Personality
         </button>
-        <button 
+        <button
           className={`tab-button ${activeTab === 'preferences' ? 'active' : ''}`}
           onClick={() => setActiveTab('preferences')}
         >
           Content Preferences
         </button>
-        <button 
+        <button
           className={`tab-button ${activeTab === 'learned' ? 'active' : ''}`}
           onClick={() => setActiveTab('learned')}
         >
           What I've Learned
         </button>
       </div>
-      
+
       <div className="user-profile-content">
         {activeTab === 'personality' && renderPersonalityTab()}
         {activeTab === 'preferences' && renderPreferencesTab()}
         {activeTab === 'learned' && (
-          <PersonalizationDashboard 
+          <PersonalizationDashboard
             personalizationData={personalizationData}
             onDataUpdate={setPersonalizationData}
           />
@@ -472,4 +472,4 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
   );
 };
 
-export default UserProfile; 
+export default UserProfile;

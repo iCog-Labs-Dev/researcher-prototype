@@ -1,7 +1,11 @@
 import axios from 'axios';
 
 // Get API URL from environment variables with fallback for development
-export const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const RAW_API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const NORMALIZED_API_URL = RAW_API_URL.replace(/\/+$/, '');
+const API_VERSION_PREFIX = '/v2';
+
+export const API_URL = `${NORMALIZED_API_URL}${API_VERSION_PREFIX}`;
 
 // Optional: Log the API URL in development for debugging
 if (process.env.REACT_APP_DEBUG === 'true') {
@@ -16,12 +20,29 @@ const api = axios.create({
   },
 });
 
-// Add interceptor to add user ID to headers if available
+// Helper to apply the Authorization header to the axios instance
+export const setAuthTokenHeader = (token) => {
+  if (token) {
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+  } else {
+    delete api.defaults.headers.common['Authorization'];
+  }
+};
+
+// Apply token from storage if available on initial load
+if (typeof window !== 'undefined') {
+  const existingToken = localStorage.getItem('auth_token');
+  if (existingToken) {
+    setAuthTokenHeader(existingToken);
+  }
+}
+
+// Add interceptor to add auth token to headers if available
 api.interceptors.request.use(
   (config) => {
-    const userId = localStorage.getItem('user_id');
-    if (userId) {
-      config.headers['user-id'] = userId;
+    const authToken = localStorage.getItem('auth_token');
+    if (authToken) {
+      config.headers['Authorization'] = `Bearer ${authToken}`;
     }
     return config;
   },
@@ -33,7 +54,7 @@ api.interceptors.request.use(
 // Get available models
 export const getModels = async () => {
   try {
-    const response = await api.get('/models');
+    const response = await api.get('/meta/models');
     return response.data;
   } catch (error) {
     console.error('Error fetching models:', error);
@@ -49,19 +70,19 @@ export const sendChatMessage = async (messages, temperature = 0.7, maxTokens = 1
       temperature,
       max_tokens: maxTokens,
     };
-    
+
     // Include personality if available
     if (personality) {
       payload.personality = personality;
     }
-    
+
     // Include session_id if available
     if (sessionId) {
       payload.session_id = sessionId;
     }
-    
+
     const response = await api.post('/chat', payload);
-    
+
     return response.data;
   } catch (error) {
     console.error('Error sending chat message:', error);
@@ -70,23 +91,6 @@ export const sendChatMessage = async (messages, temperature = 0.7, maxTokens = 1
 };
 
 // User management functions
-export const getUsers = async () => {
-  try {
-    console.log('Fetching users...');
-    const response = await api.get('/users');
-    console.log('Users response:', response.data);
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching users:', error);
-    // Log detailed error information
-    if (error.response) {
-      console.error('Error response:', error.response.status, error.response.data);
-    } else if (error.request) {
-      console.error('No response received from server');
-    }
-    throw error;
-  }
-};
 
 export const createUser = async (userData) => {
   try {
@@ -108,9 +112,7 @@ export const createUser = async (userData) => {
 export const getCurrentUser = async () => {
   try {
     console.log('Fetching current user data...');
-    const userId = localStorage.getItem('user_id');
-    console.log('Current user ID from localStorage:', userId);
-    
+
     const response = await api.get('/user');
     console.log('Current user response:', response.data);
     return response.data;
@@ -138,9 +140,7 @@ export const deleteUser = async () => {
 
 export const updateUserDisplayName = async (displayName) => {
   try {
-    const response = await api.put('/user/display-name', null, {
-      params: { display_name: displayName }
-    });
+    const response = await api.post('/user/display-name', { display_name: displayName });
     return response.data;
   } catch (error) {
     console.error('Error updating user display name:', error);
@@ -150,9 +150,7 @@ export const updateUserDisplayName = async (displayName) => {
 
 export const updateUserEmail = async (email) => {
   try {
-    const response = await api.put('/user/email', null, {
-      params: { email: email }
-    });
+    const response = await api.post('/user/email', { email: email });
     return response.data;
   } catch (error) {
     console.error('Error updating user email:', error);
@@ -162,7 +160,7 @@ export const updateUserEmail = async (email) => {
 
 export const updateUserPersonality = async (personality) => {
   try {
-    const response = await api.put('/user/personality', personality);
+    const response = await api.post('/user/personality', personality);
     return response.data;
   } catch (error) {
     console.error('Error updating user personality:', error);
@@ -172,7 +170,7 @@ export const updateUserPersonality = async (personality) => {
 
 export const getPersonalityPresets = async () => {
   try {
-    const response = await api.get('/personality-presets');
+    const response = await api.get('/meta/personality-presets');
     return response.data;
   } catch (error) {
     console.error('Error fetching personality presets:', error);
@@ -193,7 +191,7 @@ export const getUserPreferences = async () => {
 
 export const updateUserPreferences = async (preferences) => {
   try {
-    const response = await api.put('/user/preferences', preferences);
+    const response = await api.post('/user/preferences', preferences);
     return response.data;
   } catch (error) {
     console.error('Error updating user preferences:', error);
@@ -285,7 +283,7 @@ export const getPersonalizationContext = async () => {
 // Topic management functions
 export const getAllTopicSuggestions = async () => {
   try {
-    const response = await api.get('/topics/suggestions');
+    const response = await api.get('/topic/suggestions');
     return response.data;
   } catch (error) {
     console.error('Error fetching topic suggestions:', error);
@@ -293,19 +291,19 @@ export const getAllTopicSuggestions = async () => {
   }
 };
 
-export const getSessionTopicSuggestions = async (sessionId) => {
+export const getUserTopicSuggestions = async (userId) => {
   try {
-    const response = await api.get(`/topics/suggestions/${sessionId}`);
+    const response = await api.get(`/topic/suggestions/${userId}`);
     return response.data;
   } catch (error) {
-    console.error('Error fetching session topic suggestions:', error);
+    console.error('Error fetching user topic suggestions:', error);
     throw error;
   }
 };
 
 export const getTopicStatistics = async () => {
   try {
-    const response = await api.get('/topics/stats');
+    const response = await api.get('/topic/stats');
     return response.data;
   } catch (error) {
     console.error('Error fetching topic statistics:', error);
@@ -315,7 +313,7 @@ export const getTopicStatistics = async () => {
 
 export const deleteSessionTopics = async (sessionId) => {
   try {
-    const response = await api.delete(`/topics/session/${sessionId}`);
+    const response = await api.delete(`/topic/session/${sessionId}`);
     return response.data;
   } catch (error) {
     console.error('Error deleting session topics:', error);
@@ -325,7 +323,7 @@ export const deleteSessionTopics = async (sessionId) => {
 
 export const cleanupTopics = async () => {
   try {
-    const response = await api.delete('/topics/cleanup');
+    const response = await api.delete('/topic/cleanup');
     return response.data;
   } catch (error) {
     console.error('Error cleaning up topics:', error);
@@ -335,7 +333,7 @@ export const cleanupTopics = async () => {
 
 export const getTopicProcessingStatus = async (sessionId) => {
   try {
-    const response = await api.get(`/topics/status/${sessionId}`);
+    const response = await api.get(`/topic/status/${sessionId}`);
     return response.data;
   } catch (error) {
     console.error('Error checking topic processing status:', error);
@@ -346,7 +344,7 @@ export const getTopicProcessingStatus = async (sessionId) => {
 // Conversation topics sidebar functions
 export const getTopSessionTopics = async (sessionId, limit = 3) => {
   try {
-    const response = await api.get(`/topics/session/${sessionId}/top`, {
+    const response = await api.get(`/topic/session/${sessionId}/top`, {
       params: { limit }
     });
     return response.data;
@@ -359,7 +357,7 @@ export const getTopSessionTopics = async (sessionId, limit = 3) => {
 // NEW: ID-based topic deletion (SAFE - no index mismatch)
 export const deleteTopicById = async (topicId) => {
   try {
-    const response = await api.delete(`/topics/topic/${topicId}`);
+    const response = await api.delete(`/topic/${topicId}`);
     return response.data;
   } catch (error) {
     console.error('Error deleting topic by ID:', error);
@@ -370,7 +368,7 @@ export const deleteTopicById = async (topicId) => {
 // NEW: Delete all non-activated research topics
 export const deleteNonActivatedTopics = async () => {
   try {
-    const response = await api.delete('/topics/non-activated');
+    const response = await api.delete('/topic/non-activated');
     return response.data;
   } catch (error) {
     console.error('Error deleting non-activated topics:', error);
@@ -381,7 +379,7 @@ export const deleteNonActivatedTopics = async () => {
 // NEW: Create custom research topic
 export const createCustomTopic = async (topicData) => {
   try {
-    const response = await api.post('/topics/custom', topicData);
+    const response = await api.post('/topic/custom', topicData);
     return response.data;
   } catch (error) {
     console.error('Error creating custom topic:', error);
@@ -392,7 +390,7 @@ export const createCustomTopic = async (topicData) => {
 // NEW: ID-based topic research functions (SAFE - no index mismatch)
 export const enableTopicResearchById = async (topicId) => {
   try {
-    const response = await api.put(`/topics/topic/${topicId}/research`, null, {
+    const response = await api.put(`/topic/${topicId}/research`, null, {
       params: { enable: true }
     });
     return response.data;
@@ -404,7 +402,7 @@ export const enableTopicResearchById = async (topicId) => {
 
 export const disableTopicResearchById = async (topicId) => {
   try {
-    const response = await api.put(`/topics/topic/${topicId}/research`, null, {
+    const response = await api.put(`/topic/${topicId}/research`, null, {
       params: { enable: false }
     });
     return response.data;
@@ -432,7 +430,7 @@ export const getResearchFindings = async (userId, topicName = null, unreadOnly =
 
 export const setFindingBookmarked = async (findingId, bookmarked) => {
   try {
-    const response = await api.post(`/research/findings/${findingId}/bookmark`, { bookmarked });
+    const response = await api.post(`/research/${findingId}/bookmark`, { bookmarked });
     return response.data;
   } catch (error) {
     console.error('Error updating finding bookmark:', error);
@@ -442,7 +440,7 @@ export const setFindingBookmarked = async (findingId, bookmarked) => {
 
 export const markFindingAsRead = async (findingId) => {
   try {
-    const response = await api.post(`/research/findings/${findingId}/mark_read`);
+    const response = await api.post(`/research/${findingId}/mark_read`);
     return response.data;
   } catch (error) {
     console.error('Error marking finding as read:', error);
@@ -452,7 +450,7 @@ export const markFindingAsRead = async (findingId) => {
 
 export const integrateResearchFinding = async (findingId) => {
   try {
-    const response = await api.post(`/research/findings/${findingId}/integrate`);
+    const response = await api.post(`/research/${findingId}/integrate`);
     return response.data;
   } catch (error) {
     console.error('Error integrating research finding:', error);
@@ -463,7 +461,7 @@ export const integrateResearchFinding = async (findingId) => {
 // Delete research findings functions
 export const deleteResearchFinding = async (findingId) => {
   try {
-    const response = await api.delete(`/research/findings/${findingId}`);
+    const response = await api.delete(`/research/${findingId}`);
     return response.data;
   } catch (error) {
     console.error('Error deleting research finding:', error);
@@ -473,7 +471,7 @@ export const deleteResearchFinding = async (findingId) => {
 
 export const deleteAllTopicFindings = async (topicName) => {
   try {
-    const response = await api.delete(`/research/findings/topic/${encodeURIComponent(topicName)}`);
+    const response = await api.delete(`/research/topic/${encodeURIComponent(topicName)}`);
     return response.data;
   } catch (error) {
     console.error('Error deleting all topic findings:', error);
@@ -545,7 +543,7 @@ export const simulateResearchCompletion = async (qualityScore = 0.7) => {
 
 export const getActiveResearchTopics = async (userId) => {
   try {
-    const response = await api.get(`/topics/user/${userId}/research`);
+    const response = await api.get(`/topic/user/${userId}/research`);
     return response.data;
   } catch (error) {
     console.error('Error fetching active research topics:', error);
@@ -604,7 +602,7 @@ export const graphApi = {
    */
   fetchGraphData: async (type, id) => {
     try {
-      const response = await api.post('/api/graph/fetch', {
+      const response = await api.post('/graph/fetch', {
         type,
         id
       });
@@ -622,7 +620,7 @@ export const graphApi = {
    */
   testGraphConnectivity: async (userId) => {
     try {
-      const response = await api.get(`/api/graph/test/${userId}`);
+      const response = await api.get(`/graph/test/${userId}`);
       return response.data;
     } catch (error) {
       console.error('Error testing graph connectivity:', error);
@@ -631,4 +629,44 @@ export const graphApi = {
   }
 };
 
-export default api; 
+// Authentication API functions
+export const loginUser = async (email, password) => {
+  try {
+    const response = await api.post('/auth/login', {
+      email,
+      password
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error logging in:', error);
+    throw error;
+  }
+};
+
+export const registerUser = async (email, password, displayName = null) => {
+  try {
+    const response = await api.post('/auth/register', {
+      email,
+      password,
+      display_name: displayName
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error registering user:', error);
+    throw error;
+  }
+};
+
+export const loginWithGoogle = async (idToken) => {
+  try {
+    const response = await api.post('/auth/google', {
+      id_token: idToken
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error logging in with Google:', error);
+    throw error;
+  }
+};
+
+export default api;
