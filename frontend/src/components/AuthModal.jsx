@@ -330,18 +330,6 @@ const AuthModal = ({ isOpen, onRequestClose, onAuthenticated, preventClose = fal
                 ) : (
                     <form onSubmit={handleRegister} className="auth-form">
                         <div className="form-group">
-                            <label htmlFor="displayName">Display Name (Optional)</label>
-                            <input
-                                type="text"
-                                id="displayName"
-                                value={displayName}
-                                onChange={(e) => setDisplayName(e.target.value)}
-                                placeholder="Enter your display name"
-                                disabled={loading}
-                            />
-                        </div>
-
-                        <div className="form-group">
                             <label htmlFor="registerEmail">Email</label>
                             <input
                                 type="email"
