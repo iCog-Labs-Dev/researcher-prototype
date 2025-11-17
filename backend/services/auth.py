@@ -14,7 +14,7 @@ from exceptions import (
 from utils.password import hash_password, verify_password
 from utils.helpers import normalize_provider_user_id, generate_display_name_from_user_id
 from models.user import User
-from models.user_profile import UserProfile
+from models.user import UserProfile
 from models.identity import Identity
 from config import GOOGLE_CLIENT_ID
 
