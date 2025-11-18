@@ -18,7 +18,6 @@ class RestorePromptRequest(BaseModel):
     backup_filename: str
 
 
-# new schemas to work with users
 class UserSummary(BaseModel):
     """Summary of a user profile for list views."""
     id: UUID
