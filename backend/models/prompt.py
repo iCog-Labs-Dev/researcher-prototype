@@ -5,7 +5,7 @@ import sqlalchemy as sa
 from sqlalchemy import String, Text, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.ext.mutable import MutableList
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
 
@@ -49,3 +49,15 @@ class PromptHistory(Base):
     updated_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+
+    updated_by_profile: Mapped[Optional["UserProfile"]] = relationship(
+        "UserProfile",
+        primaryjoin="PromptHistory.updated_by_user_id==foreign(UserProfile.user_id)",
+        viewonly=True,
+        lazy="select",
+    )
+
+    @property
+    def user(self) -> str:
+        md = getattr(self.updated_by_profile, "meta_data", None) or {}
+        return md.get("display_name") or "unknown"
