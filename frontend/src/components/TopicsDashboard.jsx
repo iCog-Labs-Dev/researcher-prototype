@@ -6,11 +6,11 @@ import MotivationStats from './MotivationStats';
 import EngineSettings from './EngineSettings';
 import AddTopicForm from './AddTopicForm';
 import ErrorModal from './ErrorModal';
-import { 
+import {
   getAllTopicSuggestions,
   getTopicStatistics,
-  deleteSessionTopics, 
-  deleteTopicById, 
+  deleteSessionTopics,
+  deleteTopicById,
   cleanupTopics,
   deleteNonActivatedTopics,
   enableTopicResearchById,
@@ -51,12 +51,12 @@ const TopicsDashboard = () => {
   // Helper function to format dates
   const formatDate = (timestamp) => {
     if (!timestamp) return 'Unknown date';
-    
+
     const date = new Date(timestamp * 1000);
     const now = new Date();
     const diffTime = now - date;
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    
+
     if (diffDays === 0) return 'Today';
     if (diffDays === 1) return 'Yesterday';
     if (diffDays < 7) return `${diffDays} days ago`;
@@ -71,13 +71,13 @@ const TopicsDashboard = () => {
       if (!preserveError) {
         setError(null);
       }
-      
+
       const [topicsResponse, statsResponse, engineStatus] = await Promise.all([
         getAllTopicSuggestions(),
         getTopicStatistics(),
         getResearchEngineStatus().catch(() => ({ available: false, enabled: false, running: false }))
       ]);
-      
+
       const topicsData = topicsResponse.topic_suggestions || [];
       setTopics(topicsData);
       setStats(statsResponse || {});
@@ -85,7 +85,7 @@ const TopicsDashboard = () => {
         topicsData.filter(topic => topic.is_active_research).length
       );
       setResearchEngineStatus(engineStatus);
-      
+
     } catch (err) {
       console.error('Error loading topics data:', err);
       setError('Failed to load topics. Please try again.');
@@ -98,24 +98,13 @@ const TopicsDashboard = () => {
     loadData();
   }, [loadData]);
 
-  // Auto-refresh data every 10 seconds when user is selected
-  useEffect(() => {
-    if (!userId) return;
-
-    const interval = setInterval(() => {
-      loadData(true); // Preserve error during auto-refresh
-    }, 10000); // Refresh every 10 seconds
-
-    return () => clearInterval(interval);
-  }, [userId, loadData]);
-
   // Handle global research engine toggle
   const handleToggleGlobalResearch = async () => {
     if (!researchEngineStatus) return;
-    
+
     try {
       setResearchEngineLoading(true);
-      
+
       if (researchEngineStatus.running) {
         await stopResearchEngine();
         setResearchEngineStatus(prev => ({ ...prev, running: false }));
@@ -123,7 +112,7 @@ const TopicsDashboard = () => {
         await startResearchEngine();
         setResearchEngineStatus(prev => ({ ...prev, running: true }));
       }
-      
+
     } catch (err) {
       console.error('Error toggling research engine:', err);
       setError('Failed to toggle research engine. Please try again.');
@@ -137,13 +126,13 @@ const TopicsDashboard = () => {
   // Handle immediate research trigger
   const handleImmediateResearch = async () => {
     if (!userId || immediateResearchLoading) return;
-    
+
     try {
       setImmediateResearchLoading(true);
       setError(null);
-      
+
       const result = await triggerManualResearch(userId);
-      
+
       if (result.success) {
         const topicsResearched = result.topics_researched || 0;
         if (topicsResearched > 0) {
@@ -188,7 +177,7 @@ const TopicsDashboard = () => {
       // Search filter
       if (filters.searchTerm) {
         const searchLower = filters.searchTerm.toLowerCase();
-        if (!topic.name.toLowerCase().includes(searchLower) && 
+        if (!topic.name.toLowerCase().includes(searchLower) &&
             !topic.description.toLowerCase().includes(searchLower)) {
           return false;
         }
@@ -197,7 +186,7 @@ const TopicsDashboard = () => {
       if (filters.autoOnly && !topic.is_expansion) {
         return false;
       }
-      
+
       return true;
     });
 
@@ -253,13 +242,13 @@ const TopicsDashboard = () => {
   const handleTopicSelect = (sessionId, topicIndex, selected) => {
     const topicKey = `${sessionId}-${topicIndex}`;
     const newSelected = new Set(selectedTopics);
-    
+
     if (selected) {
       newSelected.add(topicKey);
     } else {
       newSelected.delete(topicKey);
     }
-    
+
     setSelectedTopics(newSelected);
   };
 
@@ -339,7 +328,7 @@ const TopicsDashboard = () => {
     if (!window.confirm('Clean up old and duplicate topics? This action cannot be undone.')) {
       return;
     }
-    
+
     try {
       setLoading(true);
       await cleanupTopics();
@@ -355,20 +344,20 @@ const TopicsDashboard = () => {
   // Handle delete non-activated topics
   const handleDeleteNonActivated = async () => {
     const nonActivatedCount = topics.filter(topic => !topic.is_active_research).length;
-    
+
     if (nonActivatedCount === 0) {
       setError('No inactive topics found to delete.');
       return;
     }
-    
+
     if (!window.confirm(`Delete all ${nonActivatedCount} topics that are not activated for research? This action cannot be undone.`)) {
       return;
     }
-    
+
     try {
       setLoading(true);
       const result = await deleteNonActivatedTopics();
-      
+
       if (result.success) {
         await loadData(); // Reload to reflect changes
         // Clear any previous error message
@@ -398,12 +387,12 @@ const TopicsDashboard = () => {
   const handleTopicAdded = (newTopic) => {
     // Refresh data to show the new topic
     loadData();
-    
+
     // Update active topics count if the topic was created with research enabled
     if (newTopic.is_active_research) {
       setActiveTopicsCount(prev => prev + 1);
     }
-    
+
     // Clear any previous error messages
     setError(null);
   };
@@ -413,7 +402,7 @@ const TopicsDashboard = () => {
     if (!window.confirm(`Delete topic "${topicName}"?`)) {
       return;
     }
-    
+
     try {
       await deleteTopicById(topicId);  // Use safe ID-based deletion
       await loadData();  // Reload to reflect changes
@@ -428,10 +417,10 @@ const TopicsDashboard = () => {
     try {
       // Use the new safe ID-based API instead of index-based
       await enableTopicResearchById(topic.topic_id);
-      
+
       // Optimistically update the UI and active count
-      setTopics(prevTopics => 
-        prevTopics.map(t => 
+      setTopics(prevTopics =>
+        prevTopics.map(t =>
           t.topic_id === topic.topic_id
             ? { ...t, is_active_research: true }
             : t
@@ -440,9 +429,9 @@ const TopicsDashboard = () => {
       setActiveTopicsCount(prev => prev + 1);
     } catch (error) {
       console.error('Error enabling research:', error);
-      
+
       let errorMessage = 'Failed to enable research. Please try again.';
-      
+
       // Extract error message from response
       if (error.response?.data?.detail) {
         const detail = error.response.data.detail;
@@ -452,9 +441,9 @@ const TopicsDashboard = () => {
           errorMessage = detail;
         }
       }
-      
+
       setError(errorMessage);
-      
+
       // Don't refresh immediately so user can see the error message
       // loadData() will be called by the retry button or auto-refresh
     }
@@ -465,10 +454,10 @@ const TopicsDashboard = () => {
     try {
       // Use the new safe ID-based API instead of index-based
       await disableTopicResearchById(topic.topic_id);
-      
+
       // Optimistically update the UI and active count
-      setTopics(prevTopics => 
-        prevTopics.map(t => 
+      setTopics(prevTopics =>
+        prevTopics.map(t =>
           t.topic_id === topic.topic_id
             ? { ...t, is_active_research: false }
             : t
@@ -507,7 +496,7 @@ const TopicsDashboard = () => {
 
   return (
     <div className="topics-dashboard">
-      <TopicsHeader 
+      <TopicsHeader
         stats={stats}
         selectedCount={selectedTopics.size}
         totalCount={filteredAndSortedTopics.length}
@@ -526,26 +515,26 @@ const TopicsDashboard = () => {
         onDeleteNonActivated={handleDeleteNonActivated}
         onAddCustomTopic={handleShowAddTopicForm}
       />
-      
-      <ErrorModal 
+
+      <ErrorModal
         isOpen={!!error}
         message={error}
         onClose={() => setError(null)}
       />
-      
-      <TopicsFilters 
+
+      <TopicsFilters
         filters={filters}
         onFiltersChange={setFilters}
         topicsCount={filteredAndSortedTopics.length}
       />
-      
+
       <div className="topics-content">
         {filteredAndSortedTopics.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">📚</div>
             <h3>No Topics Found</h3>
             <p>
-              {topics.length === 0 
+              {topics.length === 0
                 ? "You haven't generated any research topics yet. Start chatting to discover interesting topics!"
                 : "No topics match your current filters. Try adjusting your search criteria."
               }
@@ -558,14 +547,14 @@ const TopicsDashboard = () => {
               const isSelected = selectedTopics.has(topicKey);
               const isExpanded = expandedTopics.has(topicKey);
               const depth = topic && topic.is_expansion ? (parseInt(topic.expansion_depth || 1, 10) || 1) : 0;
-              
+
               return (
-                <div 
-                  key={topicKey} 
+                <div
+                  key={topicKey}
                   className={`topic-item ${isSelected ? 'selected' : ''} ${topic.is_active_research ? 'active-research' : ''} ${depth > 0 ? 'child-topic' : 'root-topic'} depth-${depth}`}
                   style={{ '--depth-indent': `${Math.min(depth, 6) * 16}px` }}
                 >
-                  <div 
+                  <div
                     className="topic-header"
                     onClick={() => toggleTopic(topicKey)}
                   >
@@ -642,14 +631,14 @@ const TopicsDashboard = () => {
                           )}
                         </div>
                       )}
-                      
+
                       {topic.conversation_context && (
                         <div className="topic-context">
                           <h4>Context</h4>
                           <p className="context-text">"{topic.conversation_context}"</p>
                         </div>
                       )}
-                      
+
                       <div className="topic-actions">
                         {!topic.is_active_research ? (
                           <button
@@ -676,7 +665,7 @@ const TopicsDashboard = () => {
                             <span className="btn-text">Stop Research</span>
                           </button>
                         )}
-                        
+
                         <button
                           className="delete-btn"
                           onClick={(e) => {
@@ -697,17 +686,17 @@ const TopicsDashboard = () => {
           </div>
         )}
       </div>
-      
+
       {showMotivation && (
         <MotivationStats onClose={() => setShowMotivation(false)} />
       )}
-      
+
       {showEngineSettings && (
         <EngineSettings onClose={() => setShowEngineSettings(false)} />
       )}
-      
+
       {showAddTopicForm && (
-        <AddTopicForm 
+        <AddTopicForm
           isOpen={showAddTopicForm}
           onClose={handleCloseAddTopicForm}
           onTopicAdded={handleTopicAdded}
@@ -717,4 +706,4 @@ const TopicsDashboard = () => {
   );
 };
 
-export default TopicsDashboard; 
+export default TopicsDashboard;
