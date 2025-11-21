@@ -498,7 +498,8 @@ async def create_custom_topic(
         raise HTTPException(status_code=500, detail=f"Error creating custom topic: {str(e)}")
 
 
-@router.get("/user/{user_id}/research")
+# need attention: there was a user_id parameter. is it correct?
+@router.get("/user/research")
 async def get_active_research_topics(
     request: Request,
 ):
@@ -536,7 +537,7 @@ async def get_active_research_topics(
         raise HTTPException(status_code=500, detail=f"Error getting active research topics: {str(e)}")
 
 
-@router.put("/{topic_id}/research")
+@router.put("/topic/{topic_id}/research")
 async def enable_disable_research_by_topic_id(
     request: Request,
     topic_id: str,
