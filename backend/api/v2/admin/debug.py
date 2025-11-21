@@ -18,6 +18,23 @@ router = APIRouter(prefix="/debug")
 logger = get_logger(__name__)
 
 
+@router.get("/status")
+async def get_research_engine_status(
+    request: Request
+):
+    """Get the current status of the autonomous research engine."""
+    try:
+        if hasattr(request.app.state, "autonomous_researcher"):
+            status = request.app.state.autonomous_researcher.get_status()
+            return status
+        else:
+            return {"enabled": False, "running": False, "error": "Autonomous researcher not initialized"}
+
+    except Exception as e:
+        logger.error(f"Error getting research engine status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error getting research status: {str(e)}")
+
+
 @router.post("/expand/{user_id}")
 async def debug_expand_topics(
     user_id: str,

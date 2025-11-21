@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy import String, Text, ForeignKey, UniqueConstraint
+from sqlalchemy import String, Text, ForeignKey, UniqueConstraint, Index
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
@@ -22,4 +22,6 @@ class Identity(Base):
 
     __table_args__ = (
         UniqueConstraint("provider", "provider_user_id", name="uq_identity_provider_user"),
+        UniqueConstraint("user_id",  "provider",  name="uq_identity_user_provider"),
+        Index("ix_identities_user_id", "user_id"),
     )
