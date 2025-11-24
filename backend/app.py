@@ -129,6 +129,7 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
 @app.get("/health")
+@app.get("/v2/health")
 async def health_check():
     """Health check endpoint."""
     health_status = {
@@ -155,6 +156,7 @@ async def health_check():
 
 
 @app.get("/zep/status")
+@app.get("/v2/zep/status")
 async def zep_status():
     """Get Zep memory status."""
     try:
