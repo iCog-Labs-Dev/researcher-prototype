@@ -1,13 +1,17 @@
+from typing import Annotated
 from fastapi import APIRouter, Request, Depends, HTTPException
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from sqlalchemy.ext.asyncio import AsyncSession
 import asyncio
 
+from db import get_session
 from schemas.schemas import ChatRequest, ChatResponse
 from graph_builder import chat_graph
-from dependencies import profile_manager, zep_manager, inject_user_id
+from dependencies import zep_manager, inject_user_id
 from services.chat_service import extract_and_store_topics_async
 from services.logging_config import get_logger
 from services.status_manager import queue_status
+from services.user import UserService
 
 router = APIRouter(prefix="/chat", tags=["v2/chat"], dependencies=[Depends(inject_user_id)])
 
@@ -17,6 +21,7 @@ logger = get_logger(__name__)
 @router.post("", response_model=ChatResponse)
 async def chat(
     request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
     body: ChatRequest,
 ):
     user_id = str(request.state.user_id)
@@ -47,7 +52,8 @@ async def chat(
         }
 
         if body.personality:
-            profile_manager.update_personality(user_id, body.personality.model_dump())
+            service = UserService()
+            await service.update_personality(session, user_id, body.personality.model_dump())
 
         try:
             # Motivation system
