@@ -11,10 +11,10 @@ from dependencies import (
     zep_manager,
     _motivation_config_override,
 )
-from schemas.schemas import (
+from schemas.research import (
     BookmarkUpdate,
     MotivationConfigUpdate,
-    ExpansionRequest,
+    ExpansionIn,
 )
 from services.autonomous_research_engine import initialize_autonomous_researcher
 from services.topic_expansion_service import TopicExpansionService, ExpansionCandidate
@@ -168,22 +168,22 @@ async def integrate_research_finding(
 async def bookmark_research_finding(
     request: Request,
     finding_id: str,
-    update: BookmarkUpdate,
+    body: BookmarkUpdate,
 ):
     """Bookmark or unbookmark a specific research finding."""
 
     user_id = str(request.state.user_id)
 
     try:
-        success = research_manager.mark_finding_bookmarked(user_id, finding_id, update.bookmarked)
+        success = research_manager.mark_finding_bookmarked(user_id, finding_id, body.bookmarked)
         if not success:
             raise HTTPException(status_code=404, detail="Finding not found")
 
         return {
             "success": True,
-            "message": ("Bookmarked" if update.bookmarked else "Unbookmarked") + f" finding {finding_id}",
+            "message": ("Bookmarked" if body.bookmarked else "Unbookmarked") + f" finding {finding_id}",
             "finding_id": finding_id,
-            "bookmarked": update.bookmarked,
+            "bookmarked": body.bookmarked,
         }
     except HTTPException:
         raise
@@ -277,7 +277,7 @@ async def get_research_engine_status(
 @router.post("/debug/expand")
 async def debug_expand_topics(
     request: Request,
-    body: ExpansionRequest
+    body: ExpansionIn
 ):
     """Debug-only: Generate (and optionally persist) topic expansion candidates from Zep."""
 
@@ -432,6 +432,7 @@ async def clear_config_override_alias():
     return {"success": True, "message": "Cleared config override"}
 
 
+# need attention: there is work with researcher.motivation, which no longer exists
 @router.get("/debug/motivation")
 async def get_motivation_status(
     request: Request,
@@ -479,6 +480,7 @@ async def get_motivation_status(
         raise HTTPException(status_code=500, detail=f"Error getting motivation status: {str(e)}")
 
 
+# need attention: there is work with researcher.motivation, which no longer exists (and on_user_activity, etc)
 @router.post("/debug/trigger-user-activity")
 async def trigger_user_activity(
     request: Request,
@@ -508,6 +510,7 @@ async def trigger_user_activity(
         raise HTTPException(status_code=500, detail=f"Error triggering user activity: {str(e)}")
 
 
+# need attention: there is work with researcher.motivation, which no longer exists
 @router.post("/debug/adjust-drives")
 async def adjust_motivation_drives(
     request: Request,
@@ -563,10 +566,11 @@ async def adjust_motivation_drives(
         raise HTTPException(status_code=500, detail=f"Error adjusting drives: {str(e)}")
 
 
+# need attention: there is work with researcher.motivation, which no longer exists
 @router.post("/debug/update-config")
 async def update_motivation_config(
     request: Request,
-    config: MotivationConfigUpdate,
+    body: MotivationConfigUpdate,
 ):
     """Debug endpoint to update motivation system configuration parameters."""
 
@@ -578,7 +582,7 @@ async def update_motivation_config(
 
             # Check if this is a complete config replacement (all parameters provided)
             all_params_provided = all(
-                getattr(config, param) is not None
+                getattr(body, param) is not None
                 for param in ["threshold", "boredom_rate", "curiosity_decay", "tiredness_decay", "satisfaction_decay"]
             )
 
@@ -588,24 +592,24 @@ async def update_motivation_config(
                 _motivation_config_override = {}
 
             # Update provided values
-            if config.threshold is not None:
-                value = max(0.1, min(10.0, config.threshold))
+            if body.threshold is not None:
+                value = max(0.1, min(10.0, body.threshold))
                 drives_config.threshold = value
                 _motivation_config_override["threshold"] = value
-            if config.boredom_rate is not None:
-                value = max(0.0, min(0.1, config.boredom_rate))
+            if body.boredom_rate is not None:
+                value = max(0.0, min(0.1, body.boredom_rate))
                 drives_config.boredom_rate = value
                 _motivation_config_override["boredom_rate"] = value
-            if config.curiosity_decay is not None:
-                value = max(0.0, min(0.1, config.curiosity_decay))
+            if body.curiosity_decay is not None:
+                value = max(0.0, min(0.1, body.curiosity_decay))
                 drives_config.curiosity_decay = value
                 _motivation_config_override["curiosity_decay"] = value
-            if config.tiredness_decay is not None:
-                value = max(0.0, min(0.1, config.tiredness_decay))
+            if body.tiredness_decay is not None:
+                value = max(0.0, min(0.1, body.tiredness_decay))
                 drives_config.tiredness_decay = value
                 _motivation_config_override["tiredness_decay"] = value
-            if config.satisfaction_decay is not None:
-                value = max(0.0, min(0.1, config.satisfaction_decay))
+            if body.satisfaction_decay is not None:
+                value = max(0.0, min(0.1, body.satisfaction_decay))
                 drives_config.satisfaction_decay = value
                 _motivation_config_override["satisfaction_decay"] = value
 
@@ -623,6 +627,7 @@ async def update_motivation_config(
         raise HTTPException(status_code=500, detail=f"Error updating config: {str(e)}")
 
 
+# need attention: there is work with researcher.motivation, which no longer exists
 @router.post("/debug/simulate-research-completion")
 async def simulate_research_completion(
     request: Request,

@@ -3,6 +3,8 @@ from .identity import Identity
 from .research_finding import ResearchFinding
 from .motivation import TopicScore, MotivationConfig
 from .prompt import Prompt, PromptHistory
+from .chat import Chat
+from .topic import Topic
 
 __all__ = (
     "User",
@@ -11,4 +13,6 @@ __all__ = (
     "MotivationConfig",
     "Prompt",
     "PromptHistory",
+    "Chat",
+    "Topic",
 )

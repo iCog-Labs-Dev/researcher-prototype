@@ -1,120 +1,88 @@
-from fastapi import APIRouter, Request, Depends, HTTPException, Query
 import time
+from typing import Annotated
+from fastapi import APIRouter, Request, Depends, HTTPException, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from db import get_session
 from dependencies import research_manager, inject_user_id
-from schemas.schemas import CustomTopicRequest
+from schemas.topic import (
+    CustomTopicIn,
+    CustomTopicOut,
+    TopicEnableOut,
+    TopicSuggestionItem,
+    TopicSuggestionsByChatOut,
+    TopicSuggestionsOut,
+)
 from services.logging_config import get_logger
+from services.topic import TopicService
 
 router = APIRouter(prefix="/topic", tags=["v2/topic"], dependencies=[Depends(inject_user_id)])
 
 logger = get_logger(__name__)
 
 
-@router.get("/suggestions/{session_id}")
+@router.get("/suggestions/{chat_id}", response_model=TopicSuggestionsByChatOut, response_model_exclude_none=True)
 async def get_topic_suggestions(
     request: Request,
-    session_id: str,
-):
-    """Get all suggested topics for a session."""
+    session: Annotated[AsyncSession, Depends(get_session)],
+    chat_id: str,
+) -> TopicSuggestionsByChatOut:
+    """Get all suggested topics for a chat."""
 
     user_id = str(request.state.user_id)
 
-    try:
-        # Get stored topic suggestions from user profile
-        stored_topics = research_manager.get_topic_suggestions(user_id, session_id)
+    service = TopicService()
+    topics = await service.get_topics_by_chat_id(session, user_id, chat_id)
 
-        # Convert to response format with topic IDs
-        topic_suggestions = []
-        for i, topic in enumerate(stored_topics):
-            topic_suggestion = {
-                "index": i,  # Keep index for backward compatibility
-                "topic_id": topic.get("topic_id"),  # Add topic ID for safe deletion
-                "name": topic.get("topic_name", ""),
-                "description": topic.get("description", ""),
-                "confidence_score": topic.get("confidence_score", 0.0),
-                "suggested_at": topic.get("suggested_at", 0),
-                "conversation_context": topic.get("conversation_context", ""),
-                "is_active_research": topic.get("is_active_research", False),
-                # Include expansion data
-                "is_expansion": topic.get("is_expansion", False),
-                "origin": topic.get("origin"),
-                "expansion_depth": topic.get("expansion_depth", 0),
-                "child_expansion_enabled": topic.get("child_expansion_enabled", False),
-                "expansion_status": topic.get("expansion_status"),
-                "last_evaluated_at": topic.get("last_evaluated_at"),
-            }
+    topic_suggestions = []
+    for topic in topics:
+        topic_suggestions.append(TopicSuggestionItem(
+            id=topic.id,
+            name=topic.name,
+            description=topic.description,
+            confidence_score=topic.confidence_score,
+            conversation_context=topic.conversation_context,
+            is_active_research=topic.is_active_research,
+            created_at=topic.created_at,
+        ))
 
-            # Add topic ID if missing (for backward compatibility)
-            if not topic_suggestion["topic_id"]:
-                topic_suggestion["topic_id"] = f"legacy_{session_id}_{i}"
-                logger.warning(f"Topic at index {i} in session {session_id} missing topic_id, using legacy ID")
-
-            topic_suggestions.append(topic_suggestion)
-
-        # Sort by suggestion time (most recent first)
-        topic_suggestions.sort(key=lambda x: x["suggested_at"], reverse=True)
-
-        return {
-            "session_id": session_id,
-            "user_id": user_id,
-            "topic_suggestions": topic_suggestions,
-            "total_count": len(topic_suggestions),
-        }
-
-    except Exception as e:
-        logger.error(f"Error retrieving topic suggestions for user {user_id}, session {session_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error retrieving topic suggestions: {str(e)}")
+    return TopicSuggestionsByChatOut(
+        total_count=len(topic_suggestions),
+        topic_suggestions=topic_suggestions,
+    )
 
 
-@router.get("/suggestions")
+@router.get("/suggestions", response_model=TopicSuggestionsOut, response_model_exclude_none=True)
 async def get_all_topic_suggestions(
     request: Request,
-):
-    """Get all suggested topics for a user across all sessions."""
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> TopicSuggestionsOut:
+    """Get all suggested topics for a user."""
 
     user_id = str(request.state.user_id)
 
-    try:
-        # Get all topic suggestions from user profile
-        all_topics_by_session = research_manager.get_all_topic_suggestions(user_id)
+    service = TopicService()
+    topics = await service.get_topics_by_user_id(session, user_id)
+    chats_count = await service.get_count_chats_by_user_id(session, user_id)
 
-        # Flatten and convert to response format
-        all_topics = []
-        for session_id, topics in all_topics_by_session.items():
-            for topic in topics:
-                all_topics.append(
-                    {
-                        "session_id": session_id,
-                        "topic_id": topic.get("topic_id"),  # Add topic ID for safe deletion
-                        "name": topic.get("topic_name", ""),
-                        "description": topic.get("description", ""),
-                        "confidence_score": topic.get("confidence_score", 0.0),
-                        "suggested_at": topic.get("suggested_at", 0),
-                        "conversation_context": topic.get("conversation_context", ""),
-                        "is_active_research": topic.get("is_active_research", False),
-                        # Include expansion data
-                        "is_expansion": topic.get("is_expansion", False),
-                        "origin": topic.get("origin"),
-                        "expansion_depth": topic.get("expansion_depth", 0),
-                        "child_expansion_enabled": topic.get("child_expansion_enabled", False),
-                        "expansion_status": topic.get("expansion_status"),
-                        "last_evaluated_at": topic.get("last_evaluated_at"),
-                    }
-                )
+    topic_suggestions = []
+    for topic in topics:
+        topic_suggestions.append(TopicSuggestionItem(
+            id=topic.id,
+            chat_id=topic.chat_id,
+            name=topic.name,
+            description=topic.description,
+            confidence_score=topic.confidence_score,
+            conversation_context=topic.conversation_context,
+            is_active_research=topic.is_active_research,
+            created_at=topic.created_at,
+        ))
 
-        # Sort by suggestion time (most recent first)
-        all_topics.sort(key=lambda x: x["suggested_at"], reverse=True)
-
-        return {
-            "user_id": user_id,
-            "topic_suggestions": all_topics,
-            "total_count": len(all_topics),
-            "sessions_count": len(all_topics_by_session),
-        }
-
-    except Exception as e:
-        logger.error(f"Error retrieving all topic suggestions for user {user_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error retrieving topic suggestions: {str(e)}")
+    return TopicSuggestionsOut(
+        total_count=len(topic_suggestions),
+        chats_count=chats_count,
+        topic_suggestions=topic_suggestions,
+    )
 
 
 @router.get("/status/{session_id}")
@@ -437,65 +405,35 @@ async def delete_non_activated_topics(
         raise HTTPException(status_code=500, detail=f"Error deleting non-activated topics: {str(e)}")
 
 
-@router.post("/custom")
+@router.post("/custom", response_model=CustomTopicOut)
 async def create_custom_topic(
     request: Request,
-    body: CustomTopicRequest,
-):
+    session: Annotated[AsyncSession, Depends(get_session)],
+    body: CustomTopicIn,
+) -> CustomTopicOut:
     """Create a custom research topic."""
 
     user_id = str(request.state.user_id)
 
-    try:
-        # Use the research manager method to add the custom topic
-        result = research_manager.add_custom_topic(
-            user_id=user_id,
-            topic_name=body.name,
-            description=body.description,
-            confidence_score=body.confidence_score,
-            enable_research=body.enable_research
-        )
+    service = TopicService()
+    topic = await service.create_topic(
+        session,
+        user_id,
+        body.name,
+        body.description,
+        confidence_score=body.confidence_score,
+        is_active_research=body.is_active_research,
+    )
 
-        if result["success"]:
-            created_topic = result["topic"]
-            return {
-                "success": True,
-                "message": f"Successfully created custom topic: {created_topic['topic_name']}",
-                "topic": {
-                    "topic_id": created_topic["topic_id"],
-                    "name": created_topic["topic_name"],
-                    "description": created_topic["description"],
-                    "confidence_score": created_topic["confidence_score"],
-                    "session_id": created_topic["session_id"],
-                    "is_active_research": created_topic["is_active_research"],
-                    "is_custom": created_topic.get("is_custom", True),
-                    "suggested_at": created_topic["suggested_at"],
-                }
-            }
-        else:
-            # Handle specific error cases
-            if "already exists" in result["error"]:
-                raise HTTPException(status_code=409, detail=result["error"])
-            elif "required" in result["error"]:
-                raise HTTPException(status_code=400, detail=result["error"])
-            elif "maximum limit" in result["error"] or "limit" in result["error"]:
-                # Return limit information for frontend to display proper message
-                raise HTTPException(
-                    status_code=400, 
-                    detail={
-                        "error": result["error"],
-                        "current_count": result.get("current_count"),
-                        "limit": result.get("limit")
-                    }
-                )
-            else:
-                raise HTTPException(status_code=500, detail=result["error"])
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error creating custom topic for user {user_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error creating custom topic: {str(e)}")
+    return CustomTopicOut(
+        id=topic.id,
+        user_id=topic.user_id,
+        name=topic.name,
+        description=topic.description,
+        confidence_score=topic.confidence_score,
+        is_active_research=topic.is_active_research,
+        created_at=topic.created_at,
+    )
 
 
 # need attention: there was a user_id parameter. is it correct?
@@ -537,53 +475,18 @@ async def get_active_research_topics(
         raise HTTPException(status_code=500, detail=f"Error getting active research topics: {str(e)}")
 
 
-@router.put("/topic/{topic_id}/research")
+@router.patch("/topic/{topic_id}/research", response_model=TopicEnableOut)
 async def enable_disable_research_by_topic_id(
     request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
     topic_id: str,
     enable: bool = Query(True, description="True to enable, False to disable"),
-):
-    """Enable or disable research for a topic by its unique ID (safer than index-based operations)."""
+) -> TopicEnableOut:
+    """Enable or disable research for a topic."""
 
     user_id = str(request.state.user_id)
 
-    try:
-        # Use the safe ID-based method to update research status
-        result = research_manager.update_topic_research_status_by_id(user_id, topic_id, enable)
+    service = TopicService()
+    result = await service.update_active_research(session, user_id, topic_id, enable)
 
-        if result["success"]:
-            updated_topic = result["updated_topic"]
-            action = "enabled" if enable else "disabled"
-            return {
-                "success": True,
-                "message": f"Research {action} for topic: {updated_topic['topic_name']}",
-                "topic": {
-                    "topic_id": updated_topic["topic_id"],
-                    "name": updated_topic["topic_name"],
-                    "description": updated_topic["description"],
-                    "session_id": updated_topic["session_id"],
-                    "is_active_research": enable,
-                },
-            }
-        else:
-            # Map specific errors to appropriate HTTP status codes
-            if "not found" in result["error"]:
-                raise HTTPException(status_code=404, detail=result["error"])
-            elif "maximum limit" in result["error"] or "limit" in result["error"]:
-                # Return limit information for frontend to display proper message
-                raise HTTPException(
-                    status_code=400,
-                    detail={
-                        "error": result["error"],
-                        "current_count": result.get("current_count"),
-                        "limit": result.get("limit")
-                    }
-                )
-            else:
-                raise HTTPException(status_code=500, detail=result["error"])
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error updating research status for topic ID {topic_id}, user {user_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error updating research status: {str(e)}")
+    return TopicEnableOut(enabled=result)

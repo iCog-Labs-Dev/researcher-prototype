@@ -18,7 +18,6 @@ from models.user import UserProfile
 from models.identity import Identity
 from config import GOOGLE_CLIENT_ID
 
-
 PROVIDER_LOCAL  = "local"
 PROVIDER_GOOGLE  = "google"
 
@@ -34,7 +33,7 @@ class AuthService:
         password: str,
     ) -> User:
         if await self._get_identity(session, PROVIDER_LOCAL, email):
-            raise AlreadyExist("User with this email already exists")
+            raise AlreadyExist("A user with this email already exists. Please log in instead.")
 
         user = User()
         session.add(user)
