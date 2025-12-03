@@ -62,6 +62,20 @@ export const AuthProvider = ({ children }) => {
         setError('');
     }, []);
 
+    const updateUser = useCallback((updater) => {
+        setUser((prevUser) => {
+            const nextUser = typeof updater === 'function' ? updater(prevUser) : updater;
+
+            if (nextUser) {
+                localStorage.setItem('auth_user', JSON.stringify(nextUser));
+            } else {
+                localStorage.removeItem('auth_user');
+            }
+
+            return nextUser;
+        });
+    }, []);
+
     const setErrorCallback = useCallback((errorMessage) => {
         setError(errorMessage);
     }, []);
@@ -75,7 +89,8 @@ export const AuthProvider = ({ children }) => {
         setError: setErrorCallback,
         login,
         logout,
-    }), [isAuthenticated, token, user, loading, error, setErrorCallback, login, logout]);
+        updateUser,
+    }), [isAuthenticated, token, user, loading, error, setErrorCallback, login, logout, updateUser]);
 
     return (
         <AuthContext.Provider value={value}>

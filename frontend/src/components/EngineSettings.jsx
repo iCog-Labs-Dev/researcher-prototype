@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getMotivationStatus, updateMotivationConfig } from '../services/api';
+import { getMotivationStatus, updateMotivationConfig } from '../services/adminApi';
 import '../styles/EngineSettings.css';
 
 const EngineSettings = ({ onClose }) => {
@@ -18,16 +18,16 @@ const EngineSettings = ({ onClose }) => {
   // Calculate estimated research frequency
   const calculateResearchFrequency = () => {
     const { boredom_rate, threshold } = settings;
-    
+
     // Return loading state if values aren't loaded yet
     if (!boredom_rate || !threshold || boredom_rate <= 0) {
       return { timeMinutes: '...', frequency: 'loading', color: '#6b7280' };
     }
-    
+
     // Simplified estimation: time for boredom alone to reach threshold
     const timeSeconds = threshold / boredom_rate;
     const timeMinutes = timeSeconds / 60;
-    
+
     let frequency, color;
     if (timeMinutes < 1) {
       frequency = 'very frequent';
@@ -45,8 +45,8 @@ const EngineSettings = ({ onClose }) => {
       frequency = 'rare';
       color = '#6b7280'; // gray
     }
-    
-    return { 
+
+    return {
       timeMinutes: timeMinutes < 1 ? '<1' : Math.round(timeMinutes).toString(),
       frequency,
       color
@@ -89,10 +89,10 @@ const EngineSettings = ({ onClose }) => {
     try {
       setSaving(true);
       setError(null);
-      
+
       // Apply the preset configuration directly (send all parameters to completely replace config)
       await updateMotivationConfig(preset);
-      
+
       // Update local state for frequency calculation
       setSettings({
         threshold: preset.threshold,
@@ -101,7 +101,7 @@ const EngineSettings = ({ onClose }) => {
         tiredness_decay: preset.tiredness_decay,
         satisfaction_decay: preset.satisfaction_decay
       });
-      
+
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
@@ -119,7 +119,7 @@ const EngineSettings = ({ onClose }) => {
         const response = await getMotivationStatus();
         const motivation = response.motivation_system;
         const driveRates = response.drive_rates;
-        
+
         setSettings({
           threshold: motivation.threshold,
           boredom_rate: driveRates.boredom_rate,
@@ -164,14 +164,14 @@ const EngineSettings = ({ onClose }) => {
           <h3>Research Engine Settings</h3>
           <button className="close-btn" onClick={onClose}>✕</button>
         </div>
-        
+
         <div className="settings-content">
           {error && (
             <div className="error-message">
               <p>{error}</p>
             </div>
           )}
-          
+
           {success && (
             <div className="success-message">
               <p>Settings saved successfully!</p>
@@ -188,7 +188,7 @@ const EngineSettings = ({ onClose }) => {
                   <div className="frequency-time">
                     ~{freq.timeMinutes} minutes
                   </div>
-                  <div 
+                  <div
                     className="frequency-label"
                     style={{ color: freq.color }}
                   >
@@ -198,10 +198,10 @@ const EngineSettings = ({ onClose }) => {
                 </div>
               );
             })()}
-            
+
             <div className="behavior-note">
               <small>
-                📌 <strong>Note:</strong> Motivation only evolves when the research engine is running. 
+                📌 <strong>Note:</strong> Motivation only evolves when the research engine is running.
                 When stopped, all motivation parameters freeze at their current values.
               </small>
             </div>
@@ -229,7 +229,7 @@ const EngineSettings = ({ onClose }) => {
               ))}
             </div>
           </div>
-        
+
         </div>
 
         <div className="settings-footer">
@@ -242,4 +242,4 @@ const EngineSettings = ({ onClose }) => {
   );
 };
 
-export default EngineSettings; 
+export default EngineSettings;

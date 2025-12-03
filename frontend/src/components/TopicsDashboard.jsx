@@ -15,11 +15,13 @@ import {
   deleteNonActivatedTopics,
   enableTopicResearchById,
   disableTopicResearchById,
-  getResearchEngineStatus,
+  getResearchEngineStatus
+} from '../services/api';
+import {
   startResearchEngine,
   stopResearchEngine,
   triggerManualResearch
-} from '../services/api';
+} from '../services/adminApi';
 import '../styles/TopicsDashboard.css';
 
 const TopicsDashboard = () => {
@@ -75,7 +77,7 @@ const TopicsDashboard = () => {
       const [topicsResponse, statsResponse, engineStatus] = await Promise.all([
         getAllTopicSuggestions(),
         getTopicStatistics(),
-        getResearchEngineStatus().catch(() => ({ available: false, enabled: false, running: false }))
+        // getResearchEngineStatus().catch(() => ({ available: false, enabled: false, running: false }))
       ]);
 
       const topicsData = topicsResponse.topic_suggestions || [];
@@ -96,7 +98,7 @@ const TopicsDashboard = () => {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+  }, []);
 
   // Handle global research engine toggle
   const handleToggleGlobalResearch = async () => {

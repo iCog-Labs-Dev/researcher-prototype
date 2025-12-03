@@ -6,12 +6,17 @@ import {
   getUserPreferences,
   updateUserPreferences,
   getUserPersonalizationData,
-  updateUserEmail
+  updateUserEmail,
+  updateUserDisplayName
 } from '../services/api';
+import { useSession } from '../context/SessionContext';
+import { useAuth } from '../context/AuthContext';
 import PersonalizationDashboard from './PersonalizationDashboard';
 import '../styles/UserProfile.css';
 
 const UserProfile = ({ userId, onProfileUpdated }) => {
+  const { updateUserDisplayName: updateSessionDisplayName } = useSession();
+  const { updateUser } = useAuth();
   const [profile, setProfile] = useState(null);
   const [presets, setPresets] = useState({});
   const [preferences, setPreferences] = useState(null);
@@ -23,6 +28,7 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
   const [editedTone, setEditedTone] = useState('');
   const [editedPreferences, setEditedPreferences] = useState(null);
   const [editedEmail, setEditedEmail] = useState('');
+  const [editedDisplayName, setEditedDisplayName] = useState('');
 
   useEffect(() => {
     const loadData = async () => {
@@ -47,6 +53,7 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
         setEditedTone(userData.personality.tone);
         setEditedPreferences(preferencesData);
         setEditedEmail(userData.metadata?.email || '');
+        setEditedDisplayName(userData.metadata?.display_name || '');
       } catch (error) {
         console.error('👤 UserProfile: ❌ Error loading user profile:', error);
         console.error('👤 UserProfile: ❌ Failed to load data for user:', userId);
@@ -86,6 +93,12 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
 
       await updateUserPersonality(updatedPersonality);
 
+      // Update display name if changed
+      if (editedDisplayName !== (profile.metadata?.display_name || '')) {
+        console.log('👤 UserProfile: Updating display name for user:', userId);
+        await updateUserDisplayName(editedDisplayName);
+      }
+
       // Update email if changed
       if (editedEmail !== (profile.metadata?.email || '')) {
         console.log('👤 UserProfile: Updating email for user:', userId);
@@ -100,9 +113,27 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
         personality: updatedPersonality,
         metadata: {
           ...profile.metadata,
-          email: editedEmail
+          email: editedEmail,
+          display_name: editedDisplayName
         }
       });
+
+      if (updateSessionDisplayName) {
+        updateSessionDisplayName(editedDisplayName);
+      }
+
+      if (updateUser) {
+        updateUser(prevUser => {
+          if (!prevUser) return prevUser;
+          return {
+            ...prevUser,
+            metadata: {
+              ...(prevUser.metadata || {}),
+              display_name: editedDisplayName
+            }
+          };
+        });
+      }
 
       setIsEditing(false);
 
@@ -193,12 +224,23 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
       {isEditing && activeTab === 'personality' ? (
         <div className="profile-edit-form">
           <div className="form-group">
+            <label>Display Name:</label>
+            <input
+              type="text"
+              value={editedDisplayName}
+              onChange={(e) => setEditedDisplayName(e.target.value)}
+              placeholder="Enter display name"
+            />
+          </div>
+
+          <div className="form-group">
             <label>Email:</label>
             <input
               type="email"
               value={editedEmail}
               onChange={(e) => setEditedEmail(e.target.value)}
               placeholder="Enter email (optional)"
+              disabled
             />
           </div>
 
@@ -429,6 +471,8 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
                 setEditedStyle(profile.personality.style);
                 setEditedTone(profile.personality.tone);
                 setEditedPreferences(preferences);
+                setEditedDisplayName(profile.metadata?.display_name || '');
+                setEditedEmail(profile.metadata?.email || '');
               }}
             >
               Cancel
@@ -473,3 +517,4 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
 };
 
 export default UserProfile;
+

@@ -222,6 +222,100 @@ export const getPromptUsageMap = async () => {
   }
 };
 
+// Debug APIs (moved from api.js - these are now in /v2/admin/debug/*)
+export const getMotivationStatus = async () => {
+  try {
+    const response = await adminApi.get('/debug/motivation');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching motivation status:', error);
+    throw error;
+  }
+};
+
+export const adjustMotivationDrives = async (drives) => {
+  try {
+    const response = await adminApi.post('/debug/adjust-drives', drives);
+    return response.data;
+  } catch (error) {
+    console.error('Error adjusting motivation drives:', error);
+    throw error;
+  }
+};
+
+export const updateMotivationConfig = async (config) => {
+  try {
+    const response = await adminApi.post('/debug/update-config', config);
+    return response.data;
+  } catch (error) {
+    console.error('Error updating motivation config:', error);
+    throw error;
+  }
+};
+
+export const triggerUserActivity = async () => {
+  try {
+    const response = await adminApi.post('/debug/trigger-user-activity');
+    return response.data;
+  } catch (error) {
+    console.error('Error triggering user activity:', error);
+    throw error;
+  }
+};
+
+export const simulateResearchCompletion = async (qualityScore = 0.7) => {
+  try {
+    const response = await adminApi.post('/debug/simulate-research-completion', null, {
+      params: { quality_score: qualityScore }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error simulating research completion:', error);
+    throw error;
+  }
+};
+
+// Research engine control functions (moved from api.js - these are now in /v2/admin/debug/control/*)
+export const startResearchEngine = async () => {
+  try {
+    const response = await adminApi.post('/debug/control/start');
+    return response.data;
+  } catch (error) {
+    console.error('Error starting research engine:', error);
+    throw error;
+  }
+};
+
+export const stopResearchEngine = async () => {
+  try {
+    const response = await adminApi.post('/debug/control/stop');
+    return response.data;
+  } catch (error) {
+    console.error('Error stopping research engine:', error);
+    throw error;
+  }
+};
+
+export const restartResearchEngine = async () => {
+  try {
+    const response = await adminApi.post('/debug/control/restart');
+    return response.data;
+  } catch (error) {
+    console.error('Error restarting research engine:', error);
+    throw error;
+  }
+};
+
+export const triggerManualResearch = async (userId) => {
+  try {
+    const response = await adminApi.post(`/debug/trigger/${userId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error triggering manual research:', error);
+    throw error;
+  }
+};
+
 // Utility functions
 export const isAuthenticated = () => {
   return !!tokenManager.getToken();
