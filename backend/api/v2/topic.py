@@ -114,7 +114,7 @@ async def get_topic_statistics(
 
     return TopicStatsOut(
         total_topics=total,
-        sessions_count=sessions_count,
+        total_sessions=sessions_count,
         average_confidence_score=avg_score,
         oldest_topic_age_days=oldest_days,
     )

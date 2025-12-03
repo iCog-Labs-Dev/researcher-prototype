@@ -74,7 +74,7 @@ class ResearchTopicsByUserOut(BaseModel):
 class TopicStatsOut(BaseModel):
     """Output body for getting topic statistics."""
     total_topics: int
-    sessions_count: int
+    total_sessions: int
     average_confidence_score: float
     oldest_topic_age_days: int
 
