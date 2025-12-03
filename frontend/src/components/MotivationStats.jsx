@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getMotivationStatus } from '../services/api';
+import { getMotivationStatus } from '../services/adminApi';
 import '../styles/MotivationStats.css';
 
 const MotivationStats = ({ onClose }) => {
@@ -32,7 +32,7 @@ const MotivationStats = ({ onClose }) => {
 
   useEffect(() => {
     fetchStatus();
-    
+
     // Set up auto-refresh every 5 seconds
     const interval = setInterval(() => {
       fetchStatus(true);
@@ -89,21 +89,21 @@ const MotivationStats = ({ onClose }) => {
             <button className="close-btn" onClick={onClose}>✕</button>
           </div>
         </div>
-        
+
         {loading && (
           <div className="loading-state">
             <div className="loading-spinner"></div>
             <p>Analyzing motivation state...</p>
           </div>
         )}
-        
+
         {!loading && !data && (
           <div className="error-state">
             <div className="error-icon">⚠️</div>
             <p>Error loading motivation data.</p>
           </div>
         )}
-        
+
         {!loading && data && (
           <div className="motivation-content">
             {/* Impetus Section - Central Focus */}
@@ -157,7 +157,7 @@ const MotivationStats = ({ onClose }) => {
                 const value = data[drive];
                 const percentage = Math.round(value * 100);
                 const intensity = percentage >= 80 ? 'very-high' : percentage >= 60 ? 'high' : percentage >= 40 ? 'medium' : percentage >= 20 ? 'low' : 'very-low';
-                
+
                 return (
                   <div key={drive} className={`drive-card ${intensity}`} style={{ '--drive-color': config.color, '--drive-color-light': config.colorLight }}>
                     <div className="drive-header">
@@ -167,7 +167,7 @@ const MotivationStats = ({ onClose }) => {
                         <span className="drive-percentage">{percentage}%</span>
                       </div>
                     </div>
-                    
+
                     <div className="drive-visualization">
                       {/* Circular Progress */}
                       <div className="drive-circle">
@@ -198,7 +198,7 @@ const MotivationStats = ({ onClose }) => {
                           {percentage}
                         </div>
                       </div>
-                      
+
                       {/* Wave/Liquid Effect */}
                       <div className="drive-wave-container">
                         <div className="drive-wave" style={{ height: `${percentage}%` }}>
@@ -206,7 +206,7 @@ const MotivationStats = ({ onClose }) => {
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="drive-description">
                       <div className="drive-subtitle">{config.description}</div>
                       <div className="drive-intensity-label">

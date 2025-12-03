@@ -4,7 +4,8 @@ import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import TypingIndicator from './TypingIndicator';
 import ConversationTopics from './ConversationTopics';
-import { sendChatMessage, triggerUserActivity } from '../services/api';
+import { sendChatMessage } from '../services/api';
+import { triggerUserActivity } from '../services/adminApi';
 import { useEngagementTracking } from '../utils/engagementTracker';
 import '../App.css';
 

@@ -390,7 +390,7 @@ export const createCustomTopic = async (topicData) => {
 // NEW: ID-based topic research functions (SAFE - no index mismatch)
 export const enableTopicResearchById = async (topicId) => {
   try {
-    const response = await api.put(`/topic/${topicId}/research`, null, {
+    const response = await api.put(`/topic/topic/${topicId}/research`, null, {
       params: { enable: true }
     });
     return response.data;
@@ -402,7 +402,7 @@ export const enableTopicResearchById = async (topicId) => {
 
 export const disableTopicResearchById = async (topicId) => {
   try {
-    const response = await api.put(`/topic/${topicId}/research`, null, {
+    const response = await api.put(`/topic/topic/${topicId}/research`, null, {
       params: { enable: false }
     });
     return response.data;
@@ -489,57 +489,6 @@ export const getResearchEngineStatus = async () => {
   }
 };
 
-export const getMotivationStatus = async () => {
-  try {
-    const response = await api.get('/research/debug/motivation');
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching motivation status:', error);
-    throw error;
-  }
-};
-
-export const adjustMotivationDrives = async (drives) => {
-  try {
-    const response = await api.post('/research/debug/adjust-drives', drives);
-    return response.data;
-  } catch (error) {
-    console.error('Error adjusting motivation drives:', error);
-    throw error;
-  }
-};
-
-export const updateMotivationConfig = async (config) => {
-  try {
-    const response = await api.post('/research/debug/update-config', config);
-    return response.data;
-  } catch (error) {
-    console.error('Error updating motivation config:', error);
-    throw error;
-  }
-};
-
-export const triggerUserActivity = async () => {
-  try {
-    const response = await api.post('/research/debug/trigger-user-activity');
-    return response.data;
-  } catch (error) {
-    console.error('Error triggering user activity:', error);
-    throw error;
-  }
-};
-
-export const simulateResearchCompletion = async (qualityScore = 0.7) => {
-  try {
-    const response = await api.post('/research/debug/simulate-research-completion', null, {
-      params: { quality_score: qualityScore }
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Error simulating research completion:', error);
-    throw error;
-  }
-};
 
 export const getActiveResearchTopics = async (userId) => {
   try {
@@ -551,46 +500,6 @@ export const getActiveResearchTopics = async (userId) => {
   }
 };
 
-export const triggerManualResearch = async (userId) => {
-  try {
-    const response = await api.post(`/research/trigger/${userId}`);
-    return response.data;
-  } catch (error) {
-    console.error('Error triggering manual research:', error);
-    throw error;
-  }
-};
-
-// Research engine control functions
-export const startResearchEngine = async () => {
-  try {
-    const response = await api.post('/research/control/start');
-    return response.data;
-  } catch (error) {
-    console.error('Error starting research engine:', error);
-    throw error;
-  }
-};
-
-export const stopResearchEngine = async () => {
-  try {
-    const response = await api.post('/research/control/stop');
-    return response.data;
-  } catch (error) {
-    console.error('Error stopping research engine:', error);
-    throw error;
-  }
-};
-
-export const restartResearchEngine = async () => {
-  try {
-    const response = await api.post('/research/control/restart');
-    return response.data;
-  } catch (error) {
-    console.error('Error restarting research engine:', error);
-    throw error;
-  }
-};
 
 // Graph API functions
 export const graphApi = {

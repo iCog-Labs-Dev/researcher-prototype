@@ -206,7 +206,7 @@ const Navigation = () => {
             {isAuthenticated ? (
               <div className="auth-controls">
                 <span className="auth-user-info">
-                  {authUser?.metadata?.display_name || authUser?.display_name || authUser?.email || 'User'}
+                  {userDisplayName || authUser?.metadata?.display_name || authUser?.display_name || authUser?.email || 'User'}
                 </span>
                 <button
                   className="logout-button"
