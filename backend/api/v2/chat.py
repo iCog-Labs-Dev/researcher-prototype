@@ -36,7 +36,7 @@ async def chat(
 
     chat_service = ChatService()
     chat_id = await chat_service.get_or_create_chat_id(
-        session, user_id, user_message, body.chat_id if body.chat_id else None
+        session, user_id, user_message, body.session_id if body.session_id else None
     )
 
     messages_for_state = []
@@ -68,7 +68,7 @@ async def chat(
     result = await chat_graph.ainvoke(state)
 
     if "error" in result:
-        raise CommonError(f"Error in chat endpoint: {result["error"]}")
+        raise CommonError(f"Error in chat endpoint: {result['error']}")
 
     assistant_message = result["messages"][-1].content
 
@@ -92,7 +92,7 @@ async def chat(
         module_used=result.get("current_module", "unknown"),
         routing_analysis=result.get("routing_analysis"),
         user_id=user_id,
-        chat_id=chat_id,
+        session_id=chat_id,
         suggested_topics=[],
         follow_up_questions=result.get("workflow_context", {}).get("follow_up_questions", []),
     )
@@ -102,11 +102,11 @@ async def chat(
     return response_obj
 
 
-@router.get("", response_model=ChatView)
+@router.get("", response_model=list[ChatView])
 async def get_chats(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> ChatView:
+) -> list[ChatView]:
     user_id = str(request.state.user_id)
 
     service = ChatService()

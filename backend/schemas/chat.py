@@ -27,7 +27,7 @@ class ChatIn(BaseModel):
     temperature: float = 0.7
     max_tokens: int = 1000
     personality: Optional[PersonalityConfig] = None
-    chat_id: Optional[UUID] = None
+    session_id: Optional[UUID] = None
 
 
 class ChatOut(BaseModel):
@@ -38,7 +38,7 @@ class ChatOut(BaseModel):
     module_used: Optional[str] = None
     routing_analysis: Optional[Dict[str, Any]] = None
     user_id: UUID
-    chat_id: UUID
+    session_id: UUID
     suggested_topics: List[TopicSuggestion] = []
     follow_up_questions: List[str] = []
 

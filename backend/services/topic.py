@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func, distinct
+from sqlalchemy import select, and_, func, distinct, delete
 
 from db import SessionLocal
 from config import DEFAULT_MODEL, MAX_ACTIVE_RESEARCH_TOPICS_PER_USER
@@ -13,19 +14,6 @@ logger = get_logger(__name__)
 
 
 class TopicService:
-    async def get_all_topics(
-        self,
-        session: AsyncSession,
-    ) -> list[Topic]:
-        query = (
-            select(Topic)
-            .where(Topic.is_active_research.is_(True))
-            .order_by(Topic.created_at.asc())
-        )
-        res = await session.execute(query)
-
-        return list(res.scalars().all())
-
     async def get_topics_by_user_id(
         self,
         session: AsyncSession,
@@ -51,6 +39,33 @@ class TopicService:
 
         return list(res.scalars().all())
 
+    async def get_active_research_topics_by_user_id(
+        self,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+    ) -> list[Topic]:
+        query = select(Topic).where(
+            and_(Topic.user_id == user_id, Topic.is_active_research.is_(True))
+        ).order_by(Topic.created_at.asc())
+
+        res = await session.execute(query)
+
+        return list(res.scalars().all())
+
+    async def get_active_research_topics(
+        self,
+        session: AsyncSession,
+    ) -> list[Topic]:
+        query = (
+            select(Topic)
+            .where(Topic.is_active_research.is_(True))
+            .order_by(Topic.created_at.asc())
+        )
+
+        res = await session.execute(query)
+
+        return list(res.scalars().all())
+
     async def get_count_chats_by_user_id(
         self,
         session: AsyncSession,
@@ -63,6 +78,61 @@ class TopicService:
         res = await session.execute(query)
 
         return int(res.scalar_one())
+
+    async def get_user_topic_stats(
+        self,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+    ) -> tuple[int, int, float, int]:
+        query = select(
+            func.count(Topic.id),
+            func.count(distinct(Topic.chat_id)),
+            func.avg(Topic.confidence_score),
+            func.min(Topic.created_at),
+        ).where(Topic.user_id == user_id)
+
+        res = await session.execute(query)
+
+        total_topics, sessions_count, avg_score, min_created = res.one()
+
+        if avg_score is None:
+            avg_score = 0.0
+
+        if min_created is None:
+            oldest_age_days = 0
+        else:
+            now = datetime.now(timezone.utc)
+            oldest_age_days = max(0, int((now - min_created).total_seconds() // 86400))
+
+        return total_topics, sessions_count, avg_score, oldest_age_days
+
+    async def get_top_topics_by_chat(
+        self,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        chat_id: uuid.UUID,
+        limit: int,
+    ) -> tuple[int, list[Topic]]:
+        query = select(func.count()).where(
+            and_(Topic.user_id == user_id, Topic.chat_id == chat_id)
+        )
+
+        res = await session.execute(query)
+
+        available_count = int(res.scalar_one())
+
+        query = (
+            select(Topic)
+            .where(and_(Topic.user_id == user_id, Topic.chat_id == chat_id))
+            .order_by(Topic.confidence_score.desc(), Topic.created_at.desc(), Topic.id.desc())
+            .limit(limit)
+        )
+
+        res = await session.execute(query)
+
+        topics = list(res.scalars().all())
+
+        return available_count, topics
 
     async def create_topic(
         self,
@@ -91,7 +161,6 @@ class TopicService:
         topic_id: uuid.UUID,
         enable: bool,
     ) -> bool:
-
         query = select(Topic).where(
             and_(Topic.id == topic_id, Topic.user_id == user_id)
         )
@@ -114,6 +183,109 @@ class TopicService:
         await session.commit()
 
         return topic.is_active_research
+
+    async def delete_topics_by_chat(
+        self,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        chat_id: uuid.UUID,
+    ) -> None:
+        query = (
+            delete(Topic)
+            .where(and_(Topic.user_id == user_id, Topic.chat_id == chat_id))
+            .returning(Topic.id)
+        )
+
+        res = await session.execute(query)
+
+        deleted_ids = res.scalars().all()
+
+        if not deleted_ids:
+            raise NotFound("No topics found for this chat")
+
+        await session.commit()
+
+    async def delete_topic_by_id(
+        self,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        topic_id: uuid.UUID,
+    ) -> None:
+        query = (
+            delete(Topic)
+            .where(and_(Topic.id == topic_id, Topic.user_id == user_id))
+            .returning(Topic.id)
+        )
+
+        res = await session.execute(query)
+
+        deleted_id = res.scalar_one_or_none()
+
+        if deleted_id is None:
+            raise NotFound("Topic not found")
+
+        await session.commit()
+
+    async def delete_non_activated_topics(
+        self,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+    ) -> None:
+        query = (
+            delete(Topic)
+            .where(and_(Topic.user_id == user_id, Topic.is_active_research.is_(False)))
+            .returning(Topic.id)
+        )
+
+        res = await session.execute(query)
+
+        deleted_ids = res.scalars().all()
+
+        if not deleted_ids:
+            raise NotFound("No non-activated topics found")
+
+        await session.commit()
+
+    async def cleanup_topics(
+        self,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        retention_days: int = 30,
+    ) -> None:
+        query = (
+            delete(Topic)
+            .where(
+                and_(
+                    Topic.user_id == user_id,
+                    Topic.created_at < (func.now() - func.make_interval(0, 0, 0, retention_days)),
+                )
+            )
+        )
+
+        await session.execute(query)
+
+        rn = func.row_number().over(
+            partition_by=(Topic.user_id, Topic.chat_id, func.lower(Topic.name)),
+            order_by=(Topic.created_at.desc(), Topic.id.desc()),
+        ).label("rn")
+
+        subquery = (
+            select(Topic.id, rn)
+            .where(Topic.user_id == user_id)
+            .subquery()
+        )
+
+        query = (
+            delete(Topic).where(
+                Topic.id.in_(
+                    select(subquery.c.id).where(subquery.c.rn > 1)
+                )
+            )
+        )
+
+        await session.execute(query)
+
+        await session.commit()
 
     async def async_extract_and_store_topics(
         self,

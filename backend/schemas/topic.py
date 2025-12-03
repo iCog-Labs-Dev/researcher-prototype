@@ -14,13 +14,13 @@ class CustomTopicIn(BaseModel):
 
 class CustomTopicOut(BaseModel):
     """Output model for topic getting."""
-    id: UUID
+    topic_id: UUID
     user_id: UUID
     name: str
     description: str
     confidence_score: float
     is_active_research: bool
-    created_at: datetime
+    suggested_at: datetime
 
 
 class TopicOnOffResearchOut(BaseModel):
@@ -34,14 +34,14 @@ class TopicEnableOut(BaseModel):
 
 class TopicSuggestionItem(BaseModel):
     """Single suggested topic."""
-    id: UUID
-    chat_id: Optional[UUID] = None
+    topic_id: UUID
+    session_id: Optional[str] = None
     name: str
     description: str
     confidence_score: float
     conversation_context: Optional[str] = None
-    is_active_research: bool
-    created_at: datetime
+    is_active_research: Optional[bool] = None
+    suggested_at: datetime
 
 
 class TopicSuggestionsByChatOut(BaseModel):
@@ -53,5 +53,32 @@ class TopicSuggestionsByChatOut(BaseModel):
 class TopicSuggestionsOut(BaseModel):
     """Output body for getting topic suggestions."""
     total_count: int
-    chats_count: int
+    sessions_count: int
     topic_suggestions: List[TopicSuggestionItem]
+
+
+class TopicStatusOut(BaseModel):
+    """Output body for getting topic status."""
+    has_topics: bool
+    topic_count: int
+
+
+class ResearchTopicsByUserOut(BaseModel):
+    """Output body for getting research topics by user."""
+    total_count: int
+    active_research_topics: List[TopicSuggestionItem]
+
+
+class TopicStatsOut(BaseModel):
+    """Output body for getting topic statistics."""
+    total_topics: int
+    sessions_count: int
+    average_confidence_score: float
+    oldest_topic_age_days: int
+
+
+class TopTopicsOut(BaseModel):
+    """Output body for getting top topics."""
+    total_count: int
+    available_count: int
+    topics: List[TopicSuggestionItem]
