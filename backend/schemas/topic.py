@@ -42,6 +42,8 @@ class TopicSuggestionItem(BaseModel):
     conversation_context: Optional[str] = None
     is_active_research: Optional[bool] = None
     suggested_at: datetime
+    last_researched: Optional[datetime] = None
+    research_count: Optional[int] = None
 
 
 class TopicSuggestionsByChatOut(BaseModel):

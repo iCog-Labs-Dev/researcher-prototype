@@ -147,7 +147,7 @@ async def cleanup_topics(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/session/{session_id}/top")
+@router.get("/session/{session_id}/top", response_model=TopTopicsOut, response_model_exclude_none=True)
 async def get_top_session_topics(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
@@ -253,6 +253,8 @@ async def get_active_research_topics(
             description=topic.description,
             confidence_score=topic.confidence_score,
             suggested_at=topic.created_at,
+            last_researched=topic.last_researched,
+            research_count=topic.research_count,
         ))
 
     return ResearchTopicsByUserOut(

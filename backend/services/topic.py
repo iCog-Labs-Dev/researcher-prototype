@@ -1,14 +1,14 @@
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func, distinct, delete
+from sqlalchemy import select, and_, func, distinct, delete, update
 
 from db import SessionLocal
 from config import DEFAULT_MODEL, MAX_ACTIVE_RESEARCH_TOPICS_PER_USER
 from services.logging_config import get_logger
 from nodes.topic_extractor_node import topic_extractor_node
 from exceptions import CommonError, NotFound, AlreadyExist
-from models import Topic
+from models import ResearchTopic
 
 logger = get_logger(__name__)
 
@@ -18,8 +18,8 @@ class TopicService:
         self,
         session: AsyncSession,
         user_id: uuid.UUID,
-    ) -> list[Topic]:
-        query = select(Topic).where(Topic.user_id == user_id).order_by(Topic.created_at.desc())
+    ) -> list[ResearchTopic]:
+        query = select(ResearchTopic).where(ResearchTopic.user_id == user_id).order_by(ResearchTopic.created_at.desc())
 
         res = await session.execute(query)
 
@@ -30,10 +30,10 @@ class TopicService:
         session: AsyncSession,
         user_id: uuid.UUID,
         chat_id: uuid.UUID
-    ) -> list[Topic]:
-        query = select(Topic).where(
-            and_(Topic.chat_id == chat_id, Topic.user_id == user_id)
-        ).order_by(Topic.created_at.desc())
+    ) -> list[ResearchTopic]:
+        query = select(ResearchTopic).where(
+            and_(ResearchTopic.chat_id == chat_id, ResearchTopic.user_id == user_id)
+        ).order_by(ResearchTopic.created_at.desc())
 
         res = await session.execute(query)
 
@@ -43,36 +43,34 @@ class TopicService:
         self,
         session: AsyncSession,
         user_id: uuid.UUID,
-    ) -> list[Topic]:
-        query = select(Topic).where(
-            and_(Topic.user_id == user_id, Topic.is_active_research.is_(True))
-        ).order_by(Topic.created_at.asc())
+    ) -> list[ResearchTopic]:
+        query = select(ResearchTopic).where(
+            and_(ResearchTopic.user_id == user_id, ResearchTopic.is_active_research.is_(True))
+        ).order_by(ResearchTopic.created_at.asc())
 
         res = await session.execute(query)
 
         return list(res.scalars().all())
 
-    async def get_active_research_topics(
+    async def async_get_active_research_topics(
         self,
-        session: AsyncSession,
-    ) -> list[Topic]:
-        query = (
-            select(Topic)
-            .where(Topic.is_active_research.is_(True))
-            .order_by(Topic.created_at.asc())
-        )
+    ) -> list[ResearchTopic]:
+        async with SessionLocal() as session:
+            query = select(ResearchTopic).where(ResearchTopic.is_active_research.is_(True)).order_by(ResearchTopic.created_at.asc())
 
-        res = await session.execute(query)
+            res = await session.execute(query)
 
-        return list(res.scalars().all())
+            topics = list(res.scalars().all())
+
+        return topics
 
     async def get_count_chats_by_user_id(
         self,
         session: AsyncSession,
         user_id: uuid.UUID,
     ) -> int:
-        query = select(func.count(distinct(Topic.chat_id))).where(
-            and_(Topic.user_id == user_id, Topic.chat_id.is_not(None))
+        query = select(func.count(distinct(ResearchTopic.chat_id))).where(
+            and_(ResearchTopic.user_id == user_id, ResearchTopic.chat_id.is_not(None))
         )
 
         res = await session.execute(query)
@@ -85,11 +83,11 @@ class TopicService:
         user_id: uuid.UUID,
     ) -> tuple[int, int, float, int]:
         query = select(
-            func.count(Topic.id),
-            func.count(distinct(Topic.chat_id)),
-            func.avg(Topic.confidence_score),
-            func.min(Topic.created_at),
-        ).where(Topic.user_id == user_id)
+            func.count(ResearchTopic.id),
+            func.count(distinct(ResearchTopic.chat_id)),
+            func.avg(ResearchTopic.confidence_score),
+            func.min(ResearchTopic.created_at),
+        ).where(ResearchTopic.user_id == user_id)
 
         res = await session.execute(query)
 
@@ -112,9 +110,9 @@ class TopicService:
         user_id: uuid.UUID,
         chat_id: uuid.UUID,
         limit: int,
-    ) -> tuple[int, list[Topic]]:
+    ) -> tuple[int, list[ResearchTopic]]:
         query = select(func.count()).where(
-            and_(Topic.user_id == user_id, Topic.chat_id == chat_id)
+            and_(ResearchTopic.user_id == user_id, ResearchTopic.chat_id == chat_id)
         )
 
         res = await session.execute(query)
@@ -122,9 +120,9 @@ class TopicService:
         available_count = int(res.scalar_one())
 
         query = (
-            select(Topic)
-            .where(and_(Topic.user_id == user_id, Topic.chat_id == chat_id))
-            .order_by(Topic.confidence_score.desc(), Topic.created_at.desc(), Topic.id.desc())
+            select(ResearchTopic)
+            .where(and_(ResearchTopic.user_id == user_id, ResearchTopic.chat_id == chat_id))
+            .order_by(ResearchTopic.confidence_score.desc(), ResearchTopic.created_at.desc(), ResearchTopic.id.desc())
             .limit(limit)
         )
 
@@ -142,7 +140,7 @@ class TopicService:
         description: str,
         confidence_score: float,
         is_active_research: bool,
-    ) -> Topic:
+    ) -> ResearchTopic:
         if is_active_research:
             await self._check_limit_research_topics(session, user_id)
 
@@ -161,8 +159,8 @@ class TopicService:
         topic_id: uuid.UUID,
         enable: bool,
     ) -> bool:
-        query = select(Topic).where(
-            and_(Topic.id == topic_id, Topic.user_id == user_id)
+        query = select(ResearchTopic).where(
+            and_(ResearchTopic.id == topic_id, ResearchTopic.user_id == user_id)
         )
 
         res = await session.execute(query)
@@ -170,10 +168,10 @@ class TopicService:
         topic = res.scalar_one_or_none()
 
         if not topic:
-            raise NotFound("Topic not found")
+            raise NotFound("Research topic not found")
 
         if topic.is_active_research == enable:
-            raise AlreadyExist("Topic is already in this state")
+            raise AlreadyExist("Research topic is already in this state")
 
         if enable:
             await self._check_limit_research_topics(session, user_id)
@@ -191,9 +189,9 @@ class TopicService:
         chat_id: uuid.UUID,
     ) -> None:
         query = (
-            delete(Topic)
-            .where(and_(Topic.user_id == user_id, Topic.chat_id == chat_id))
-            .returning(Topic.id)
+            delete(ResearchTopic)
+            .where(and_(ResearchTopic.user_id == user_id, ResearchTopic.chat_id == chat_id))
+            .returning(ResearchTopic.id)
         )
 
         res = await session.execute(query)
@@ -212,9 +210,9 @@ class TopicService:
         topic_id: uuid.UUID,
     ) -> None:
         query = (
-            delete(Topic)
-            .where(and_(Topic.id == topic_id, Topic.user_id == user_id))
-            .returning(Topic.id)
+            delete(ResearchTopic)
+            .where(and_(ResearchTopic.id == topic_id, ResearchTopic.user_id == user_id))
+            .returning(ResearchTopic.id)
         )
 
         res = await session.execute(query)
@@ -222,7 +220,7 @@ class TopicService:
         deleted_id = res.scalar_one_or_none()
 
         if deleted_id is None:
-            raise NotFound("Topic not found")
+            raise NotFound("Research topic not found")
 
         await session.commit()
 
@@ -232,9 +230,9 @@ class TopicService:
         user_id: uuid.UUID,
     ) -> None:
         query = (
-            delete(Topic)
-            .where(and_(Topic.user_id == user_id, Topic.is_active_research.is_(False)))
-            .returning(Topic.id)
+            delete(ResearchTopic)
+            .where(and_(ResearchTopic.user_id == user_id, ResearchTopic.is_active_research.is_(False)))
+            .returning(ResearchTopic.id)
         )
 
         res = await session.execute(query)
@@ -253,11 +251,11 @@ class TopicService:
         retention_days: int = 30,
     ) -> None:
         query = (
-            delete(Topic)
+            delete(ResearchTopic)
             .where(
                 and_(
-                    Topic.user_id == user_id,
-                    Topic.created_at < (func.now() - func.make_interval(0, 0, 0, retention_days)),
+                    ResearchTopic.user_id == user_id,
+                    ResearchTopic.created_at < (func.now() - func.make_interval(0, 0, 0, retention_days)),
                 )
             )
         )
@@ -265,19 +263,19 @@ class TopicService:
         await session.execute(query)
 
         rn = func.row_number().over(
-            partition_by=(Topic.user_id, Topic.chat_id, func.lower(Topic.name)),
-            order_by=(Topic.created_at.desc(), Topic.id.desc()),
+            partition_by=(ResearchTopic.user_id, ResearchTopic.chat_id, func.lower(ResearchTopic.name)),
+            order_by=(ResearchTopic.created_at.desc(), ResearchTopic.id.desc()),
         ).label("rn")
 
         subquery = (
-            select(Topic.id, rn)
-            .where(Topic.user_id == user_id)
+            select(ResearchTopic.id, rn)
+            .where(ResearchTopic.user_id == user_id)
             .subquery()
         )
 
         query = (
-            delete(Topic).where(
-                Topic.id.in_(
+            delete(ResearchTopic).where(
+                ResearchTopic.id.in_(
                     select(subquery.c.id).where(subquery.c.rn > 1)
                 )
             )
@@ -286,6 +284,22 @@ class TopicService:
         await session.execute(query)
 
         await session.commit()
+
+    async def async_update_topic_last_researched(
+        self,
+        topic_id: uuid.UUID,
+    ):
+        async with SessionLocal.begin() as session:
+            query = (
+                update(ResearchTopic)
+                .where(ResearchTopic.id == topic_id)
+                .values(
+                    last_researched=func.now(),
+                    research_count=ResearchTopic.research_count + 1,
+                )
+            )
+
+            await session.execute(query)
 
     async def async_extract_and_store_topics(
         self,
@@ -322,7 +336,7 @@ class TopicService:
                 raw_topics = topic_results.get("result", [])
 
                 if raw_topics:
-                    async with SessionLocal() as session:
+                    async with SessionLocal.begin() as session:
                         for topic in raw_topics:
                             await self._create_topic(
                                 session,
@@ -333,8 +347,6 @@ class TopicService:
                                 chat_id=chat_id,
                                 conversation_context=conversation_context
                             )
-
-                        await session.commit()
 
                 else:
                     logger.info(f"🔍 Background: No topics extracted for chat {chat_id}")
@@ -359,8 +371,8 @@ class TopicService:
         chat_id: uuid.UUID = None,
         conversation_context: str = "",
         is_active_research: bool = False,
-    ) -> Topic:
-        topic = Topic(
+    ) -> ResearchTopic:
+        topic = ResearchTopic(
             user_id=user_id,
             chat_id=chat_id,
             name=name,
@@ -379,8 +391,8 @@ class TopicService:
         session: AsyncSession,
         user_id: uuid.UUID,
     ):
-        query = select(func.count()).select_from(Topic).where(
-            and_(Topic.user_id == user_id, Topic.is_active_research == True)
+        query = select(func.count()).select_from(ResearchTopic).where(
+            and_(ResearchTopic.user_id == user_id, ResearchTopic.is_active_research == True)
         )
 
         res = await session.execute(query)
