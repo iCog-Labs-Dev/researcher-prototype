@@ -258,7 +258,7 @@ export const trackLinkClick = async (url, context = {}) => {
 
 export const overrideLearnedBehavior = async (preferenceType, overrideValue, disableLearning = false) => {
   try {
-    const response = await api.put('/user/personalization/override', {
+    const response = await api.post('/user/personalization/override', {
       preference_type: preferenceType,
       override_value: overrideValue,
       disable_learning: disableLearning
@@ -291,9 +291,9 @@ export const getAllTopicSuggestions = async () => {
   }
 };
 
-export const getUserTopicSuggestions = async (userId) => {
+export const getSessionTopicSuggestions = async (sessionId) => {
   try {
-    const response = await api.get(`/topic/suggestions/${userId}`);
+    const response = await api.get(`/topic/suggestions/${sessionId}`);
     return response.data;
   } catch (error) {
     console.error('Error fetching user topic suggestions:', error);
@@ -380,17 +380,25 @@ export const deleteNonActivatedTopics = async () => {
 export const createCustomTopic = async (topicData) => {
   try {
     const response = await api.post('/topic/custom', topicData);
-    return response.data;
+    return {
+      success: true,
+      topic: response.data,
+      error: null,
+    };
   } catch (error) {
     console.error('Error creating custom topic:', error);
-    throw error;
+    return {
+      success: false,
+      topic: null,
+      error: error.response?.data?.detail || 'Failed to create topic',
+    };
   }
 };
 
 // NEW: ID-based topic research functions (SAFE - no index mismatch)
 export const enableTopicResearchById = async (topicId) => {
   try {
-    const response = await api.put(`/topic/topic/${topicId}/research`, null, {
+    const response = await api.patch(`/topic/topic/${topicId}/research`, null, {
       params: { enable: true }
     });
     return response.data;
@@ -402,7 +410,7 @@ export const enableTopicResearchById = async (topicId) => {
 
 export const disableTopicResearchById = async (topicId) => {
   try {
-    const response = await api.put(`/topic/topic/${topicId}/research`, null, {
+    const response = await api.patch(`/topic/topic/${topicId}/research`, null, {
       params: { enable: false }
     });
     return response.data;
@@ -490,9 +498,9 @@ export const getResearchEngineStatus = async () => {
 };
 
 
-export const getActiveResearchTopics = async (userId) => {
+export const getActiveResearchTopics = async () => {
   try {
-    const response = await api.get(`/topic/user/${userId}/research`);
+    const response = await api.get(`/topic/user/research`);
     return response.data;
   } catch (error) {
     console.error('Error fetching active research topics:', error);
@@ -529,6 +537,7 @@ export const graphApi = {
    */
   testGraphConnectivity: async (userId) => {
     try {
+      // need attention: this endpoint doesn't exist
       const response = await api.get(`/graph/test/${userId}`);
       return response.data;
     } catch (error) {

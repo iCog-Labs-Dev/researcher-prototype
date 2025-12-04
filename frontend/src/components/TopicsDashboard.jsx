@@ -51,20 +51,15 @@ const TopicsDashboard = () => {
   const [expandedTopics, setExpandedTopics] = useState(new Set());
 
   // Helper function to format dates
-  const formatDate = (timestamp) => {
-    if (!timestamp) return 'Unknown date';
+const formatDate = (dateString) => {
+  if (!dateString) return 'N/A';
 
-    const date = new Date(timestamp * 1000);
-    const now = new Date();
-    const diffTime = now - date;
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  const date = new Date(dateString);
 
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-    return date.toLocaleDateString();
-  };
+  if (isNaN(date.getTime())) return 'N/A';
+
+  return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+};
 
   // Load topics and stats
   const loadData = useCallback(async (preserveError = false) => {
