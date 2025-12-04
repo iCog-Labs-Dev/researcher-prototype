@@ -7,26 +7,26 @@ from fastapi import APIRouter, Request, Depends, HTTPException
 from dependencies import inject_user_id
 from storage.zep_manager import ZepManager
 from services.logging_config import get_logger
-from schemas.schemas import GraphRequest, GraphResponse
+from schemas.graph import GraphIn, GraphOut
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/graph", tags=["v2/graph"], dependencies=[Depends(inject_user_id)])
 
 
-@router.post("/fetch")
+@router.post("/fetch", response_model=GraphOut)
 async def fetch_graph_data(
     request: Request,
-    body: GraphRequest,
-) -> GraphResponse:
+    body: GraphIn,
+) -> GraphOut:
     """
     Fetch graph data from Zep for visualization.
     
     Args:
-        body: GraphRequest containing type and id
+        body: GraphIn containing type and id
         
     Returns:
-        GraphResponse containing triplets for visualization
+        GraphOut containing triplets for visualization
     """
 
     user_id = str(request.state.user_id)
@@ -40,7 +40,7 @@ async def fetch_graph_data(
         
         if not zep_manager.is_enabled():
             logger.warning("ZepManager is not enabled")
-            return GraphResponse(triplets=[])
+            return GraphOut(triplets=[])
         
         # For user graphs, validate that the user is requesting their own data
         # or has appropriate permissions (could be extended for admin access)
@@ -73,14 +73,14 @@ async def fetch_graph_data(
         # Check if we got any data
         if not nodes and not edges:
             logger.info(f"No graph data found for user {body.id}")
-            return GraphResponse(triplets=[])
+            return GraphOut(triplets=[])
         
         # Create triplets from nodes and edges
         triplets = zep_manager.create_triplets(edges, nodes)
         
         logger.info(f"Successfully created {len(triplets)} triplets for user {body.id}")
         
-        return GraphResponse(triplets=triplets)
+        return GraphOut(triplets=triplets)
         
     except HTTPException:
         raise

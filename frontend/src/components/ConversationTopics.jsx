@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getUserTopicSuggestions, deleteTopicById, enableTopicResearchById, disableTopicResearchById } from '../services/api';
+import { getSessionTopicSuggestions, deleteTopicById, enableTopicResearchById, disableTopicResearchById } from '../services/api';
 import { useSession } from '../context/SessionContext';
 import { trackEngagement } from '../utils/engagementTracker';
 import TopicSidebarItem from './TopicSidebarItem';
@@ -25,8 +25,8 @@ const ConversationTopics = ({ isCollapsed, onToggleCollapse, onTopicUpdate }) =>
       if (!preserveError) {
         setError(null);
       }
-      
-      const response = await getUserTopicSuggestions(userId);
+
+      const response = await getSessionTopicSuggestions(userId);
       const allTopics = response.topic_suggestions || [];
       
       // Get the 3 latest topics

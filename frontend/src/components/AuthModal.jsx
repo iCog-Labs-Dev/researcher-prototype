@@ -192,7 +192,7 @@ const AuthModal = ({ isOpen, onRequestClose, onAuthenticated, preventClose = fal
             }
         } catch (error) {
             console.error('Login error:', error);
-            const errorMessage = error.response?.data?.message || error.message || 'Login failed. Please try again.';
+            const errorMessage = error.response?.data?.detail || 'Login failed. Please try again.';
             setLocalError(errorMessage);
         } finally {
             setLoading(false);
@@ -249,7 +249,7 @@ const AuthModal = ({ isOpen, onRequestClose, onAuthenticated, preventClose = fal
             }
         } catch (error) {
             console.error('Registration error:', error);
-            const errorMessage = error.response?.data?.message || error.message || 'Registration failed. Please try again.';
+            const errorMessage = error.response?.data?.detail || 'Registration failed. Please try again.';
             setLocalError(errorMessage);
         } finally {
             setLoading(false);

@@ -16,7 +16,6 @@ from schemas.user import (
     PersonalizationHistory,
     PreferenceOverride,
     PersonalizationContext,
-    AdaptationLogEntry,
     InteractionSignals,
     PersonalizationTransparency,
     LearnedBehaviors,
