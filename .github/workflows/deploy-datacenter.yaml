@@ -32,7 +32,7 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/qwestor-backend:latest
 
       - name: Build and push Frontend
         id: build-qwestor-researcher-frontend-prod
@@ -47,9 +47,9 @@ jobs:
           ls -la frontend
           git submodule init
           git submodule update
-          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest -f frontend/Dockerfile frontend/
-          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest
-          echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest" >> $GITHUB_OUTPUT
+          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/qwestor-frontend:latest -f frontend/Dockerfile frontend/
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/qwestor-frontend:latest
+          echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/qwestor-frontend:latest" >> $GITHUB_OUTPUT
   # deploy:
   #   needs: build-and-push
   #   runs-on: ubuntu-latest
