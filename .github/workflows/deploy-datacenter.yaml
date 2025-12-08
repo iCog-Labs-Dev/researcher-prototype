@@ -1,0 +1,80 @@
+name: Build and Deploy
+
+on:
+#  push:
+#    branches: [ "main" ]
+  workflow_dispatch:
+  
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Log in to Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Backend
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest
+
+      - name: Build and push Frontend
+        id: build-qwestor-researcher-frontend-prod
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          rm frontend/.env.development frontend/.env.example frontend/.env.production
+          cat << EOF >> frontend/.env
+          ${{ secrets.FRONTEND_ENV_DEV}}
+          EOF
+          cat frontend/.env
+          ls -la frontend
+          git submodule init
+          git submodule update
+          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest -f frontend/Dockerfile frontend/
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest
+          echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest" >> $GITHUB_OUTPUT
+  # deploy:
+  #   needs: build-and-push
+  #   runs-on: ubuntu-latest
+    
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v3
+
+  #     - name: Copy k8s configs
+  #       uses: appleboy/scp-action@master
+  #       with:
+  #         host: ${{ secrets.SSH_HOST }}
+  #         username: ${{ secrets.SSH_USER }}
+  #         key: ${{ secrets.SSH_PRIVATE_KEY }}
+  #         source: "k8s/*"
+  #         target: "~/app-deploy"
+
+  #     - name: Apply K8s
+  #       uses: appleboy/ssh-action@master
+  #       with:
+  #         host: ${{ secrets.SSH_HOST }}
+  #         username: ${{ secrets.SSH_USER }}
+  #         key: ${{ secrets.SSH_PRIVATE_KEY }}
+  #         script: |
+  #           kubectl apply -f ~/app-deploy/k8s/
+            
+  #           kubectl rollout restart deployment/backend
+  #           kubectl rollout restart deployment/frontend
