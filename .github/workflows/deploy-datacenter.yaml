@@ -50,6 +50,7 @@ jobs:
           docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/qwestor-frontend:latest -f frontend/Dockerfile frontend/
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/qwestor-frontend:latest
           echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/qwestor-frontend:latest" >> $GITHUB_OUTPUT
+
   # deploy:
   #   needs: build-and-push
   #   runs-on: ubuntu-latest
