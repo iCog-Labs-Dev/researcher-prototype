@@ -51,6 +51,27 @@ jobs:
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/qwestor-frontend:latest
           echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/qwestor-frontend:latest" >> $GITHUB_OUTPUT
 
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Execute SSH commands on Target Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DC_DEV_TARGET_HOST }}
+          username: ${{ secrets.DC_DEV_TARGET_USER }}
+          key: ${{ secrets.DC_DEV_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.DC_DEV_PORT }}
+          
+          proxy_host: ${{ secrets.DC_DEV_JUMP_HOST }}
+          proxy_username: ${{ secrets.DC_DEV_JUMP_USER }}
+          proxy_key: ${{ secrets.DC_DEV_SSH_JUMP_PRIVATE_KEY }} 
+          proxy_port: ${{ secrets.DC_DEV_JUMP_PORT }}
+          
+          script: |
+            kubectl apply -f ~/k8s/
+            
+            kubectl rollout restart deployment/backend
+            kubectl rollout restart deployment/frontend
   # deploy:
   #   needs: build-and-push
   #   runs-on: ubuntu-latest
