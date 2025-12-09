@@ -41,7 +41,7 @@ jobs:
         run: |
           rm frontend/.env.development frontend/.env.example frontend/.env.production
           cat << EOF >> frontend/.env
-          ${{ secrets.FRONTEND_ENV_DEV}}
+          ${{ secrets.FRONTEND_ENV_DEV_DC}}
           EOF
           cat frontend/.env
           ls -la frontend
