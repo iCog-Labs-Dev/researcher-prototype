@@ -23,10 +23,6 @@ class CustomTopicOut(BaseModel):
     suggested_at: datetime
 
 
-class TopicOnOffResearchOut(BaseModel):
-    """Output model for topic getting."""
-
-
 class TopicEnableOut(BaseModel):
     """Output body for updating active research."""
     enabled: bool

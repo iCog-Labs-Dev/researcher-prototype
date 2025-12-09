@@ -1,8 +1,10 @@
-from pydantic import BaseModel
-from typing import Dict, Any, Optional
+from uuid import UUID
+from datetime import datetime
+from pydantic import BaseModel, ConfigDict
+from typing import Dict, Any, Optional, List
 
 
-class BookmarkUpdate(BaseModel):
+class BookmarkUpdateInOut(BaseModel):
     """Toggle bookmark for a finding."""
     bookmarked: bool
 
@@ -22,3 +24,23 @@ class ExpansionIn(BaseModel):
     create_topics: Optional[bool] = False
     enable_research: Optional[bool] = False
     limit: Optional[int] = None
+
+
+class ResearchFindingItemOut(BaseModel):
+    """Output body for a research finding."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    topic_id: UUID
+    topic_name: str
+    read: bool
+    bookmarked: bool
+    research_time: float
+    quality_score: Optional[float] = None
+    created_at: datetime
+
+
+class ResearchFindingsOut(BaseModel):
+    """Output body for getting research findings."""
+    total_findings: int
+    findings: List[ResearchFindingItemOut]

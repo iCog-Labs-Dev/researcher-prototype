@@ -1,8 +1,6 @@
 from __future__ import annotations
-
 import uuid
 from typing import Optional
-
 from sqlalchemy import String, Boolean, Float, UniqueConstraint, Index, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -13,7 +11,12 @@ from .base import Base
 class ResearchFinding(Base):
     __tablename__ = "research_findings"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    topic_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("research_topics.id", ondelete="CASCADE"), nullable=False, index=True
+    )
 
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     topic_name: Mapped[str] = mapped_column(String(255), nullable=False)
