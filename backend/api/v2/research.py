@@ -1,23 +1,26 @@
-from fastapi import APIRouter, Request, Depends, HTTPException, Query
-from typing import Optional, List, Dict, Any
 import time
+from uuid import UUID
+from typing import Optional, Annotated
+from fastapi import APIRouter, Request, Depends, HTTPException, Query, Response, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import config
+from db import get_session
 from services.logging_config import get_logger
 from dependencies import (
     profile_manager,
     inject_user_id,
     research_manager,
-    zep_manager,
     _motivation_config_override,
 )
 from schemas.research import (
-    BookmarkUpdate,
+    BookmarkUpdateInOut,
     MotivationConfigUpdate,
     ExpansionIn,
+    ResearchFindingsOut,
 )
 from services.autonomous_research_engine import initialize_autonomous_researcher
-from services.topic_expansion_service import TopicExpansionService, ExpansionCandidate
+from services.research import ResearchService
 
 router = APIRouter(prefix="/research", tags=["v2/research"], dependencies=[Depends(inject_user_id)])
 
@@ -25,234 +28,86 @@ logger = get_logger(__name__)
 
 
 # need attention: there was a user_id parameter. is it correct?
-@router.get("/findings")
+@router.get("/findings", response_model=ResearchFindingsOut)
 async def get_research_findings(
     request: Request,
-    topic_name: Optional[str] = Query(None, description="Filter by topic name"),
+    session: Annotated[AsyncSession, Depends(get_session)],
+    topic_id: Optional[UUID] = Query(None, description="Filter by topic ID"),
     unread_only: bool = Query(False, description="Only return unread findings"),
-):
-    """Get research findings for a user, optionally filtered by topic or read status."""
-
+) -> ResearchFindingsOut:
     user_id = str(request.state.user_id)
 
-    try:
-        # Use the new API method from research_manager
-        findings = research_manager.get_research_findings_for_api(user_id, topic_name, unread_only)
+    service = ResearchService()
+    findings = await service.get_findings(session, user_id, topic_id, unread_only)
 
-        return {
-            "success": True,
-            "user_id": user_id,
-            "total_findings": len(findings),
-            "filters": {"topic_name": topic_name, "unread_only": unread_only},
-            "findings": findings,
-        }
-
-    except Exception as e:
-        logger.error(f"Error getting research findings for user {user_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error getting research findings: {str(e)}")
+    return ResearchFindingsOut(
+        total_findings=len(findings),
+        findings=findings
+    )
 
 
 @router.post("/findings/{finding_id}/mark_read")
 async def mark_research_finding_read(
     request: Request,
-    finding_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    finding_id: UUID,
 ):
-    """Mark a research finding as read."""
-
     user_id = str(request.state.user_id)
 
-    try:
-        success = research_manager.mark_finding_as_read(user_id, finding_id)
+    service = ResearchService()
+    await service.mark_finding_as_read(session, user_id, finding_id)
 
-        if not success:
-            raise HTTPException(status_code=404, detail="Finding not found")
-
-        return {"success": True, "message": f"Marked finding {finding_id} as read", "finding_id": finding_id}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error marking finding as read for user {user_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error marking finding as read: {str(e)}")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/findings/{finding_id}/integrate")
+@router.post("/findings/{finding_id}/integrate", deprecated=True, description="Deprecated: Zep integration disabled")
 async def integrate_research_finding(
-    request: Request,
-    finding_id: str,
+    finding_id: UUID,
 ):
-    """Integrate a research finding into the knowledge graph."""
-
-    user_id = str(request.state.user_id)
-
-    try:
-        # First get the finding to make sure it exists and get its content
-        findings = research_manager.get_research_findings_for_api(user_id, None, False)
-        finding = None
-        
-        for f in findings:
-            if f.get("finding_id") == finding_id:
-                finding = f
-                break
-        
-        if not finding:
-            raise HTTPException(status_code=404, detail="Finding not found")
-            
-        if finding.get("integrated"):
-            return {
-                "success": True, 
-                "message": "Finding is already integrated",
-                "finding_id": finding_id,
-                "was_already_integrated": True
-            }
-
-        # Submit key insights to Zep for automatic entity/relationship extraction
-        key_insights = finding.get("key_insights", [])
-        if not key_insights:
-            # If no key insights, use the findings summary as content
-            key_insights = [finding.get("findings_summary", "No summary available")]
-        
-        try:
-            # Get topic metadata for enhanced context
-            topic_name = finding.get("topic_name", "Unknown Topic")
-            topic_info = research_manager.get_topic_info_by_name(user_id, topic_name)
-            
-            topic_description = None
-            topic_context = None
-            if topic_info:
-                topic_description = topic_info.get("description")
-                topic_context = topic_info.get("conversation_context")
-            
-            # Use Zep's content submission for entity extraction
-            zep_success = await zep_manager.store_research_finding(
-                user_id=user_id,
-                topic_name=topic_name,
-                key_insights=key_insights,
-                finding_id=finding_id,
-                topic_description=topic_description,
-                topic_context=topic_context
-            )
-            
-            if not zep_success:
-                logger.warning(f"Failed to store research finding in Zep for finding {finding_id}")
-        
-        except Exception as e:
-            logger.error(f"Error submitting content to Zep: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Error integrating with knowledge graph: {str(e)}")
-
-        # Mark the finding as integrated
-        integration_success = research_manager.mark_finding_as_integrated(user_id, finding_id)
-        
-        if not integration_success:
-            logger.warning(f"Added to knowledge graph but failed to mark finding {finding_id} as integrated")
-        
-        return {
-            "success": True,
-            "message": f"Successfully submitted finding to knowledge graph for entity extraction",
-            "finding_id": finding_id,
-            "topic_name": finding.get("topic_name"),
-            "key_insights_submitted": len(key_insights),
-            "zep_integration_success": zep_success,
-            "integration_marked": integration_success,
-            "was_already_integrated": False
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error integrating finding {finding_id} for user {user_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error integrating finding: {str(e)}")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/findings/{finding_id}/bookmark")
+@router.post("/findings/{finding_id}/bookmark", response_model=BookmarkUpdateInOut)
 async def bookmark_research_finding(
     request: Request,
-    finding_id: str,
-    body: BookmarkUpdate,
-):
-    """Bookmark or unbookmark a specific research finding."""
-
+    session: Annotated[AsyncSession, Depends(get_session)],
+    finding_id: UUID,
+    body: BookmarkUpdateInOut,
+) -> BookmarkUpdateInOut:
     user_id = str(request.state.user_id)
 
-    try:
-        success = research_manager.mark_finding_bookmarked(user_id, finding_id, body.bookmarked)
-        if not success:
-            raise HTTPException(status_code=404, detail="Finding not found")
+    service = ResearchService()
+    result = await service.mark_finding_bookmarked(session, user_id, finding_id, body.bookmarked)
 
-        return {
-            "success": True,
-            "message": ("Bookmarked" if body.bookmarked else "Unbookmarked") + f" finding {finding_id}",
-            "finding_id": finding_id,
-            "bookmarked": body.bookmarked,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error updating bookmark for finding {finding_id} for user {user_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error updating bookmark: {str(e)}")
+    return BookmarkUpdateInOut(bookmarked=result)
 
 
 @router.delete("/findings/{finding_id}")
 async def delete_research_finding(
     request: Request,
-    finding_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    finding_id: UUID,
 ):
-    """Delete a specific research finding."""
-
     user_id = str(request.state.user_id)
 
-    try:
-        result = research_manager.delete_research_finding(user_id, finding_id)
+    service = ResearchService()
+    await service.delete_research_finding(session, user_id, finding_id)
 
-        if not result["success"]:
-            if "not found" in result["error"]:
-                raise HTTPException(status_code=404, detail=result["error"])
-            else:
-                raise HTTPException(status_code=500, detail=result["error"])
-
-        return {
-            "success": True,
-            "message": "Successfully deleted research finding",
-            "deleted_finding": result["deleted_finding"],
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error deleting research finding {finding_id} for user {user_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error deleting research finding: {str(e)}")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.delete("/findings/topic/{topic_name}")
+@router.delete("/findings/topic/{topic_id}")
 async def delete_all_topic_findings(
     request: Request,
-    topic_name: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    topic_id: UUID,
 ):
-    """Delete all research findings for a specific topic."""
-
     user_id = str(request.state.user_id)
 
-    try:
-        result = research_manager.delete_all_topic_findings(user_id, topic_name)
+    service = ResearchService()
+    await service.delete_all_topic_findings(session, user_id, topic_id)
 
-        if not result["success"]:
-            if "not found" in result["error"]:
-                raise HTTPException(status_code=404, detail=result["error"])
-            else:
-                raise HTTPException(status_code=500, detail=result["error"])
-
-        return {
-            "success": True,
-            "message": f"Successfully deleted all findings for topic '{topic_name}'",
-            "topic_name": result["topic_name"],
-            "findings_deleted": result["findings_deleted"],
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error deleting all findings for topic '{topic_name}' for user {user_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error deleting topic findings: {str(e)}")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/status")
@@ -273,134 +128,16 @@ async def get_research_engine_status(
         raise HTTPException(status_code=500, detail=f"Error getting research status: {str(e)}")
 
 
-# need attention: there was a user_id parameter. is it correct?
-@router.post("/debug/expand")
+@router.post("/debug/expand", deprecated=True, description="Deprecated: Zep integration disabled")
 async def debug_expand_topics(
-    request: Request,
     body: ExpansionIn
 ):
-    """Debug-only: Generate (and optionally persist) topic expansion candidates from Zep."""
-
-    user_id = str(request.state.user_id)
-
-    try:
-        if not config.ZEP_ENABLED or not zep_manager.is_enabled():
-            return {"success": False, "error": "Zep disabled"}
-
-        # Validate input
-        root = body.root_topic or {}
-        name = (root.get("topic_name") or "").strip()
-        if not name:
-            return {"success": False, "error": "Invalid root_topic.topic_name"}
-
-        # Generate candidates
-        svc = TopicExpansionService(zep_manager, research_manager)
-        candidates: List[ExpansionCandidate] = await svc.generate_candidates(user_id, body.root_topic)
-
-        # Transform for response
-        cand_dicts: List[Dict[str, Any]] = [
-            {
-                "name": c.name,
-                "source": c.source,
-                "similarity": c.similarity,
-                "rationale": c.rationale,
-            }
-            for c in candidates
-        ]
-
-        created: List[Dict[str, Any]] = []
-        skipped_duplicates: List[str] = []
-
-        # Optional persistence path (bounded)
-        limit = body.limit if isinstance(body.limit, int) and body.limit > 0 else config.EXPLORATION_PER_ROOT_MAX
-        if body.create_topics:
-            to_create = min(limit, len(candidates))
-            root_name = (body.root_topic.get("topic_name") or "").strip()
-            base_desc = (body.root_topic.get("description") or "").strip()
-            for cand in candidates[:to_create]:
-                desc = base_desc or f"Expanded from '{root_name}' via Zep ({cand.source})"
-                # TODO: Extend topic schema to capture is_expansion + origin metadata
-                result = research_manager.add_custom_topic(
-                    user_id=user_id,
-                    topic_name=cand.name,
-                    description=desc,
-                    confidence_score=0.8,
-                    enable_research=bool(body.enable_research),
-                )
-                if result.get("success"):
-                    topic = result.get("topic", {})
-                    created.append({"topic_id": topic.get("topic_id"), "name": topic.get("topic_name")})
-                else:
-                    # Likely duplicate
-                    skipped_duplicates.append(cand.name)
-
-        logger.info(
-            f"Expansion preview for user {user_id}: {len(cand_dicts)} candidates, created {len(created)}"
-        )
-
-        return {
-            "success": True,
-            "root_topic": body.root_topic.get("topic_name"),
-            "candidates": cand_dicts,
-            "created_topics": created,
-            "skipped_duplicates": skipped_duplicates,
-            "limit": (body.limit if body.limit is not None else config.EXPLORATION_PER_ROOT_MAX),
-            "metrics": getattr(svc, "metrics", {}),
-        }
-
-    except Exception as e:
-        logger.error(f"Error expanding topics for user {user_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Expansion error: {str(e)}")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-# need attention: all users are selected, but this endpoint is not for the admin panel
-@router.get("/debug/active-topics")
+@router.get("/debug/active-topics", deprecated=True, description="Deprecated: Don't use on frontend")
 async def get_debug_active_topics():
-    """Debug endpoint to see active research topics across all users."""
-
-    try:
-        debug_info = {"total_users": 0, "users_with_active_topics": 0, "total_active_topics": 0, "user_breakdown": []}
-
-        # Get all users
-        all_users = profile_manager.list_users()
-        debug_info["total_users"] = len(all_users)
-
-        for user_id in all_users:
-            try:
-                active_topics = research_manager.get_active_research_topics(user_id)
-                if active_topics:
-                    debug_info["users_with_active_topics"] += 1
-                    debug_info["total_active_topics"] += len(active_topics)
-
-                    debug_info["user_breakdown"].append(
-                        {
-                            "user_id": user_id,
-                            "active_topics_count": len(active_topics),
-                            "topics": [
-                                {
-                                    "name": topic.get("topic_name"),
-                                    "description": (
-                                        topic.get("description", "")[:100] + "..."
-                                        if len(topic.get("description", "")) > 100
-                                        else topic.get("description", "")
-                                    ),
-                                    "last_researched": topic.get("last_researched"),
-                                    "research_count": topic.get("research_count", 0),
-                                }
-                                for topic in active_topics
-                            ],
-                        }
-                    )
-
-            except Exception as e:
-                logger.error(f"Error getting active topics for user {user_id}: {str(e)}")
-                continue
-
-        return debug_info
-
-    except Exception as e:
-        logger.error(f"Error getting debug active topics: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error getting debug info: {str(e)}")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/debug/config-override")
