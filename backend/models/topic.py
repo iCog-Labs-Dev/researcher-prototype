@@ -1,7 +1,7 @@
 import uuid
-from sqlalchemy import ForeignKey, Text, Boolean, Float, Integer, DateTime
+from sqlalchemy import ForeignKey, Text, Boolean, Float, Integer, DateTime, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, CITEXT
 
 from .base import Base
 
@@ -19,7 +19,7 @@ class ResearchTopic(Base):
         UUID(as_uuid=True), ForeignKey("chats.id", ondelete="CASCADE"), index=True
     )
 
-    name: Mapped[str] = mapped_column(Text, nullable=False)
+    name: Mapped[str] = mapped_column(CITEXT(), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     conversation_context: Mapped[str] = mapped_column(Text)
     confidence_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
@@ -27,3 +27,7 @@ class ResearchTopic(Base):
     is_active_research: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     research_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_researched: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uq_research_topics_user_name"),
+    )
