@@ -67,6 +67,7 @@ class MotivationRepository:
     async def create_topic_score(
         self,
         user_id: uuid.UUID,
+        topic_id: uuid.UUID,
         topic_name: str,
         motivation_score: float = 0.0,
         engagement_score: float = 0.0,
@@ -86,6 +87,7 @@ class MotivationRepository:
         """Create a new topic score."""
         topic_score = TopicScore(
             user_id=user_id,
+            topic_id=topic_id,
             topic_name=topic_name,
             motivation_score=motivation_score,
             engagement_score=engagement_score,
@@ -127,7 +129,8 @@ class MotivationRepository:
         integrated_findings: Optional[int] = None,
         average_quality: Optional[float] = None,
         last_quality_update: Optional[float] = None,
-        meta_data: Optional[Dict[str, Any]] = None
+        meta_data: Optional[Dict[str, Any]] = None,
+        topic_id: Optional[uuid.UUID] = None,
     ) -> Optional[TopicScore]:
         """Update topic score."""
         existing = await self.get_topic_score(user_id, topic_name)
@@ -137,6 +140,8 @@ class MotivationRepository:
             return None
         
         update_data = {}
+        if topic_id is not None:
+            update_data['topic_id'] = topic_id
         if motivation_score is not None:
             update_data['motivation_score'] = motivation_score
         if engagement_score is not None:
@@ -175,6 +180,7 @@ class MotivationRepository:
         self,
         user_id: uuid.UUID,
         topic_name: str,
+        topic_id: Optional[uuid.UUID] = None,
         motivation_score: Optional[float] = None,
         engagement_score: Optional[float] = None,
         success_rate: Optional[float] = None,
@@ -215,8 +221,12 @@ class MotivationRepository:
             return updated or existing
         else:
             # Create new
+            if not topic_id:
+                raise ValueError("topic_id is required when creating a topic score")
             return await self.create_topic_score(
-                user_id, topic_name,
+                user_id=user_id,
+                topic_id=topic_id,
+                topic_name=topic_name,
                 motivation_score=motivation_score or 0.0,
                 engagement_score=engagement_score or 0.0,
                 success_rate=success_rate or 0.5,

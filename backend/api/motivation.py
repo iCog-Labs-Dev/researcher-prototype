@@ -125,8 +125,13 @@ async def create_or_update_topic_score(
     try:
         body = await request.json()
         user_uuid = uuid.UUID(body["user_id"])
+        topic_id_raw = body.get("topic_id")
+        if not topic_id_raw:
+            raise HTTPException(status_code=400, detail="topic_id is required")
+        topic_uuid = uuid.UUID(topic_id_raw)
         score = await repo.create_or_update_topic_score(
             user_id=user_uuid,
+            topic_id=topic_uuid,
             topic_name=body["topic_name"],
             motivation_score=body.get("motivation_score"),
             engagement_score=body.get("engagement_score"),
