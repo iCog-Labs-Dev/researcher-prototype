@@ -6,7 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy import select
 
+from db import SessionLocal
 from exceptions import NotFound, CommonError
+from services.logging_config import get_logger
 from models.user import User, UserProfile
 from schemas.user import (
     PreferencesConfig,
@@ -14,6 +16,9 @@ from schemas.user import (
     PersonalizationHistory,
     AdaptationLogEntry,
 )
+
+logger = get_logger(__name__)
+
 
 class UserService:
     async def get_user(
@@ -37,6 +42,89 @@ class UserService:
             raise NotFound("User not found")
 
         return user
+
+    async def list_users(
+        self,
+        session: AsyncSession,
+        limit: int,
+        offset: int,
+    ) -> list[User]:
+        res = await session.execute(
+            select(User)
+            .options(selectinload(User.profile))
+            .order_by(User.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+
+        return list(res.scalars().all())
+
+    async def async_get_personalization_context(
+        self,
+        user_id: Optional[str],
+    ) -> dict[str, Any]:
+        if not user_id:
+            return {}
+
+        try:
+            async with SessionLocal() as session:
+                profile = await session.get(UserProfile, user_id)
+
+            if profile is None:
+                logger.error(f"🔍 User {user_id} profile not found")
+                return {}
+
+            preferences = profile.preferences or {}
+            analytics = profile.engagement_analytics or {}
+
+            content_preferences = preferences.get("content_preferences") or {}
+            format_preferences = preferences.get("format_preferences") or {}
+            interaction_preferences = preferences.get("interaction_preferences") or {}
+
+            learned_adaptations = analytics.get("learned_adaptations") or {}
+            interaction_signals = analytics.get("interaction_signals") or {}
+
+            preferred_sources = interaction_signals.get("most_engaged_source_types") or []
+            follow_up_frequency = interaction_signals.get("follow_up_question_frequency") or 0.0
+
+            return {
+                "content_preferences": content_preferences,
+                "format_preferences": format_preferences,
+                "interaction_preferences": interaction_preferences,
+                "learned_adaptations": learned_adaptations,
+                "engagement_patterns": {
+                    "preferred_sources": list(preferred_sources),
+                    "follow_up_frequency": float(follow_up_frequency),
+                },
+            }
+        except Exception as e:
+            logger.error(f"🔍 Failed to get personalization context for user {user_id}: {str(e)}")
+            return {}
+
+    async def async_get_personality(
+        self,
+        user_id: Optional[str],
+    ) -> dict[str, Any]:
+        default_personality = {"style": "helpful", "tone": "friendly", "additional_traits": {}}
+
+        if not user_id:
+            return default_personality
+
+        try:
+            async with SessionLocal() as session:
+                profile = await session.get(UserProfile, user_id)
+
+            if profile is None:
+                logger.error(f"🔍 User {user_id} profile not found")
+                return default_personality
+
+            if not profile.personality:
+                return default_personality
+
+            return profile.personality
+        except Exception as e:
+            logger.error(f"🔍 Failed to get personality for user {user_id}: {str(e)}")
+            return default_personality
 
     async def update_display_name(
         self,
@@ -114,22 +202,6 @@ class UserService:
 
         return user.profile.personality or {}
 
-    async def list_users(
-        self,
-        session: AsyncSession,
-        limit: int,
-        offset: int,
-    ) -> list[User]:
-        res = await session.execute(
-            select(User)
-            .options(selectinload(User.profile))
-            .order_by(User.created_at.desc())
-            .limit(limit)
-            .offset(offset)
-        )
-
-        return list(res.scalars().all())
-
     async def update_role(
         self,
         session: AsyncSession,
@@ -142,19 +214,6 @@ class UserService:
         await session.commit()
 
         return user.role
-
-    def _ensure_profile(
-        self,
-        session: AsyncSession,
-        user: User,
-    ) -> UserProfile:
-        if user.profile is not None:
-            return user.profile
-
-        profile = UserProfile(user_id=user.id, meta_data={})
-        session.add(profile)
-
-        return profile
 
     async def track_user_engagement(
         self,
@@ -479,6 +538,19 @@ class UserService:
             await self._save_preferences(profile, preferences)
 
             await session.commit()
+
+    def _ensure_profile(
+        self,
+        session: AsyncSession,
+        user: User,
+    ) -> UserProfile:
+        if user.profile is not None:
+            return user.profile
+
+        profile = UserProfile(user_id=user.id, meta_data={})
+        session.add(profile)
+
+        return profile
 
     def _load_preferences(self, profile: UserProfile) -> PreferencesConfig:
         return PreferencesConfig.model_validate(profile.preferences or {})

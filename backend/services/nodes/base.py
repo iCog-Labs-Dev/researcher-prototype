@@ -1,0 +1,70 @@
+"""
+Base definitions and imports for all node modules.
+"""
+
+import os
+from typing import Dict, List, Annotated, TypedDict, Optional, Any
+from langchain_core.messages import BaseMessage
+
+# Import our storage components
+from storage.storage_manager import StorageManager
+from storage.profile_manager import ProfileManager
+from storage.research_manager import ResearchManager
+from storage.zep_manager import ZepManager
+from services.personalization_manager import PersonalizationManager
+# Import our services
+from services.user import UserService
+
+# Import all prompt templates from prompts.py
+from prompts import (
+    # Multi-source analyzer prompts
+    MULTI_SOURCE_SYSTEM_PROMPT,
+    # Search prompts
+    SEARCH_OPTIMIZER_SYSTEM_PROMPT,
+    PERPLEXITY_SYSTEM_PROMPT,
+    # Analysis prompts
+    ANALYSIS_REFINER_SYSTEM_PROMPT,
+    # Integrator prompts
+    INTEGRATOR_SYSTEM_PROMPT,
+    # Renderer prompts
+    RESPONSE_RENDERER_SYSTEM_PROMPT,
+    # Topic extractor prompts
+    TOPIC_EXTRACTOR_SYSTEM_PROMPT,
+
+    EVIDENCE_SUMMARIZER_PROMPT,
+    RESEARCH_FINDINGS_DEDUPLICATION_PROMPT,
+    RESEARCH_FINDINGS_QUALITY_ASSESSMENT_PROMPT,
+    RESEARCH_QUERY_GENERATION_PROMPT,
+    RESEARCH_SOURCE_SELECTION_PROMPT,
+    SEARCH_RESULTS_REVIEWER_PROMPT,
+)
+
+# Initialize storage components - use backend directory storage
+storage_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "storage_data")
+storage_manager = StorageManager(storage_dir)
+profile_manager = ProfileManager(storage_manager)
+research_manager = ResearchManager(storage_manager, profile_manager)
+zep_manager = ZepManager()
+personalization_manager = PersonalizationManager(storage_manager, profile_manager)
+
+# Initialize services
+user_service = UserService()
+
+
+class ChatState(TypedDict):
+    """Type definition for the chat state that flows through the graph."""
+
+    messages: Annotated[List[BaseMessage], "The messages in the conversation using LangChain core message types"]
+    model: Annotated[str, "The model to use for the conversation"]
+    temperature: Annotated[float, "The temperature to use for generation"]
+    max_tokens: Annotated[int, "The maximum number of tokens to generate"]
+    personality: Annotated[Optional[Dict[str, Any]], "User's personality configuration"]
+    current_module: Annotated[Optional[str], "The current active module"]
+    module_results: Annotated[Dict[str, Any], "Results from different modules"]
+    workflow_context: Annotated[Dict[str, Any], "Contextual data for the current workflow execution."]
+    user_id: Annotated[Optional[str], "The ID of the current user"]
+    routing_analysis: Annotated[Optional[Dict[str, Any]], "Analysis from the router"]
+    thread_id: Annotated[Optional[str], "The thread ID for memory management"]
+    memory_context: Annotated[Optional[str], "Memory context retrieved from Zep"]
+    intent: Annotated[Optional[str], "The routing intent: chat, search, or analysis"]
+    selected_sources: Annotated[Optional[List[str]], "Selected sources for search intent"]

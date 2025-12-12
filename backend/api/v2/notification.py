@@ -11,7 +11,7 @@ from services.notification_manager import connection_manager
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/notification", tags=["v2/notifications"])
+router = APIRouter(prefix="/notification", tags=["v2/notification"])
 
 
 @router.websocket("/ws")
