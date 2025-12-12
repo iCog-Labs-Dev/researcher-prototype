@@ -1,9 +1,9 @@
 name: Deploy Qwestor Frontend Dev
 
 on:
-  push:
-    branches:
-      - dev
+#  push:
+#    branches:
+#      - dev
   workflow_dispatch:
 env:
   ECR_REPOSITORY_QWESTOR_FRONTEND: qwestor-researcher-frontend-prod
