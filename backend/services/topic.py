@@ -56,9 +56,13 @@ class TopicService:
 
     async def async_get_active_research_topics(
         self,
+        user_id: Optional[uuid.UUID] = None,
     ) -> list[ResearchTopic]:
         async with SessionLocal() as session:
             query = select(ResearchTopic).where(ResearchTopic.is_active_research.is_(True)).order_by(ResearchTopic.created_at.asc())
+
+            if user_id is not None:
+                query = query.where(ResearchTopic.user_id == user_id)
 
             res = await session.execute(query)
 
