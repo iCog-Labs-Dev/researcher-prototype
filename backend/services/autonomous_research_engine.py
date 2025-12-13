@@ -22,6 +22,7 @@ from research_graph_builder import research_graph
 from services.motivation import MotivationSystem
 from services.topic_expansion_service import TopicExpansionService
 from services.topic import TopicService
+from services.research import ResearchService
 
 
 class AutonomousResearcher:
@@ -53,13 +54,18 @@ class AutonomousResearcher:
 
         # Topic expansion service is instantiated on-demand in process_expansions_for_root
         self.topic_service = TopicService()
+        self.research_service = ResearchService()
 
-    def get_recent_average_quality(self, user_id: str, topic_name: str, window_days: int) -> float:
+    async def get_recent_average_quality(self, user_id: str, topic_name: str, window_days: int) -> float:
         """Compute recent average quality over window for a topic."""
         try:
+            user_uuid = uuid.UUID(user_id) if user_id != "guest" else None
+            if not user_uuid:
+                return 0.0
+            
             now = time.time()
             window_start = now - (window_days * 24 * 3600)
-            findings = self.research_manager.get_research_findings_for_api(user_id, topic_name, unread_only=False)
+            findings = await self.research_service.async_get_findings(user_uuid, topic_name=topic_name, unread_only=False)
             scores = [f.get("quality_score") for f in findings if f.get("research_time", 0) >= window_start and isinstance(f.get("quality_score"), (int, float))]
             if not scores:
                 return 0.0
@@ -220,7 +226,12 @@ class AutonomousResearcher:
                             )
                             continue
 
-                    self.research_manager.cleanup_old_research_findings(user_id, config.RESEARCH_FINDINGS_RETENTION_DAYS)
+                    try:
+                        user_uuid = uuid.UUID(user_id) if user_id != "guest" else None
+                        if user_uuid:
+                            await self.research_service.async_cleanup_old_research_findings(user_uuid, config.RESEARCH_FINDINGS_RETENTION_DAYS)
+                    except Exception as cleanup_error:
+                        logger.debug(f"Error cleaning up old findings for user {user_id}: {cleanup_error}")
 
                 except Exception as e:
                     logger.error(f"🔬 Error processing user {user_id}: {str(e)}")
@@ -281,7 +292,7 @@ class AutonomousResearcher:
                             engagement = await self.motivation_system._get_topic_engagement_score(user_id, name)
                     except Exception:
                         engagement = 0.0
-                    avg_quality = self.get_recent_average_quality(user_id, name, window_days)
+                    avg_quality = await self.get_recent_average_quality(user_id, name, window_days)
 
                     status = topic.get('expansion_status', 'active')
                     last_eval = float(topic.get('last_evaluated_at', 0) or 0)
@@ -301,12 +312,19 @@ class AutonomousResearcher:
                         continue
 
                     # Assess interactions in window via findings read/bookmark/integration
-                    findings = self.research_manager.get_research_findings_for_api(user_id, name, unread_only=False)
-                    window_start = now_ts - window_days * 24 * 3600
-                    any_interaction = any(
-                        (f.get('read', False) or f.get('bookmarked', False) or f.get('integrated', False)) and f.get('research_time', 0) >= window_start
-                        for f in findings
-                    )
+                    try:
+                        user_uuid = uuid.UUID(user_id) if user_id != "guest" else None
+                        if user_uuid:
+                            findings = await self.research_service.async_get_findings(user_uuid, topic_name=name, unread_only=False)
+                            window_start = now_ts - window_days * 24 * 3600
+                            any_interaction = any(
+                                (f.get('read', False) or f.get('bookmarked', False) or f.get('integrated', False)) and f.get('research_time', 0) >= window_start
+                                for f in findings
+                            )
+                        else:
+                            any_interaction = False
+                    except Exception:
+                        any_interaction = False
 
                     # Retire after TTL if still cold (check before pausing again)
                     if status == 'paused' and last_eval and (now_ts - last_eval) >= retire_ttl_days * 24 * 3600:
@@ -424,7 +442,12 @@ class AutonomousResearcher:
                     continue
 
             # Cleanup old findings
-            self.research_manager.cleanup_old_research_findings(user_id, config.RESEARCH_FINDINGS_RETENTION_DAYS)
+            try:
+                user_uuid = uuid.UUID(user_id) if user_id != "guest" else None
+                if user_uuid:
+                    await self.research_service.async_cleanup_old_research_findings(user_uuid, config.RESEARCH_FINDINGS_RETENTION_DAYS)
+            except Exception as cleanup_error:
+                logger.debug(f"Error cleaning up old findings for user {user_id}: {cleanup_error}")
 
             return {
                 "success": True,

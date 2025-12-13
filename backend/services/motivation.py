@@ -18,6 +18,7 @@ from storage.research_manager import ResearchManager
 from services.personalization_manager import PersonalizationManager
 from services.topic_expansion_service import TopicExpansionService
 from services.topic import TopicService
+from services.research import ResearchService
 from models.motivation import TopicScore
 from models.research_finding import ResearchFinding
 import config
@@ -72,6 +73,7 @@ class MotivationSystem:
         # Configuration
         self._config = None
         self.topic_service = TopicService()
+        self.research_service = ResearchService()
         
         # Research graph decoupled; execution delegated to Research Engine
         
@@ -325,18 +327,12 @@ class MotivationSystem:
     async def _get_topic_engagement_score(self, user_id: str, topic_name: str) -> float:
         """Get engagement score for a topic based on research findings interactions."""
         try:
-            if not self.personalization_manager:
+            user_uuid = uuid.UUID(user_id) if user_id != "guest" else None
+            if not user_uuid:
                 return 0.0
             
-            # Import here to avoid circular dependencies
-            from storage.research_manager import ResearchManager
-            research_manager = ResearchManager(
-                self.personalization_manager.storage, 
-                self.personalization_manager.profile_manager
-            )
-            
-            # Get all findings for this user and topic
-            all_findings = research_manager.get_research_findings_for_api(user_id, topic_name, unread_only=False)
+            # Get all findings for this user and topic from DB
+            all_findings = await self.research_service.async_get_findings(user_uuid, topic_name=topic_name, unread_only=False)
             if not all_findings:
                 return 0.0
             
@@ -352,7 +348,7 @@ class MotivationSystem:
             recent_threshold = time.time() - (7 * 24 * 3600)  # 7 days ago
             recent_reads = sum(1 for f in all_findings 
                              if f.get('read', False) and 
-                             f.get('created_at', 0) > recent_threshold)
+                             f.get('research_time', 0) > recent_threshold)
             
             recent_bonus = min(recent_reads * config.ENGAGEMENT_RECENT_BONUS_RATE, config.ENGAGEMENT_RECENT_BONUS_MAX)
             
@@ -554,7 +550,12 @@ class MotivationSystem:
                             continue
                     
                     # Cleanup old findings for this user
-                    self.research_manager.cleanup_old_research_findings(user_id, config.RESEARCH_FINDINGS_RETENTION_DAYS)
+                    try:
+                        user_uuid = uuid.UUID(user_id) if user_id != "guest" else None
+                        if user_uuid:
+                            await self.research_service.async_cleanup_old_research_findings(user_uuid, config.RESEARCH_FINDINGS_RETENTION_DAYS)
+                    except Exception as cleanup_error:
+                        logger.debug(f"Error cleaning up old findings for user {user_id}: {cleanup_error}")
                 
                 except Exception as e:
                     logger.error(f"🎯 Error processing user {user_id}: {str(e)}")
