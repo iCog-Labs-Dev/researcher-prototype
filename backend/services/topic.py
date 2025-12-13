@@ -1,7 +1,9 @@
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func, distinct, delete, update
+from sqlalchemy.dialects.postgresql import insert
 
 from db import SessionLocal
 from config import DEFAULT_MODEL, MAX_ACTIVE_RESEARCH_TOPICS_PER_USER
@@ -54,9 +56,13 @@ class TopicService:
 
     async def async_get_active_research_topics(
         self,
+        user_id: Optional[uuid.UUID] = None,
     ) -> list[ResearchTopic]:
         async with SessionLocal() as session:
             query = select(ResearchTopic).where(ResearchTopic.is_active_research.is_(True)).order_by(ResearchTopic.created_at.asc())
+
+            if user_id is not None:
+                query = query.where(ResearchTopic.user_id == user_id)
 
             res = await session.execute(query)
 
@@ -145,7 +151,13 @@ class TopicService:
             await self._check_limit_research_topics(session, user_id)
 
         topic = await self._create_topic(
-            session, user_id, name, description, confidence_score, is_active_research=is_active_research
+            session,
+            user_id,
+            name,
+            description,
+            confidence_score,
+            is_active_research=is_active_research,
+            strict=True,
         )
 
         await session.commit()
@@ -262,27 +274,6 @@ class TopicService:
 
         await session.execute(query)
 
-        rn = func.row_number().over(
-            partition_by=(ResearchTopic.user_id, ResearchTopic.chat_id, func.lower(ResearchTopic.name)),
-            order_by=(ResearchTopic.created_at.desc(), ResearchTopic.id.desc()),
-        ).label("rn")
-
-        subquery = (
-            select(ResearchTopic.id, rn)
-            .where(ResearchTopic.user_id == user_id)
-            .subquery()
-        )
-
-        query = (
-            delete(ResearchTopic).where(
-                ResearchTopic.id.in_(
-                    select(subquery.c.id).where(subquery.c.rn > 1)
-                )
-            )
-        )
-
-        await session.execute(query)
-
         await session.commit()
 
     async def async_update_topic_last_researched(
@@ -371,20 +362,35 @@ class TopicService:
         chat_id: uuid.UUID = None,
         conversation_context: str = "",
         is_active_research: bool = False,
-    ) -> ResearchTopic:
-        topic = ResearchTopic(
+        strict: bool = False,
+    ) -> Optional[ResearchTopic]:
+        norm_name = name.strip()
+
+        query = insert(ResearchTopic).values(
             user_id=user_id,
             chat_id=chat_id,
-            name=name,
+            name=norm_name,
             description=description,
             confidence_score=confidence_score,
             conversation_context=conversation_context,
             is_active_research=is_active_research,
-        )
+        ).on_conflict_do_nothing(
+            index_elements=["user_id", "name"]
+        ).returning(ResearchTopic)
 
-        session.add(topic)
+        res = await session.execute(query)
 
-        return topic
+        topic = res.scalar_one_or_none()
+        if topic:
+            if strict:
+                return topic
+            else:
+                return None
+
+        if strict:
+            raise AlreadyExist(f"Topic '{norm_name}' already exists")
+        else:
+            return None
 
     async def _check_limit_research_topics(
         self,
