@@ -7,15 +7,14 @@ import EngineSettings from './EngineSettings';
 import AddTopicForm from './AddTopicForm';
 import ErrorModal from './ErrorModal';
 import {
-  getAllTopicSuggestions,
-  getTopicStatistics,
-  deleteSessionTopics,
-  deleteTopicById,
-  cleanupTopics,
-  deleteNonActivatedTopics,
-  enableTopicResearchById,
-  disableTopicResearchById,
-  getResearchEngineStatus
+    getAllTopicSuggestions,
+    getTopicStatistics,
+    deleteSessionTopics,
+    deleteTopicById,
+    cleanupTopics,
+    deleteNonActivatedTopics,
+    enableTopicResearchById,
+    disableTopicResearchById, getResearchEngineStatus,
 } from '../services/api';
 import {
   startResearchEngine,
@@ -72,7 +71,7 @@ const formatDate = (dateString) => {
       const [topicsResponse, statsResponse, engineStatus] = await Promise.all([
         getAllTopicSuggestions(),
         getTopicStatistics(),
-        // getResearchEngineStatus().catch(() => ({ available: false, enabled: false, running: false }))
+        getResearchEngineStatus().catch(() => ({ available: false, enabled: false, running: false }))
       ]);
 
       const topicsData = topicsResponse.topic_suggestions || [];
@@ -93,7 +92,7 @@ const formatDate = (dateString) => {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   // Handle global research engine toggle
   const handleToggleGlobalResearch = async () => {

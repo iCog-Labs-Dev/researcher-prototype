@@ -26,6 +26,7 @@ export const SessionProvider = ({ children }) => {
   const [userDisplayName, setUserDisplayName] = useState('');
   const [personality, setPersonality] = useState(null);
   const [conversationTopics, setConversationTopics] = useState([]);
+  const [sessionId, setSessionId] = useState(null);
 
   const previousUserIdRef = useRef(null);
 
@@ -94,6 +95,24 @@ export const SessionProvider = ({ children }) => {
   const resetSession = useCallback(() => {
     setMessages([{ ...DEFAULT_SYSTEM_MESSAGE }]);
     setConversationTopics([]);
+    setSessionId(null);
+  }, []);
+
+  const switchSession = useCallback((newSessionId, initialMessages = null) => {
+    setSessionId(newSessionId);
+    // If initial messages provided, use them; otherwise start with system message
+    if (initialMessages && Array.isArray(initialMessages) && initialMessages.length > 0) {
+      setMessages(initialMessages);
+    } else {
+      setMessages([{ ...DEFAULT_SYSTEM_MESSAGE }]);
+    }
+    setConversationTopics([]);
+  }, []);
+
+  const startNewSession = useCallback(() => {
+    setSessionId(null);
+    setMessages([{ ...DEFAULT_SYSTEM_MESSAGE }]);
+    setConversationTopics([]);
   }, []);
 
   const value = useMemo(() => ({
@@ -103,6 +122,7 @@ export const SessionProvider = ({ children }) => {
     userDisplayName,
     personality,
     conversationTopics,
+    sessionId,
 
     // Actions
     updateMessages,
@@ -111,7 +131,10 @@ export const SessionProvider = ({ children }) => {
     updateUserDisplayName,
     updateConversationTopics,
     resetSession,
-  }), [userId, messages, userDisplayName, personality, conversationTopics, updateMessages, addMessage, updatePersonality, updateUserDisplayName, updateConversationTopics, resetSession]);
+    switchSession,
+    startNewSession,
+    setSessionId,
+  }), [userId, messages, userDisplayName, personality, conversationTopics, sessionId, updateMessages, addMessage, updatePersonality, updateUserDisplayName, updateConversationTopics, resetSession, switchSession, startNewSession]);
 
   return (
     <SessionContext.Provider value={value}>

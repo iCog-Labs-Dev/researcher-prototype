@@ -253,15 +253,6 @@ export const updateMotivationConfig = async (config) => {
   }
 };
 
-export const triggerUserActivity = async () => {
-  try {
-    const response = await adminApi.post('/debug/trigger-user-activity');
-    return response.data;
-  } catch (error) {
-    console.error('Error triggering user activity:', error);
-    throw error;
-  }
-};
 
 export const simulateResearchCompletion = async (qualityScore = 0.7) => {
   try {

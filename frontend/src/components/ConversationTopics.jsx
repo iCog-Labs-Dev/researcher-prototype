@@ -7,7 +7,7 @@ import ErrorModal from './ErrorModal';
 import '../styles/ConversationTopics.css';
 
 const ConversationTopics = ({ isCollapsed, onToggleCollapse, onTopicUpdate }) => {
-  const { userId } = useSession();
+  const { sessionId } = useSession();
   const [topics, setTopics] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -15,7 +15,7 @@ const ConversationTopics = ({ isCollapsed, onToggleCollapse, onTopicUpdate }) =>
 
   // Fetch topics for the current session
   const fetchTopics = useCallback(async (preserveError = false) => {
-    if (!userId) {
+    if (!sessionId) {
       setTopics([]);
       return;
     }
@@ -26,7 +26,7 @@ const ConversationTopics = ({ isCollapsed, onToggleCollapse, onTopicUpdate }) =>
         setError(null);
       }
 
-      const response = await getSessionTopicSuggestions(userId);
+      const response = await getSessionTopicSuggestions(sessionId);
       const allTopics = response.topic_suggestions || [];
       
       // Get the 3 latest topics
@@ -59,7 +59,7 @@ const ConversationTopics = ({ isCollapsed, onToggleCollapse, onTopicUpdate }) =>
     } finally {
       setLoading(false);
     }
-  }, [userId, onTopicUpdate]);
+  }, [sessionId, onTopicUpdate]);
 
   // Initial fetch when component mounts or dependencies change
   useEffect(() => {
@@ -68,14 +68,14 @@ const ConversationTopics = ({ isCollapsed, onToggleCollapse, onTopicUpdate }) =>
 
   // Auto-refresh topics every 15 seconds when session is active
   useEffect(() => {
-    if (!userId) return;
+    if (!sessionId) return;
 
     const interval = setInterval(() => {
       fetchTopics(true); // Preserve error during auto-refresh
     }, 15000); // Refresh every 15 seconds
 
     return () => clearInterval(interval);
-  }, [userId, fetchTopics]);
+  }, [sessionId, fetchTopics]);
 
   // Handle enabling research for a topic
   const handleEnableResearch = async (topic) => {
