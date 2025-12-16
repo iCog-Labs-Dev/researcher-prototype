@@ -54,25 +54,31 @@
 /* Chat container takes full viewport */
 .chat-container {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   height: calc(100vh - 70px);
   background: var(--background-color);
   position: relative;
+  width: 100%;
 }
 
+/* Main Chat Content Area */
 .chat-content {
   display: flex;
   flex-direction: column;
   flex: 1;
+  margin-left: 200px; /* Space for SessionHistory sidebar */
   transition: margin-right 0.3s ease;
+  min-width: 0; /* Allow flex item to shrink */
 }
 
 .chat-content.with-sidebar {
-  margin-right: 350px;
+  margin-right: 350px; /* Space for ConversationTopics sidebar */
 }
 
-.chat-content.with-left-panel {
-  margin-left: 200px;
+
+
+.right-closed {
+  margin-right: 50px; /* Space for ConversationTopics sidebar */
 }
 
 
@@ -133,22 +139,22 @@
 
 /* Responsive adjustments for sidebar */
 @media (max-width: 1200px) {
-  .chat-content.with-sidebar {
-    margin-right: 300px;
+  .chat-content {
+    margin-left: 200px; /* Keep SessionHistory space */
   }
-  .chat-content.with-left-panel {
-    margin-left: 180px;
+  .chat-content.with-sidebar {
+    margin-right: 300px; /* Reduced space for ConversationTopics */
   }
 }
 
 @media (max-width: 1024px) {
+  .chat-content {
+    margin-left: 0; /* SessionHistory hidden on mobile */
+  }
   .chat-content.with-sidebar {
-    margin-right: 0;
+    margin-right: 0; /* ConversationTopics becomes overlay on mobile */
   }
-  .chat-content.with-left-panel {
-    margin-left: 0;
-  }
-  
+
   .scroll-to-latest-button {
     right: 1rem;
     bottom: 100px;
@@ -159,11 +165,16 @@
   .main-content {
     padding-top: 120px; /* Account for taller mobile navigation */
   }
-  
+
   .chat-container {
     height: calc(100vh - 120px);
   }
-  
+
+  .chat-content {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
   .chat-messages {
     padding: 1rem;
   }

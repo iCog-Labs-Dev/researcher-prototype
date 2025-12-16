@@ -3,12 +3,10 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import ChatPage from './ChatPage';
 import { useSession } from '../context/SessionContext';
 import * as api from '../services/api';
-import * as adminApi from '../services/adminApi';
 
 // Mock all dependencies
 jest.mock('../context/SessionContext');
 jest.mock('../services/api');
-jest.mock('../services/adminApi');
 
 // Mock child components
 jest.mock('./ChatMessage', () => {
@@ -85,7 +83,7 @@ describe('ChatPage Comprehensive Tests', () => {
     useSession.mockReturnValue(mockSessionContext);
     
     api.sendChatMessage = jest.fn();
-    adminApi.triggerUserActivity = jest.fn().mockResolvedValue({});
+    api.triggerUserActivity = jest.fn().mockResolvedValue({});
   });
 
   describe('Message Sending - Core Functionality', () => {
@@ -263,14 +261,14 @@ describe('ChatPage Comprehensive Tests', () => {
       fireEvent.click(sendButton);
 
       await waitFor(() => {
-        expect(adminApi.triggerUserActivity).toHaveBeenCalled();
+        expect(api.triggerUserActivity).toHaveBeenCalled();
       });
     });
 
     test('handles user activity trigger failure gracefully', async () => {
       const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
       
-      adminApi.triggerUserActivity.mockRejectedValue(new Error('Activity service down'));
+      api.triggerUserActivity.mockRejectedValue(new Error('Activity service down'));
       api.sendChatMessage.mockResolvedValue({ response: 'Test response' });
       
       render(<ChatPage />);
