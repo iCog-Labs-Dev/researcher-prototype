@@ -49,7 +49,6 @@ class AutonomousResearcher:
         self.motivation_system = None
         
         # Configure research parameters from config
-        self.max_topics_per_user = config.RESEARCH_MAX_TOPICS_PER_USER
         self.quality_threshold = config.RESEARCH_QUALITY_THRESHOLD
         self.enabled = config.RESEARCH_ENGINE_ENABLED
 
@@ -181,8 +180,8 @@ class AutonomousResearcher:
 
             for user_id, user_topics in topics_by_user.items():
                 try:
-                    topics_to_research = user_topics[: self.max_topics_per_user]
-                    logger.info(f"🔬 User {user_id} has {len(topics_to_research)} active research topics selected")
+                    topics_to_research = user_topics
+                    logger.info(f"🔬 User {user_id} has {len(topics_to_research)} active research topics")
 
                     for topic in topics_to_research:
                         try:
@@ -391,8 +390,8 @@ class AutonomousResearcher:
                     "findings_stored": 0,
                 }
 
-            # Limit topics
-            topics_to_research = active_topics[: self.max_topics_per_user]
+            # Research all active topics (already limited by MAX_ACTIVE_RESEARCH_TOPICS_PER_USER)
+            topics_to_research = active_topics
             topics_researched = 0
             findings_stored = 0
             research_details = []
@@ -469,7 +468,6 @@ class AutonomousResearcher:
             "enabled": self.enabled,
             "running": self.is_running,
             "quality_threshold": self.quality_threshold,
-            "max_topics_per_user": self.max_topics_per_user,
             "retention_days": config.RESEARCH_FINDINGS_RETENTION_DAYS,
             "engine_type": "Motivation-driven LangGraph-based",
             "research_graph_nodes": [
