@@ -174,11 +174,12 @@ class AutonomousResearcher:
             total_topics_researched = 0
             total_findings_stored = 0
             quality_scores: List[float] = []
-            processed_users: set = set()
+            processed_users: set = set()  # Track users for lifecycle updates
 
             for topic in active_topics:
                 try:
                     user_id = str(topic.user_id)
+                    processed_users.add(user_id)  # Track for lifecycle updates
                     root_name = topic.name
                     logger.info(f"🔬 Researching topic: {root_name} for user {user_id}")
 
@@ -212,15 +213,6 @@ class AutonomousResearcher:
                     except Exception as ex:
                         logger.debug(f"Expansion processing failed for '{root_name}': {ex}")
 
-                    # Cleanup old findings for this user (once per user)
-                    if user_id not in processed_users:
-                        try:
-                            user_uuid = uuid.UUID(user_id) if user_id != "guest" else None
-                            if user_uuid:
-                                await self.research_service.async_cleanup_old_research_findings(user_uuid, config.RESEARCH_FINDINGS_RETENTION_DAYS)
-                        except Exception as cleanup_error:
-                            logger.debug(f"Error cleaning up old findings for user {user_id}: {cleanup_error}")
-                        processed_users.add(user_id)
 
                     await asyncio.sleep(config.RESEARCH_TOPIC_DELAY)
 
@@ -235,6 +227,12 @@ class AutonomousResearcher:
             )
 
             avg_quality = sum(quality_scores) / len(quality_scores) if quality_scores else 0.0
+
+            # Cleanup old findings globally (once for all users)
+            try:
+                await self.research_service.async_cleanup_old_research_findings(config.RESEARCH_FINDINGS_RETENTION_DAYS)
+            except Exception as cleanup_error:
+                logger.debug(f"Error cleaning up old findings: {cleanup_error}")
 
             # Update expansion lifecycle for all processed users
             try:
@@ -434,13 +432,11 @@ class AutonomousResearcher:
                     )
                     continue
 
-            # Cleanup old findings
+            # Cleanup old findings globally
             try:
-                user_uuid = uuid.UUID(user_id) if user_id != "guest" else None
-                if user_uuid:
-                    await self.research_service.async_cleanup_old_research_findings(user_uuid, config.RESEARCH_FINDINGS_RETENTION_DAYS)
+                await self.research_service.async_cleanup_old_research_findings(config.RESEARCH_FINDINGS_RETENTION_DAYS)
             except Exception as cleanup_error:
-                logger.debug(f"Error cleaning up old findings for user {user_id}: {cleanup_error}")
+                logger.debug(f"Error cleaning up old findings: {cleanup_error}")
 
             return {
                 "success": True,

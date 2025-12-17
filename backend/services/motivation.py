@@ -548,13 +548,6 @@ class MotivationSystem:
                             logger.error(f"🎯 Error researching topic {topic_name}: {str(e)}")
                             continue
                     
-                    # Cleanup old findings for this user
-                    try:
-                        user_uuid = uuid.UUID(user_id) if user_id != "guest" else None
-                        if user_uuid:
-                            await self.research_service.async_cleanup_old_research_findings(user_uuid, config.RESEARCH_FINDINGS_RETENTION_DAYS)
-                    except Exception as cleanup_error:
-                        logger.debug(f"Error cleaning up old findings for user {user_id}: {cleanup_error}")
                 
                 except Exception as e:
                     logger.error(f"🎯 Error processing user {user_id}: {str(e)}")
@@ -563,6 +556,12 @@ class MotivationSystem:
             avg_quality = sum(quality_scores) / len(quality_scores) if quality_scores else 0.0
             
             logger.info(f"🎯 Research cycle completed: {total_topics_researched} topics, {total_findings_stored} findings, avg quality: {avg_quality:.2f}")
+            
+            # Cleanup old findings globally (once for all users)
+            try:
+                await self.research_service.async_cleanup_old_research_findings(config.RESEARCH_FINDINGS_RETENTION_DAYS)
+            except Exception as cleanup_error:
+                logger.debug(f"Error cleaning up old findings: {cleanup_error}")
             
             return {
                 "topics_researched": total_topics_researched,

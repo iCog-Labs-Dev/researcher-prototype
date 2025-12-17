@@ -31,36 +31,6 @@ class ResearchService:
 
         return list(res.scalars().all())
 
-    async def cleanup_old_research_findings(
-        self,
-        session: AsyncSession,
-        user_id: uuid.UUID,
-        retention_days: int,
-    ) -> int:
-        """Delete research findings older than retention_days for a user."""
-        cutoff_time = time.time() - (retention_days * 24 * 3600)
-        
-        query = (
-            delete(ResearchFinding)
-            .where(
-                and_(
-                    ResearchFinding.user_id == user_id,
-                    ResearchFinding.research_time < cutoff_time
-                )
-            )
-            .returning(ResearchFinding.id)
-        )
-        
-        res = await session.execute(query)
-        deleted_ids = list(res.scalars().all())
-        await session.commit()
-        
-        deleted_count = len(deleted_ids)
-        if deleted_count > 0:
-            logger.info(f"Cleaned up {deleted_count} old research findings for user {user_id}")
-        
-        return deleted_count
-
     async def async_get_findings(
         self,
         user_id: uuid.UUID,
@@ -101,59 +71,48 @@ class ResearchService:
 
     async def async_cleanup_old_research_findings(
         self,
-        user_id: uuid.UUID = None,
-        retention_days: int = None,
+        retention_days: int,
     ):
-        """
-        Async wrapper to cleanup old research findings.
-        If user_id is provided, cleans up for that user only.
-        If user_id is None, performs global cleanup (from dev branch).
-        """
-        if user_id is not None:
-            # Per-user cleanup
+        """Cleanup old research findings globally for all users."""
+        try:
             async with SessionLocal.begin() as session:
-                return await self.cleanup_old_research_findings(session, user_id, retention_days)
-        else:
-            # Global cleanup (from dev branch) - fixes created_at -> research_time
-            try:
-                async with SessionLocal.begin() as session:
-                    cutoff_time = time.time() - (retention_days * 24 * 3600)
+                cutoff_time = time.time() - (retention_days * 24 * 3600)
+                query = (
+                    delete(ResearchFinding)
+                    .where(ResearchFinding.research_time < cutoff_time)
+                    .returning(ResearchFinding.topic_id)
+                )
+
+                res = await session.execute(query)
+
+                deleted_topic_ids_list = res.scalars().all()
+                deleted_findings = len(deleted_topic_ids_list)
+                touched_topic_ids = set(deleted_topic_ids_list)
+
+                deleted_topics = 0
+                if touched_topic_ids:
+                    has_findings = exists(
+                        select(1).where(ResearchFinding.topic_id == ResearchTopic.id)
+                    )
                     query = (
-                        delete(ResearchFinding)
-                        .where(ResearchFinding.research_time < cutoff_time)
-                        .returning(ResearchFinding.topic_id)
+                        delete(ResearchTopic)
+                        .where(and_(
+                            ResearchTopic.id.in_(touched_topic_ids),
+                            ResearchTopic.is_active_research.is_(False),
+                            ~has_findings,
+                        ))
                     )
 
                     res = await session.execute(query)
 
-                    deleted_topic_ids_list = res.scalars().all()
-                    deleted_findings = len(deleted_topic_ids_list)
-                    touched_topic_ids = set(deleted_topic_ids_list)
+                    deleted_topics = res.rowcount
 
-                    deleted_topics = 0
-                    if touched_topic_ids:
-                        has_findings = exists(
-                            select(1).where(ResearchFinding.topic_id == ResearchTopic.id)
-                        )
-                        query = (
-                            delete(ResearchTopic)
-                            .where(and_(
-                                ResearchTopic.id.in_(touched_topic_ids),
-                                ResearchTopic.is_active_research.is_(False),
-                                ~has_findings,
-                            ))
-                        )
+            logger.info(
+                f"Cleanup done. Deleted findings: {deleted_findings}, deleted topics: {deleted_topics}, touched topics: {len(touched_topic_ids)}",
+            )
 
-                        res = await session.execute(query)
-
-                        deleted_topics = res.rowcount
-
-                logger.info(
-                    f"Cleanup done. Deleted findings: {deleted_findings}, deleted topics: {deleted_topics}, touched topics: {len(touched_topic_ids)}",
-                )
-
-            except Exception as e:
-                logger.error(f"Cleanup failed: {str(e)}")
+        except Exception as e:
+            logger.error(f"Cleanup failed: {str(e)}")
 
     async def mark_finding_as_read(
         self,
