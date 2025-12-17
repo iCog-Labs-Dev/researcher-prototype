@@ -32,24 +32,13 @@ async def initializer_node(state: ChatState) -> ChatState:
     if not user_id:
         logger.error(f"🧠 Initializer: ❌ Missing user_id identifier")
     if not state.get("personality"):
-        state["personality"] = await user_service.async_get_personality(user_id)
+        _, personality = await user_service.async_get_personality(user_id)
+        state["personality"] = personality
 
     # Handle thread ID generation or retrieval
     thread_id = state.get("thread_id", None)
     if not thread_id:
-        # Generate a new thread ID for this conversation thread
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
-        thread_id = f"{user_id}-{timestamp}"
-        state["thread_id"] = thread_id
-        logger.info(f"🧠 Initializer: ✅ Generated new thread ID: {thread_id}")
-
-        # Ensure thread exists in ZEP when we generate a new thread ID
-        if zep_manager.is_enabled():
-            try:
-                await zep_manager.create_thread(thread_id, user_id)
-            except Exception as e:
-                logger.warning(f"Failed to create thread in ZEP: {str(e)}")
-                # Don't fail the request if ZEP thread creation fails
+        logger.error(f"🧠 Initializer: ❌ Missing thread_id")
     else:
         logger.info(f"🧠 Initializer: Using provided thread ID: {thread_id}")
         # Ensure the thread exists in ZEP when a thread ID is provided externally (e.g., new session from UI)

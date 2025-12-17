@@ -9,11 +9,11 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 import config
 from .base import (
     ChatState,
-    RESPONSE_RENDERER_SYSTEM_PROMPT,
     user_service,
 )
 from utils.helpers import get_current_datetime_str
 from llm_models import FormattedResponse
+from services.prompt_cache import PromptCache
 from services.status_manager import queue_status  # noqa: F401
 from services.citation_processor import citation_processor
 from services.logging_config import get_logger
@@ -66,7 +66,7 @@ async def response_renderer_node(state: ChatState) -> ChatState:
         try:
             logger.info(f"✨ Renderer: Retrieving personalization context for user {user_id}")
 
-            personalization_context = await user_service.async_get_personalization_context(user_id)
+            _, personalization_context = await user_service.async_get_personalization_context(user_id)
 
             logger.debug(f"✨ Renderer: ✅ Personalization context retrieved for user {user_id}")
         except Exception as e:
@@ -94,7 +94,7 @@ async def response_renderer_node(state: ChatState) -> ChatState:
     
     # Create a system prompt for the renderer with personalization
     system_message = SystemMessage(
-        content=RESPONSE_RENDERER_SYSTEM_PROMPT.format(
+        content=PromptCache.get("RESPONSE_RENDERER_SYSTEM_PROMPT").format(
             current_time=current_time_str, 
             style=style, 
             tone=tone, 

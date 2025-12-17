@@ -7,11 +7,9 @@ from langchain_core.messages import SystemMessage
 from langchain_openai import ChatOpenAI
 
 import config
-from .base import (
-    ChatState,
-    RESEARCH_QUERY_GENERATION_PROMPT,
-)
+from .base import ChatState
 from utils.helpers import get_current_datetime_str
+from services.prompt_cache import PromptCache
 from services.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -40,7 +38,7 @@ def research_query_generator_node(state: ChatState) -> ChatState:
     
     try:
         # Create the prompt for research query generation
-        prompt = RESEARCH_QUERY_GENERATION_PROMPT.format(
+        prompt = PromptCache.get("RESEARCH_QUERY_GENERATION_PROMPT").format(
             current_time=get_current_datetime_str(),
             topic_name=topic_name,
             topic_description=topic_description,

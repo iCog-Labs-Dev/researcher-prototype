@@ -7,48 +7,19 @@ from typing import Dict, List, Annotated, TypedDict, Optional, Any
 from langchain_core.messages import BaseMessage
 
 # Import our storage components
-from storage.storage_manager import StorageManager
-from storage.profile_manager import ProfileManager
-from storage.research_manager import ResearchManager
 from storage.zep_manager import ZepManager
-from services.personalization_manager import PersonalizationManager
 # Import our services
 from services.user import UserService
+from services.research import ResearchService, FindingPayload
+from services.topic import TopicService
 
-# Import all prompt templates from prompts.py
-from prompts import (
-    # Multi-source analyzer prompts
-    MULTI_SOURCE_SYSTEM_PROMPT,
-    # Search prompts
-    SEARCH_OPTIMIZER_SYSTEM_PROMPT,
-    PERPLEXITY_SYSTEM_PROMPT,
-    # Analysis prompts
-    ANALYSIS_REFINER_SYSTEM_PROMPT,
-    # Integrator prompts
-    INTEGRATOR_SYSTEM_PROMPT,
-    # Renderer prompts
-    RESPONSE_RENDERER_SYSTEM_PROMPT,
-    # Topic extractor prompts
-    TOPIC_EXTRACTOR_SYSTEM_PROMPT,
-
-    EVIDENCE_SUMMARIZER_PROMPT,
-    RESEARCH_FINDINGS_DEDUPLICATION_PROMPT,
-    RESEARCH_FINDINGS_QUALITY_ASSESSMENT_PROMPT,
-    RESEARCH_QUERY_GENERATION_PROMPT,
-    RESEARCH_SOURCE_SELECTION_PROMPT,
-    SEARCH_RESULTS_REVIEWER_PROMPT,
-)
-
-# Initialize storage components - use backend directory storage
-storage_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "storage_data")
-storage_manager = StorageManager(storage_dir)
-profile_manager = ProfileManager(storage_manager)
-research_manager = ResearchManager(storage_manager, profile_manager)
+# Initialize storage components
 zep_manager = ZepManager()
-personalization_manager = PersonalizationManager(storage_manager, profile_manager)
 
 # Initialize services
 user_service = UserService()
+research_service = ResearchService()
+topic_service = TopicService()
 
 
 class ChatState(TypedDict):

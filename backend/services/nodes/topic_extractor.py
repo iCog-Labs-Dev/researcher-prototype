@@ -8,17 +8,17 @@ from langchain_core.messages import SystemMessage
 import config
 from .base import (
     ChatState,
-    TOPIC_EXTRACTOR_SYSTEM_PROMPT,
-    research_manager
+    topic_service,
 )
 from utils.helpers import get_current_datetime_str
 from llm_models import TopicSuggestions
+from services.prompt_cache import PromptCache
 from services.logging_config import get_logger
 
 logger = get_logger(__name__)
 
 
-def topic_extractor_node(state: ChatState) -> ChatState:
+async def topic_extractor_node(state: ChatState) -> ChatState:
     """Extract research-worthy topics from the conversation."""
     logger.info("🔍 Topic Extractor: Analyzing conversation for research topics")
     
@@ -51,28 +51,25 @@ def topic_extractor_node(state: ChatState) -> ChatState:
     active_topics_section = ""
     if user_id:
         try:
-            all_existing_topics = research_manager.get_all_topic_suggestions(user_id)
-            if all_existing_topics:
-                # Only include topics that the user has actively chosen to research
-                active_topics = []
-                for thread_id, topics in all_existing_topics.items():
-                    for topic in topics:
-                        if topic.get("is_active_research", False):  # Only active research topics
-                            topic_name = topic.get("topic_name", "Unknown")
-                            description = topic.get("description", "")
-                            active_topics.append(f"• {topic_name} - {description}")
-                
-                if active_topics:
-                    # Limit to top 5 active research topics to provide context
-                    active_topics_list = "\n".join(active_topics[:5])
+            success, all_active_topics = await topic_service.async_get_active_research_topics(user_id)
+
+            if success:
+                if all_active_topics:
+                    active_topics = []
+                    for topic in all_active_topics:
+                        topic_name = topic.get("topic_name", "Unknown")
+                        description = topic.get("description", "")
+                        active_topics.append(f"• {topic_name} - {description}")
+
+                    active_topics_list = "\n".join(active_topics)
                     active_topics_section = f"USER'S ACTIVE RESEARCH INTERESTS:\nThe user is currently researching these topics:\n\n{active_topics_list}\n\nUse this to understand the user's research interests, but ONLY suggest new topics that are related to the current conversation."
                     logger.debug(f"🔍 Topic Extractor: Including {len(active_topics)} active research topics for context")
                 else:
                     active_topics_section = ""
-                    logger.debug("🔍 Topic Extractor: ⚠️ No active research topics found")
+                    logger.debug("🔍 Topic Extractor: ⚠️ No active topics found for user")
             else:
+                logger.warning(f"🔍 Topic Extractor: Error retrieving active research topics")
                 active_topics_section = ""
-                logger.debug("🔍 Topic Extractor: ⚠️ No existing topics found for user")
         except Exception as e:
             logger.warning(f"🔍 Topic Extractor: Error retrieving active research topics: {str(e)}")
             active_topics_section = ""
@@ -92,7 +89,7 @@ def topic_extractor_node(state: ChatState) -> ChatState:
         logger.debug("🔍 Topic Extractor: ⚠️ No memory context available")
     
     # Create the full system prompt
-    full_prompt = TOPIC_EXTRACTOR_SYSTEM_PROMPT.format(
+    full_prompt = PromptCache.get("TOPIC_EXTRACTOR_SYSTEM_PROMPT").format(
         current_time=current_time_str,
         existing_topics_section=active_topics_section,
         min_confidence=min_confidence,

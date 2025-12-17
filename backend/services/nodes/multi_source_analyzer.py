@@ -7,12 +7,10 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
 import config
-from .base import (
-    ChatState,
-    MULTI_SOURCE_SYSTEM_PROMPT,
-)
+from .base import ChatState
 from utils.helpers import get_current_datetime_str, get_last_user_message
 from llm_models import MultiSourceAnalysis
+from services.prompt_cache import PromptCache
 from services.status_manager import queue_status  # noqa: F401
 from services.logging_config import get_logger
 
@@ -65,7 +63,7 @@ async def multi_source_analyzer_node(state: ChatState) -> ChatState:
 
         # Create system message with analysis instructions
         system_message = SystemMessage(
-            content=MULTI_SOURCE_SYSTEM_PROMPT.format(
+            content=PromptCache.get("MULTI_SOURCE_SYSTEM_PROMPT").format(
                 current_time=get_current_datetime_str(), memory_context_section=memory_context_section
             )
         )

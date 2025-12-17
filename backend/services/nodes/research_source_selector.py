@@ -7,11 +7,9 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage
 
 import config
-from .base import (
-    ChatState,
-    RESEARCH_SOURCE_SELECTION_PROMPT,
-)
+from .base import ChatState
 from llm_models import MultiSourceAnalysis
+from services.prompt_cache import PromptCache
 from services.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -39,7 +37,7 @@ async def research_source_selector_node(state: ChatState) -> ChatState:
     
     try:
         # Create the source selection prompt
-        prompt = RESEARCH_SOURCE_SELECTION_PROMPT.format(
+        prompt = PromptCache.get("RESEARCH_SOURCE_SELECTION_PROMPT").format(
             topic_name=topic_name,
             topic_description=topic_description,
             research_query=research_query

@@ -6,13 +6,11 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage
 
 import config
-from .base import (
-    ChatState,
-    SEARCH_RESULTS_REVIEWER_PROMPT,
-)
+from .base import ChatState
 from config import SEARCH_RESULTS_LIMIT
 from llm_models import RelevanceSelection
 from utils.helpers import get_current_datetime_str
+from services.prompt_cache import PromptCache
 from services.status_manager import queue_status  # noqa: F401
 from services.logging_config import get_logger
 
@@ -71,7 +69,7 @@ async def search_results_reviewer_node(state: ChatState) -> ChatState:
         
         # If we don't have structured items, fall back to content-based filtering
         if items is None:
-            prompt = SEARCH_RESULTS_REVIEWER_PROMPT.format(
+            prompt = PromptCache.get("SEARCH_RESULTS_REVIEWER_PROMPT").format(
                 current_time=current_time,
                 source_name=source_human_name,
                 query=query,
@@ -117,7 +115,7 @@ async def search_results_reviewer_node(state: ChatState) -> ChatState:
 
         enumerated_block = "\n".join(enumerated)
 
-        prompt = SEARCH_RESULTS_REVIEWER_PROMPT.format(
+        prompt = PromptCache.get("SEARCH_RESULTS_REVIEWER_PROMPT").format(
             current_time=current_time,
             source_name=source_human_name,
             query=query,

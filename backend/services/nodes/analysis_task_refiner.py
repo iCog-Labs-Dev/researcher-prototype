@@ -6,12 +6,10 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage
 
 import config
-from .base import (
-    ChatState,
-    ANALYSIS_REFINER_SYSTEM_PROMPT,
-)
+from .base import ChatState
 from utils.helpers import get_current_datetime_str, get_last_user_message
 from llm_models import AnalysisTask
+from services.prompt_cache import PromptCache
 from services.status_manager import queue_status  # noqa: F401
 from services.logging_config import get_logger
 
@@ -48,7 +46,7 @@ def analysis_task_refiner_node(state: ChatState) -> ChatState:
         logger.debug("🧩 Analysis Refiner: No memory context available")
 
     system_message = SystemMessage(
-        content=ANALYSIS_REFINER_SYSTEM_PROMPT.format(
+        content=PromptCache.get("ANALYSIS_REFINER_SYSTEM_PROMPT").format(
             current_time=current_time_str, memory_context_section=memory_context_section
         )
     )
