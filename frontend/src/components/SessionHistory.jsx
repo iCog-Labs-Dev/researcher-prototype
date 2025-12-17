@@ -4,7 +4,7 @@ import { getAllChatSessions, createOrSwitchSession } from '../services/api';
 import '../styles/SessionHistory.css';
 
 const SessionHistory = () => {
-  const { sessionId, switchSession, startNewSession, setSessionId } = useSession();
+  const { sessionId, switchSession, startNewSession } = useSession();
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

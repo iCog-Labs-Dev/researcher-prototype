@@ -1,98 +1,46 @@
-import React, { useState } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { adminLogin } from '../../services/adminApi';
-import { useAdmin } from '../../context/AdminContext';
+import { useAuth } from '../../context/AuthContext';
+import AuthModal from '../AuthModal';
 import '../../styles/Admin.css';
 
 const AdminLogin = () => {
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const { login } = useAdmin();
+  const { isAuthenticated, user, loading } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
+  useEffect(() => {
+    if (loading) return;
 
-    try {
-      const response = await adminLogin(password);
-      login(response);
+    const role = user?.role ?? user?.metadata?.role;
+
+    if (!isAuthenticated) {
+      // We no longer support a separate admin password. Push to /admin which will show login if needed.
       navigate('/admin');
-    } catch (error) {
-      console.error('Login failed:', error);
-      if (error.response?.status === 401) {
-        setError('Invalid password. Please try again.');
-      } else {
-        setError('Login failed. Please check your connection and try again.');
-      }
-    } finally {
-      setLoading(false);
+      return;
     }
-  };
 
-  return (
-    <div className="admin-login-container">
-      <div className="admin-login-card">
-        <div className="admin-login-header">
-          <h1>🔐 Admin Access</h1>
-          <p>AI Research Assistant - Prompt Management</p>
-        </div>
+    if (role === 'admin') {
+      navigate('/admin');
+    } else {
+      navigate('/');
+    }
+  }, [isAuthenticated, loading, navigate, user]);
 
-        <form onSubmit={handleSubmit} className="admin-login-form">
-          <div className="form-group">
-            <label htmlFor="password">Admin Password</label>
-            <input
-              type="password"
-              id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter admin password"
-              required
-              disabled={loading}
-              autoFocus
-            />
-          </div>
-
-          {error && (
-            <div className="error-message">
-              <span className="error-icon">⚠️</span>
-              {error}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            className="login-button"
-            disabled={loading || !password.trim()}
-          >
-            {loading ? (
-              <>
-                <span className="loading-spinner"></span>
-                Logging in...
-              </>
-            ) : (
-              'Login to Admin Panel'
-            )}
-          </button>
-        </form>
-
-        <div className="admin-login-footer">
-          <p className="help-text">
-            Need help? Contact your system administrator.
-          </p>
-          <button
-            type="button"
-            className="back-button"
-            onClick={() => navigate('/')}
-          >
-            ← Back to Chat
-          </button>
-        </div>
+  if (loading) {
+    return (
+      <div className="admin-loading">
+        <div className="loading-spinner"></div>
+        <p>Redirecting...</p>
       </div>
-    </div>
-  );
+    );
+  }
+
+  if (!isAuthenticated) {
+    // If someone opens /admin/login directly, show the normal login modal.
+    return <AuthModal isOpen={true} onRequestClose={() => {}} preventClose={true} />;
+  }
+
+  return null;
 };
 
 export default AdminLogin; 

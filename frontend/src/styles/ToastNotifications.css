@@ -2,7 +2,8 @@
   position: fixed;
   top: 20px;
   right: 20px;
-  z-index: 1000;
+  /* Must be above fixed header (.navigation z-index: 1200) and dropdowns (1300) */
+  z-index: 2000;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -37,6 +38,10 @@
 
 .toast-system_status {
   border-left-color: #ffc107;
+}
+
+.toast-access_denied {
+  border-left-color: #dc3545;
 }
 
 .toast-content {

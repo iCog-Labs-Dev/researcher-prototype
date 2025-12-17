@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getAllPrompts, getAdminStatus, deleteAllUsers } from '../../services/adminApi';
-import { useAdmin } from '../../context/AdminContext';
+import { useAuth } from '../../context/AuthContext';
 import PromptEditor from './PromptEditor';
 import FlowVisualization from './FlowVisualization';
 import '../../styles/Admin.css';
@@ -14,7 +14,7 @@ const AdminDashboard = () => {
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('overview');
   
-  const { logout, user } = useAdmin();
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -82,7 +82,9 @@ const AdminDashboard = () => {
           <span className="admin-subtitle">Prompt Management System</span>
         </div>
         <div className="admin-header-right">
-          <span className="admin-user">👤 {user?.username}</span>
+          <span className="admin-user">
+            👤 {user?.metadata?.display_name || user?.display_name || user?.email || user?.username || 'Admin'}
+          </span>
           <button onClick={() => navigate('/')} className="btn-secondary">
             🏠 Back to Chat
           </button>
