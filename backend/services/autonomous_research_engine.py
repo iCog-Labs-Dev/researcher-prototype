@@ -373,8 +373,7 @@ class AutonomousResearcher:
                 return {"success": False, "error": "Invalid user_id", "topics_researched": 0, "findings_stored": 0}
 
             # Get active research topics for this user from DB
-            active_topics_all = await self.topic_service.async_get_active_research_topics()
-            active_topics = [t for t in active_topics_all if t.user_id == user_uuid]
+            active_topics = await self.topic_service.async_get_active_research_topics(user_id=user_uuid)
 
             if not active_topics:
                 return {
