@@ -169,72 +169,65 @@ class AutonomousResearcher:
                     "average_quality": 0.0,
                 }
 
-            topics_by_user: Dict[str, List] = {}
-            for topic in active_topics:
-                topics_by_user.setdefault(str(topic.user_id), []).append(topic)
-            logger.info(f"🔬 Scanning {len(topics_by_user)} users for active research topics...")
+            logger.info(f"🔬 Processing {len(active_topics)} active research topics...")
 
             total_topics_researched = 0
             total_findings_stored = 0
             quality_scores: List[float] = []
+            processed_users: set = set()
 
-            for user_id, user_topics in topics_by_user.items():
+            for topic in active_topics:
                 try:
-                    topics_to_research = user_topics
-                    logger.info(f"🔬 User {user_id} has {len(topics_to_research)} active research topics")
+                    user_id = str(topic.user_id)
+                    root_name = topic.name
+                    logger.info(f"🔬 Researching topic: {root_name} for user {user_id}")
 
-                    for topic in topics_to_research:
-                        try:
-                            root_name = topic.name
-                            logger.info(f"🔬 Researching topic: {root_name} for user {user_id}")
+                    topic_payload = {
+                        "topic_id": str(topic.id),
+                        "topic_name": topic.name,
+                        "description": topic.description,
+                        "last_researched": topic.last_researched.astimezone(timezone.utc).strftime("%Y-%m-%d") if topic.last_researched else None,
+                        "is_active_research": topic.is_active_research,
+                    }
 
-                            topic_payload = {
-                                "topic_id": str(topic.id),
-                                "topic_name": topic.name,
-                                "description": topic.description,
-                                "last_researched": topic.last_researched.astimezone(timezone.utc).strftime("%Y-%m-%d") if topic.last_researched else None,
-                                "is_active_research": topic.is_active_research,
-                            }
-
-                            root_result = await self.run_langgraph_research(user_id, topic_payload)
-                            if root_result:
-                                total_topics_researched += 1
-                                if root_result.get("stored", False):
-                                    total_findings_stored += 1
-                                if root_result.get("quality_score"):
-                                    quality_scores.append(root_result.get("quality_score"))
-
-                            try:
-                                child_runs = await self.process_expansions_for_root(user_id, topic_payload)
-                                if child_runs:
-                                    logger.info("🔬 Executed %d expansion child research task(s) for user %s on '%s'", len(child_runs), user_id, root_name)
-                                    for cr in child_runs:
-                                        cres = cr.get("result") or {}
-                                        total_topics_researched += 1
-                                        if cres.get("stored", False):
-                                            total_findings_stored += 1
-                                        if cres.get("quality_score"):
-                                            quality_scores.append(cres.get("quality_score"))
-                            except Exception as ex:
-                                logger.debug(f"Expansion processing failed for '{root_name}': {ex}")
-
-                            await asyncio.sleep(config.RESEARCH_TOPIC_DELAY)
-
-                        except Exception as e:
-                            logger.error(
-                                f"🔬 Error researching topic {getattr(topic, 'name', 'unknown')} for user {user_id}: {str(e)}"
-                            )
-                            continue
+                    root_result = await self.run_langgraph_research(user_id, topic_payload)
+                    if root_result:
+                        total_topics_researched += 1
+                        if root_result.get("stored", False):
+                            total_findings_stored += 1
+                        if root_result.get("quality_score"):
+                            quality_scores.append(root_result.get("quality_score"))
 
                     try:
-                        user_uuid = uuid.UUID(user_id) if user_id != "guest" else None
-                        if user_uuid:
-                            await self.research_service.async_cleanup_old_research_findings(user_uuid, config.RESEARCH_FINDINGS_RETENTION_DAYS)
-                    except Exception as cleanup_error:
-                        logger.debug(f"Error cleaning up old findings for user {user_id}: {cleanup_error}")
+                        child_runs = await self.process_expansions_for_root(user_id, topic_payload)
+                        if child_runs:
+                            logger.info("🔬 Executed %d expansion child research task(s) for user %s on '%s'", len(child_runs), user_id, root_name)
+                            for cr in child_runs:
+                                cres = cr.get("result") or {}
+                                total_topics_researched += 1
+                                if cres.get("stored", False):
+                                    total_findings_stored += 1
+                                if cres.get("quality_score"):
+                                    quality_scores.append(cres.get("quality_score"))
+                    except Exception as ex:
+                        logger.debug(f"Expansion processing failed for '{root_name}': {ex}")
+
+                    # Cleanup old findings for this user (once per user)
+                    if user_id not in processed_users:
+                        try:
+                            user_uuid = uuid.UUID(user_id) if user_id != "guest" else None
+                            if user_uuid:
+                                await self.research_service.async_cleanup_old_research_findings(user_uuid, config.RESEARCH_FINDINGS_RETENTION_DAYS)
+                        except Exception as cleanup_error:
+                            logger.debug(f"Error cleaning up old findings for user {user_id}: {cleanup_error}")
+                        processed_users.add(user_id)
+
+                    await asyncio.sleep(config.RESEARCH_TOPIC_DELAY)
 
                 except Exception as e:
-                    logger.error(f"🔬 Error processing user {user_id}: {str(e)}")
+                    logger.error(
+                        f"🔬 Error researching topic {getattr(topic, 'name', 'unknown')} for user {getattr(topic, 'user_id', 'unknown')}: {str(e)}"
+                    )
                     continue
 
             logger.info(
@@ -243,9 +236,10 @@ class AutonomousResearcher:
 
             avg_quality = sum(quality_scores) / len(quality_scores) if quality_scores else 0.0
 
+            # Update expansion lifecycle for all processed users
             try:
-                for uid in topics_by_user.keys():
-                    await self._update_expansion_lifecycle(uid)
+                for user_id in processed_users:
+                    await self._update_expansion_lifecycle(user_id)
             except Exception as e:
                 logger.error(f"Lifecycle update failed: {str(e)}")
 
