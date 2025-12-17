@@ -8,17 +8,17 @@ from langchain_core.messages import SystemMessage
 import config
 from .base import (
     ChatState,
-    research_manager,
-    RESEARCH_FINDINGS_DEDUPLICATION_PROMPT,
+    research_service,
 )
 from utils.helpers import get_current_datetime_str
 from llm_models import ResearchDeduplicationResult
+from services.prompt_cache import PromptCache
 from services.logging_config import get_logger
 
 logger = get_logger(__name__)
 
 
-def research_deduplication_node(state: ChatState) -> ChatState:
+async def research_deduplication_node(state: ChatState) -> ChatState:
     """Check if research findings are duplicates of existing findings."""
     logger.info("🔄 Research Deduplication: Checking for duplicate findings")
     
@@ -37,6 +37,7 @@ def research_deduplication_node(state: ChatState) -> ChatState:
     # Get search results and research metadata
     search_results = state.get("module_results", {}).get("search", {})
     research_metadata = state.get("workflow_context", {}).get("research_metadata", {})
+    topic_id = research_metadata.get("topic_id", "Unknown Topic ID")
     topic_name = research_metadata.get("topic_name", "Unknown Topic")
     user_id = research_metadata.get("user_id", "unknown")
     
@@ -53,36 +54,25 @@ def research_deduplication_node(state: ChatState) -> ChatState:
     
     try:
         # Get existing research findings for this topic and user
-        existing_findings = research_manager.get_research_findings(user_id, topic_name)
-        
-        if not existing_findings or topic_name not in existing_findings:
-            logger.info(f"🔄 Research Deduplication: ✅ No existing findings for topic '{topic_name}' - not a duplicate")
-            state["module_results"]["research_deduplication"] = {
-                "success": True,
-                "is_duplicate": False,
-                "reason": "No existing findings for comparison",
-                "topic_name": topic_name
-            }
-            return state
-        
-        topic_findings = existing_findings[topic_name]
-        
+        success, topic_findings = await research_service.async_get_findings(user_id, topic_id)
+
+        if not success:
+            raise Exception("Error retrieving existing findings")
+
         if not topic_findings:
             logger.info(f"🔄 Research Deduplication: ✅ Empty existing findings for topic '{topic_name}' - not a duplicate")
+
             state["module_results"]["research_deduplication"] = {
                 "success": True,
                 "is_duplicate": False,
                 "reason": "Empty existing findings list",
                 "topic_name": topic_name
             }
+
             return state
         
         # Get recent findings for comparison (last 3)
-        recent_findings = sorted(
-            topic_findings, 
-            key=lambda x: x.get("research_time", 0), 
-            reverse=True
-        )[:3]
+        recent_findings = topic_findings[:3]
         
         # Prepare existing findings text for comparison
         existing_text = "\n\n".join([
@@ -93,7 +83,7 @@ def research_deduplication_node(state: ChatState) -> ChatState:
         logger.info(f"🔄 Research Deduplication: Comparing against {len(recent_findings)} recent findings")
         
         # Create deduplication prompt
-        prompt = RESEARCH_FINDINGS_DEDUPLICATION_PROMPT.format(
+        prompt = PromptCache.get("RESEARCH_FINDINGS_DEDUPLICATION_PROMPT").format(
             current_time=get_current_datetime_str(),
             existing_findings=existing_text[:1500],  # Limit length
             new_findings=new_findings[:1500]  # Limit length

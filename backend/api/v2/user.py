@@ -41,6 +41,7 @@ async def get_me(
     return UserProfile(
         id=user.id,
         created_at=user.created_at,
+        role=user.role,
         metadata=(profile.meta_data if profile and profile.meta_data else {}),
         personality=PersonalityConfig.model_validate(profile.personality or {}),
         preferences=PreferencesConfig.model_validate(profile.preferences or {}),

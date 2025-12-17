@@ -1,9 +1,10 @@
 from __future__ import annotations
 import uuid
 from typing import Optional
-from sqlalchemy import String, Boolean, Float, UniqueConstraint, Index, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import String, Boolean, Float, ForeignKey, Text
+from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY, TEXT
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.ext.mutable import MutableList
 
 from .base import Base
 
@@ -29,14 +30,13 @@ class ResearchFinding(Base):
     bookmarked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     integrated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
-    # Metrics
-    research_time: Mapped[float] = mapped_column(Float, nullable=False)
+    # Result data
     quality_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-
-    __table_args__ = (
-        UniqueConstraint("user_id", "finding_id", name="uq_research_finding_user_finding"),
-        Index("ix_findings_user_topic", "user_id", "topic_name"),
-        Index("ix_findings_time", "research_time"),
-    )
-
-
+    findings_content: Mapped[Optional[str]] = mapped_column(Text)
+    formatted_content: Mapped[Optional[str]] = mapped_column(Text)
+    research_query: Mapped[Optional[str]] = mapped_column(Text)
+    findings_summary: Mapped[Optional[str]] = mapped_column(Text)
+    source_urls: Mapped[list[str]] = mapped_column(MutableList.as_mutable(ARRAY(TEXT)), nullable=True)
+    citations: Mapped[list[str]] = mapped_column(MutableList.as_mutable(ARRAY(TEXT)), nullable=True)
+    key_insights: Mapped[list[str]] = mapped_column(MutableList.as_mutable(ARRAY(TEXT)), nullable=True)
+    search_sources: Mapped[list[dict]] = mapped_column(MutableList.as_mutable(JSONB), nullable=True)

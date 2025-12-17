@@ -62,6 +62,41 @@ export const getModels = async () => {
   }
 };
 
+// Get all chat sessions for the current user
+export const getAllChatSessions = async () => {
+  try {
+    const response = await api.get('/chat');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching chat sessions:', error);
+    throw error;
+  }
+};
+
+// Create or switch to a chat session
+export const createOrSwitchSession = async (sessionId = null) => {
+  try {
+    // For session initialization, send a minimal user message
+    // The backend will create or retrieve the session based on session_id
+    const payload = {
+      messages: [{ role: 'user', content: 'Hello' }],
+      temperature: 0.7,
+      max_tokens: 1000,
+    };
+
+    // Include session_id if provided (switching to existing session)
+    if (sessionId) {
+      payload.session_id = sessionId;
+    }
+
+    const response = await api.post('/chat', payload);
+    return response.data;
+  } catch (error) {
+    console.error('Error creating/switching session:', error);
+    throw error;
+  }
+};
+
 // Send a chat message
 export const sendChatMessage = async (messages, temperature = 0.7, maxTokens = 1000, personality = null, sessionId = null) => {
   try {
@@ -427,7 +462,7 @@ export const getResearchFindings = async (userId, topicName = null, unreadOnly =
     if (topicName) params.topic_name = topicName;
     if (unreadOnly) params.unread_only = unreadOnly;
 
-    const response = await api.get(`/research/findings/${userId}`, { params });
+    const response = await api.get(`/research/findings`, { params });
     console.log('Research findings response:', response.data);
     return response.data;
   } catch (error) {
@@ -583,6 +618,17 @@ export const loginWithGoogle = async (idToken) => {
     return response.data;
   } catch (error) {
     console.error('Error logging in with Google:', error);
+    throw error;
+  }
+};
+
+// Trigger user activity for motivation system
+export const triggerUserActivity = async () => {
+  try {
+    const response = await api.post('/research/debug/trigger-user-activity');
+    return response.data;
+  } catch (error) {
+    console.error('Error triggering user activity:', error);
     throw error;
   }
 };

@@ -8,11 +8,9 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage
 
 import config
-from .base import (
-    ChatState,
-    INTEGRATOR_SYSTEM_PROMPT,
-)
+from .base import ChatState
 from utils.helpers import get_current_datetime_str, get_last_user_message
+from services.prompt_cache import PromptCache
 from services.status_manager import queue_status  # noqa: F401
 from services.logging_config import get_logger
 
@@ -358,7 +356,7 @@ When synthesizing, cross-reference information between sources and highlight are
     context_section = "\n\n".join(context_sections) if context_sections else ""
 
     # Create enhanced system message with context
-    system_message_content = INTEGRATOR_SYSTEM_PROMPT.format(
+    system_message_content = PromptCache.get("INTEGRATOR_SYSTEM_PROMPT").format(
         current_time=current_time_str, memory_context_section=memory_context_section, context_section=context_section
     )
 

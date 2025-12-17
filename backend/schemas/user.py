@@ -50,6 +50,7 @@ class UserProfile(BaseModel):
     """Complete user profile information."""
     id: UUID
     created_at: datetime
+    role: str
     metadata: dict[str, Any] = Field(default_factory=dict)
     personality: PersonalityConfig = Field(default_factory=PersonalityConfig)
     preferences: Optional[PreferencesConfig] = None

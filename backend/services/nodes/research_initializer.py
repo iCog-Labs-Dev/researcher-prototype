@@ -23,6 +23,7 @@ def research_initializer_node(state: ChatState) -> ChatState:
     
     # Get research context from workflow_context
     research_context = state["workflow_context"].get("research_context", {})
+    topic_id = research_context.get("topic_id", "Unknown Topic ID")
     topic_name = research_context.get("topic_name", "Unknown Topic")
     topic_description = research_context.get("topic_description", "")
     user_id = research_context.get("user_id", "unknown")
@@ -53,6 +54,7 @@ def research_initializer_node(state: ChatState) -> ChatState:
     
     # Store research metadata
     state["workflow_context"]["research_metadata"] = {
+        "topic_id": topic_id,
         "topic_name": topic_name,
         "topic_description": topic_description,
         "research_query": research_query,
