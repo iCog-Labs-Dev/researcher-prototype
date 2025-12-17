@@ -5,7 +5,6 @@ from sqlalchemy import select, and_
 
 from exceptions import NotFound
 from models.chat import Chat
-from services.user import UserService
 
 
 class ChatService:

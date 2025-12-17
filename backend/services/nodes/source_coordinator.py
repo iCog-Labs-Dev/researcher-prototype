@@ -7,7 +7,7 @@ from typing import Dict, Any
 
 from .base import ChatState
 # Import search services
-from services.search_services import (
+from services.search import (
     PerplexitySearchService,
     OpenAlexSearchService,
     HackerNewsSearchService,

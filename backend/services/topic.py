@@ -56,19 +56,24 @@ class TopicService:
 
     async def async_get_active_research_topics(
         self,
-        user_id: Optional[uuid.UUID] = None,
-    ) -> list[ResearchTopic]:
-        async with SessionLocal() as session:
-            query = select(ResearchTopic).where(ResearchTopic.is_active_research.is_(True)).order_by(ResearchTopic.created_at.asc())
+        user_id: Optional[str] = None,
+    ) -> tuple[bool, list[ResearchTopic]]:
+        try:
+            async with SessionLocal() as session:
+                query = select(ResearchTopic).where(ResearchTopic.is_active_research.is_(True)).order_by(ResearchTopic.created_at.asc())
 
-            if user_id is not None:
-                query = query.where(ResearchTopic.user_id == user_id)
+                if user_id is not None:
+                    query = query.where(ResearchTopic.user_id == user_id)
 
-            res = await session.execute(query)
+                res = await session.execute(query)
 
-            topics = list(res.scalars().all())
+                topics = list(res.scalars().all())
 
-        return topics
+            return True, topics
+        except Exception as e:
+            logger.error(f"Error getting active research topics: {str(e)}")
+
+            return False, []
 
     async def get_count_chats_by_user_id(
         self,
@@ -278,27 +283,34 @@ class TopicService:
 
     async def async_update_topic_last_researched(
         self,
-        topic_id: uuid.UUID,
-    ):
-        async with SessionLocal.begin() as session:
-            query = (
-                update(ResearchTopic)
-                .where(ResearchTopic.id == topic_id)
-                .values(
-                    last_researched=func.now(),
-                    research_count=ResearchTopic.research_count + 1,
+        topic_id: str,
+    ) -> bool:
+        try:
+            async with SessionLocal.begin() as session:
+                query = (
+                    update(ResearchTopic)
+                    .where(ResearchTopic.id == topic_id)
+                    .values(
+                        last_researched=func.now(),
+                        research_count=ResearchTopic.research_count + 1,
+                    )
                 )
-            )
 
-            await session.execute(query)
+                await session.execute(query)
+
+            return True
+        except Exception as e:
+            logger.error(f"Error updating topic '{topic_id} last researched time': {str(e)}")
+
+            return False
 
     async def async_extract_and_store_topics(
         self,
-        user_id: uuid.UUID,
-        chat_id: uuid.UUID,
+        user_id: str,
+        chat_id: str,
         state: dict,
         conversation_context: str,
-    ):
+    ) -> bool:
         try:
             logger.info(f"🔍 Background: Starting topic extraction for chat {chat_id}")
 
@@ -340,17 +352,22 @@ class TopicService:
                             )
 
                 else:
-                    logger.info(f"🔍 Background: No topics extracted for chat {chat_id}")
+                    logger.warning(f"🔍 Background: No topics extracted for chat {chat_id}")
+
+                return True
             else:
                 logger.warning(
                     f"🔍 Background: Topic extraction failed for chat {chat_id}: {topic_results.get('message', 'Unknown error')}"
                 )
+
 
         except Exception as e:
             logger.error(
                 f"🔍 Background: Error in topic extraction for chat {chat_id}: {str(e)}",
                 exc_info=True,
             )
+
+        return False
 
     async def _create_topic(
         self,

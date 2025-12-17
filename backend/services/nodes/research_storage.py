@@ -8,14 +8,16 @@ import asyncio
 import config
 from .base import (
     ChatState,
-    research_manager
+    research_service,
+    FindingPayload,
+    topic_service,
 )
 from services.logging_config import get_logger
 
 logger = get_logger(__name__)
 
 
-def research_storage_node(state: ChatState) -> ChatState:
+async def research_storage_node(state: ChatState) -> ChatState:
     """Store research findings if they meet quality criteria and are not duplicates."""
     logger.info("💾 Research Storage: Processing research findings for storage")
     
@@ -26,6 +28,7 @@ def research_storage_node(state: ChatState) -> ChatState:
     research_metadata = state.get("workflow_context", {}).get("research_metadata", {})
     
     # Extract key information
+    topic_id = research_metadata.get("topic_id", "Unknown Topic ID")
     topic_name = research_metadata.get("topic_name", "Unknown Topic")
     user_id = research_metadata.get("user_id", "unknown")
     research_query = state.get("workflow_context", {}).get("refined_search_query", "")
@@ -58,18 +61,26 @@ def research_storage_node(state: ChatState) -> ChatState:
     
     if overall_quality_score < quality_threshold:
         logger.info(f"💾 Research Storage: ⚠️ Quality score {overall_quality_score:.2f} below threshold {quality_threshold} - not storing")
-        
+
         # Still update last researched time to avoid immediate retry
-        research_manager.update_topic_last_researched(user_id, topic_name)
-        
-        state["module_results"]["research_storage"] = {
-            "success": True,
-            "stored": False,
-            "reason": "Quality below threshold",
-            "quality_score": overall_quality_score,
-            "quality_threshold": quality_threshold,
-            "topic_updated": True
-        }
+        success = await topic_service.async_update_topic_last_researched(user_id, topic_id)
+
+        if success:
+            state["module_results"]["research_storage"] = {
+                "success": True,
+                "stored": False,
+                "reason": "Quality below threshold",
+                "quality_score": overall_quality_score,
+                "quality_threshold": quality_threshold,
+                "topic_updated": True
+            }
+        else:
+            state["module_results"]["research_storage"] = {
+                "success": False,
+                "error": "Failed to update topic last researched time",
+                "stored": False,
+            }
+
         return state
     
     # Check for duplicates
@@ -79,15 +90,23 @@ def research_storage_node(state: ChatState) -> ChatState:
         logger.info(f"💾 Research Storage: ⚠️ Findings are duplicate - not storing")
         
         # Still update last researched time
-        research_manager.update_topic_last_researched(user_id, topic_name)
-        
-        state["module_results"]["research_storage"] = {
-            "success": True,
-            "stored": False,
-            "reason": "Duplicate findings",
-            "similarity_score": dedup_results.get("similarity_score", 0.0),
-            "topic_updated": True
-        }
+        success = await topic_service.async_update_topic_last_researched(user_id, topic_id)
+
+        if success:
+            state["module_results"]["research_storage"] = {
+                "success": True,
+                "stored": False,
+                "reason": "Duplicate findings",
+                "similarity_score": dedup_results.get("similarity_score", 0.0),
+                "topic_updated": True
+            }
+        else:
+            state["module_results"]["research_storage"] = {
+                "success": False,
+                "error": "Failed to update topic last researched time",
+                "stored": False,
+            }
+
         return state
     
     # Prepare finding data for storage
@@ -106,35 +125,30 @@ def research_storage_node(state: ChatState) -> ChatState:
     citations = search_results.get("citations", [])
     search_sources = search_results.get("search_results", [])
     
-    finding = {
-        "findings_content": research_content,  # Raw content from search
-        "formatted_content": formatted_content,  # Formatted content with clickable citations
-        "research_time": current_time,
-        "quality_score": overall_quality_score,
-        "source_urls": quality_assessment.get("source_urls", []),
-        "citations": citations,  # Direct citation URLs from Perplexity
-        "search_sources": search_sources,  # Structured source information
-        "research_query": research_query,
-        "key_insights": quality_assessment.get("key_insights", []),
-        "findings_summary": quality_assessment.get("findings_summary", "")
-    }
+    finding = FindingPayload(
+        quality_score=overall_quality_score,
+        findings_content=research_content, # Raw content from search
+        formatted_content=formatted_content, # Formatted content with clickable citations
+        research_query=research_query,
+        findings_summary=quality_assessment.get("findings_summary"),
+        source_urls=quality_assessment.get("source_urls"),
+        citations=citations, # Direct citation URLs from Perplexity
+        key_insights=quality_assessment.get("key_insights"),
+        search_sources=search_sources, # Structured source information
+    )
     
     try:
         # Store the research finding
         logger.info(f"💾 Research Storage: Storing high-quality finding for topic '{topic_name}' (score: {overall_quality_score:.2f})")
         
-        success = research_manager.store_research_finding(user_id, topic_name, finding)
+        success, finding_id = await research_service.async_store_research_finding(user_id, topic_id, topic_name, finding)
         
         if success:
-            # Update last researched time
-            research_manager.update_topic_last_researched(user_id, topic_name, current_time)
-            
             logger.info(f"💾 Research Storage: ✅ Successfully stored research finding for '{topic_name}'")
             
             # Send notification about new research
             try:
                 from services.notification_manager import notification_service
-                finding_id = f"{user_id}_{topic_name}_{int(current_time)}"
                 
                 # Get or create event loop for this thread
                 try:
@@ -149,7 +163,7 @@ def research_storage_node(state: ChatState) -> ChatState:
                     # If loop is running, schedule as task
                     asyncio.create_task(notification_service.notify_new_research(
                         user_id=user_id,
-                        topic_id=topic_name,
+                        topic_id=topic_id,
                         result_id=finding_id,
                         topic_name=topic_name
                     ))
@@ -157,7 +171,7 @@ def research_storage_node(state: ChatState) -> ChatState:
                     # Run the async function in the loop
                     loop.run_until_complete(notification_service.notify_new_research(
                         user_id=user_id,
-                        topic_id=topic_name,
+                        topic_id=topic_id,
                         result_id=finding_id,
                         topic_name=topic_name
                     ))
@@ -171,7 +185,7 @@ def research_storage_node(state: ChatState) -> ChatState:
             state["module_results"]["research_storage"] = {
                 "success": True,
                 "stored": True,
-                "finding_id": f"{user_id}_{topic_name}_{int(current_time)}",
+                "finding_id": finding_id,
                 "quality_score": overall_quality_score,
                 "insights_count": len(quality_assessment.get("key_insights", [])),
                 "content_length": len(research_content),
@@ -183,9 +197,8 @@ def research_storage_node(state: ChatState) -> ChatState:
             
             state["module_results"]["research_storage"] = {
                 "success": False,
-                "error": "Failed to store research finding in user profile",
+                "error": "Failed to store research finding",
                 "stored": False,
-                "quality_score": overall_quality_score
             }
             
     except Exception as e:
@@ -199,4 +212,4 @@ def research_storage_node(state: ChatState) -> ChatState:
             "quality_score": overall_quality_score
         }
     
-    return state 
+    return state

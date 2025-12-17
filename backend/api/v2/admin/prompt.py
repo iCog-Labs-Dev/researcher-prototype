@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_session
 from dependencies import inject_user_id
 from services.prompt import PromptService
+from services.prompt_cache import PromptCache
 from schemas.admin import (
     PromptUpdateIn,
     PromptTestIn,
@@ -84,6 +85,8 @@ async def update_prompt(
     service = PromptService()
     prompt = await service.update_prompt(session, prompt_name, body.content, admin_id)
 
+    await PromptCache.refresh_one(prompt_name)
+
     return PromptRecord(
         name=prompt.name,
         content=prompt.content,
@@ -153,6 +156,8 @@ async def restore_prompt(
 
     service = PromptService()
     prompt = await service.restore_prompt(session, prompt_name, admin_id)
+
+    await PromptCache.refresh_one(prompt_name)
 
     return PromptRecord(
         name=prompt.name,
