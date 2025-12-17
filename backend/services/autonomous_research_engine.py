@@ -226,7 +226,7 @@ class AutonomousResearcher:
 
                 except Exception as e:
                     logger.error(
-                        f"🔬 Error researching topic {getattr(topic, 'name', 'unknown')} for user {getattr(topic, 'user_id', 'unknown')}: {str(e)}"
+                        f"🔬 Error researching topic {topic.name} for user {topic.user_id}: {str(e)}"
                     )
                     continue
 
@@ -424,10 +424,10 @@ class AutonomousResearcher:
                     await asyncio.sleep(config.RESEARCH_MANUAL_DELAY)
 
                 except Exception as e:
-                    logger.error(f"🔬 Error in manual LangGraph research for topic {getattr(topic, 'name', 'unknown')}: {str(e)}")
+                    logger.error(f"🔬 Error in manual LangGraph research for topic {topic.name}: {str(e)}")
                     research_details.append(
                         {
-                            "topic_name": getattr(topic, "name", "Unknown"),
+                            "topic_name": topic.name,
                             "success": False,
                             "stored": False,
                             "error": str(e),
