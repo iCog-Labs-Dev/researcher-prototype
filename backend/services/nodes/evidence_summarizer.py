@@ -7,12 +7,10 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage
 
 import config
-from .base import (
-    ChatState,
-    EVIDENCE_SUMMARIZER_PROMPT,
-)
+from .base import ChatState
 from llm_models import EvidenceSummary
 from utils.helpers import get_current_datetime_str, get_last_user_message
+from services.prompt_cache import PromptCache
 from services.status_manager import queue_status  # noqa: F401
 from services.logging_config import get_logger
 
@@ -117,7 +115,7 @@ async def evidence_summarizer_node(state: ChatState) -> ChatState:
         enumerated_block = "\n".join(enumerated_items)
 
         # Create the summarization prompt
-        prompt = EVIDENCE_SUMMARIZER_PROMPT.format(
+        prompt = PromptCache.get("EVIDENCE_SUMMARIZER_PROMPT").format(
             current_time=current_time,
             source_name=source_human_name,
             query=query,

@@ -1,4 +1,5 @@
 import uuid
+from typing import TypedDict, Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, delete, func, exists
 
@@ -8,6 +9,18 @@ from exceptions import NotFound, AlreadyExist
 from models import ResearchFinding, ResearchTopic
 
 logger = get_logger(__name__)
+
+
+class FindingPayload(TypedDict, total=False):
+    quality_score: Optional[float]
+    findings_content: Optional[str]
+    formatted_content: Optional[str]
+    research_query: Optional[str]
+    findings_summary: Optional[str]
+    source_urls: Optional[list[str]]
+    citations: Optional[list[str]]
+    key_insights: Optional[list[str]]
+    search_sources: Optional[list[dict[str, Any]]]
 
 
 class ResearchService:
@@ -32,24 +45,75 @@ class ResearchService:
 
     async def async_get_findings(
         self,
-        user_id: uuid.UUID,
-        topic_id: uuid.UUID,
-    ) -> list[ResearchFinding]:
-        async with SessionLocal() as session:
-            query = select(ResearchFinding).where(
-                and_(ResearchFinding.user_id == user_id, ResearchFinding.topic_id == topic_id)
-            ).order_by(ResearchFinding.created_at.desc())
+        user_id: str,
+        topic_id: str,
+    ) -> tuple[bool, list[ResearchFinding]]:
+        try:
+            async with SessionLocal() as session:
+                query = select(ResearchFinding).where(
+                    and_(ResearchFinding.user_id == user_id, ResearchFinding.topic_id == topic_id)
+                ).order_by(ResearchFinding.created_at.desc())
 
-            res = await session.execute(query)
+                res = await session.execute(query)
 
-            findings = list(res.scalars().all())
+                findings = list(res.scalars().all())
 
-        return findings
+            return True, findings
+        except Exception as e:
+            logger.error(f"Error getting findings for user {user_id}, topic {topic_id}: {str(e)}")
+
+            return False, []
+
+    async def async_store_research_finding(
+        self,
+        user_id: str,
+        topic_id: str,
+        topic_name: str,
+        finding_data: FindingPayload,
+    ) -> tuple[bool, Optional[str]]:
+        try:
+            async with SessionLocal.begin() as session:
+                query = select(ResearchTopic.id).where(
+                    and_(ResearchTopic.id == topic_id, ResearchTopic.user_id == user_id)
+                )
+
+                res = await session.execute(query)
+
+                topic = res.scalar_one_or_none()
+
+                if not topic:
+                    logger.error(f"Error storing research finding for user {user_id}, topic '{topic_name}': topic not found")
+
+                    return False, None
+
+                finding = ResearchFinding(
+                    user_id=user_id,
+                    topic_id=topic_id,
+                    topic_name=topic_name,
+                    quality_score=finding_data.get("quality_score"),
+                    findings_content=finding_data.get("findings_content"),
+                    formatted_content=finding_data.get("formatted_content"),
+                    research_query=finding_data.get("research_query"),
+                    findings_summary=finding_data.get("findings_summary"),
+                    source_urls=finding_data.get("source_urls"),
+                    citations=finding_data.get("citations"),
+                    key_insights=finding_data.get("key_insights"),
+                    search_sources=finding_data.get("search_sources"),
+                )
+
+                session.add(finding)
+                await session.flush()
+
+            return True, finding.id
+        except Exception as e:
+            logger.error(f"Error storing research finding for user {user_id}, topic '{topic_name}': {str(e)}")
+
+        return False, None
 
     async def async_cleanup_old_research_findings(
         self,
         retention_days: int,
-    ):
+    ) -> bool:
         try:
             async with SessionLocal.begin() as session:
                 query = (
@@ -86,8 +150,12 @@ class ResearchService:
                 f"Cleanup done. Deleted findings: {deleted_findings}, deleted topics: {deleted_topics}, touched topics: {len(touched_topic_ids)}",
             )
 
+            return True
+
         except Exception as e:
             logger.error(f"Cleanup failed: {str(e)}")
+
+        return False
 
     async def mark_finding_as_read(
         self,

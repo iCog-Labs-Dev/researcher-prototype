@@ -61,18 +61,15 @@ class UserService:
 
     async def async_get_personalization_context(
         self,
-        user_id: Optional[str],
-    ) -> dict[str, Any]:
-        if not user_id:
-            return {}
-
+        user_id: str,
+    ) -> tuple[bool, dict[str, Any]]:
         try:
             async with SessionLocal() as session:
                 profile = await session.get(UserProfile, user_id)
 
             if profile is None:
                 logger.error(f"🔍 User {user_id} profile not found")
-                return {}
+                return False, {}
 
             preferences = profile.preferences or {}
             analytics = profile.engagement_analytics or {}
@@ -87,7 +84,7 @@ class UserService:
             preferred_sources = interaction_signals.get("most_engaged_source_types") or []
             follow_up_frequency = interaction_signals.get("follow_up_question_frequency") or 0.0
 
-            return {
+            return True, {
                 "content_preferences": content_preferences,
                 "format_preferences": format_preferences,
                 "interaction_preferences": interaction_preferences,
@@ -99,16 +96,17 @@ class UserService:
             }
         except Exception as e:
             logger.error(f"🔍 Failed to get personalization context for user {user_id}: {str(e)}")
-            return {}
+
+        return False, {}
 
     async def async_get_personality(
         self,
         user_id: Optional[str],
-    ) -> dict[str, Any]:
+    ) -> tuple[bool, dict[str, Any]]:
         default_personality = {"style": "helpful", "tone": "friendly", "additional_traits": {}}
 
         if not user_id:
-            return default_personality
+            return True, default_personality
 
         try:
             async with SessionLocal() as session:
@@ -116,15 +114,16 @@ class UserService:
 
             if profile is None:
                 logger.error(f"🔍 User {user_id} profile not found")
-                return default_personality
+                return False, default_personality
 
             if not profile.personality:
-                return default_personality
+                return True, default_personality
 
-            return profile.personality
+            return True, profile.personality
         except Exception as e:
             logger.error(f"🔍 Failed to get personality for user {user_id}: {str(e)}")
-            return default_personality
+
+        return False, default_personality
 
     async def update_display_name(
         self,

@@ -15,6 +15,9 @@ from exceptions import CommonError
 # Import and configure logging after environment variables are loaded
 from services.logging_config import configure_logging, get_logger
 
+# Import prompt cache
+from services.prompt_cache import PromptCache
+
 # Configure application logging
 logger = configure_logging()
 
@@ -46,6 +49,13 @@ async def lifespan(app: FastAPI):
     """Manage the lifespan of the FastAPI application."""
     # Startup
     logger.info("🚀 Starting AI Chatbot API...")
+
+    # Initialize prompts
+    try:
+        await PromptCache.refresh_all()
+        logger.info("🔬 Prompts loaded")
+    except Exception as e:
+        logger.error(f"🔬 Failed to load prompts: {e}")
 
     # Initialize and start the autonomous researcher
     try:
