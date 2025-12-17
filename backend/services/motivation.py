@@ -6,7 +6,7 @@ import asyncio
 import time
 import uuid
 from typing import List, Dict, Any, Optional, Union
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import update, func, select
@@ -434,9 +434,7 @@ class MotivationSystem:
                                 "topic_id": str(research_topic.id),
                                 "topic_name": research_topic.name,
                                 "description": research_topic.description,
-                                "last_researched": research_topic.last_researched.timestamp()
-                                if getattr(research_topic, "last_researched", None)
-                                else 0.0,
+                                "last_researched": research_topic.last_researched.astimezone(timezone.utc).strftime("%Y-%m-%d") if research_topic.last_researched else None,
                                 "is_active_research": research_topic.is_active_research,
                             }
                             

@@ -5,6 +5,7 @@ Autonomous Research Engine using LangGraph for conducting background research on
 import asyncio
 import time
 import uuid
+from datetime import timezone
 from typing import Dict, List, Any, Optional
 
 
@@ -192,7 +193,7 @@ class AutonomousResearcher:
                                 "topic_id": str(topic.id),
                                 "topic_name": topic.name,
                                 "description": topic.description,
-                                "last_researched": topic.last_researched.timestamp() if getattr(topic, "last_researched", None) else 0.0,
+                                "last_researched": topic.last_researched.astimezone(timezone.utc).strftime("%Y-%m-%d") if topic.last_researched else None,
                                 "is_active_research": topic.is_active_research,
                             }
 
@@ -405,7 +406,7 @@ class AutonomousResearcher:
                         "topic_id": str(topic.id),
                         "topic_name": topic.name,
                         "description": topic.description,
-                        "last_researched": topic.last_researched.timestamp() if getattr(topic, "last_researched", None) else 0.0,
+                        "last_researched": topic.last_researched.astimezone(timezone.utc).strftime("%Y-%m-%d") if topic.last_researched else None,
                         "is_active_research": topic.is_active_research,
                     }
                     research_result = await self.run_langgraph_research(user_id, topic_payload)
