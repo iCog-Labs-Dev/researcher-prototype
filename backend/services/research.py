@@ -34,23 +34,20 @@ class ResearchService:
     async def async_get_findings(
         self,
         user_id: uuid.UUID,
-        topic_name: str = None,
-        topic_id: uuid.UUID = None,
-        unread_only: bool = False,
+        topic_id: uuid.UUID,
     ) -> list[dict]:
-        """Async wrapper to get findings by user_id and optional topic_name or topic_id (converts to dict format for compatibility)."""
+        """Async wrapper to get findings by user_id and topic_id (converts to dict format for compatibility)."""
         async with SessionLocal() as session:
-            query = select(ResearchFinding).where(ResearchFinding.user_id == user_id)
-            
-            if topic_id:
-                query = query.where(ResearchFinding.topic_id == topic_id)
-            elif topic_name:
-                query = query.where(ResearchFinding.topic_name == topic_name)
-            
-            if unread_only:
-                query = query.where(ResearchFinding.read.is_(False))
-            
-            query = query.order_by(ResearchFinding.research_time.desc())
+            query = (
+                select(ResearchFinding)
+                .where(
+                    and_(
+                        ResearchFinding.user_id == user_id,
+                        ResearchFinding.topic_id == topic_id
+                    )
+                )
+                .order_by(ResearchFinding.research_time.desc())
+            )
             
             res = await session.execute(query)
             findings = list(res.scalars().all())

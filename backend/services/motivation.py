@@ -330,8 +330,14 @@ class MotivationSystem:
             if not user_uuid:
                 return 0.0
             
+            # Get topic_id from topic_name
+            active_topics = await self.topic_service.async_get_active_research_topics(user_id=user_uuid)
+            topic = next((t for t in active_topics if t.name == topic_name), None)
+            if not topic:
+                return 0.0
+            
             # Get all findings for this user and topic from DB
-            all_findings = await self.research_service.async_get_findings(user_uuid, topic_name=topic_name, unread_only=False)
+            all_findings = await self.research_service.async_get_findings(user_uuid, topic_id=topic.id)
             if not all_findings:
                 return 0.0
             

@@ -63,9 +63,15 @@ class AutonomousResearcher:
             if not user_uuid:
                 return 0.0
             
+            # Get topic_id from topic_name
+            active_topics = await self.topic_service.async_get_active_research_topics(user_id=user_uuid)
+            topic = next((t for t in active_topics if t.name == topic_name), None)
+            if not topic:
+                return 0.0
+            
             now = time.time()
             window_start = now - (window_days * 24 * 3600)
-            findings = await self.research_service.async_get_findings(user_uuid, topic_name=topic_name, unread_only=False)
+            findings = await self.research_service.async_get_findings(user_uuid, topic_id=topic.id)
             scores = [f.get("quality_score") for f in findings if f.get("research_time", 0) >= window_start and isinstance(f.get("quality_score"), (int, float))]
             if not scores:
                 return 0.0
@@ -307,12 +313,18 @@ class AutonomousResearcher:
                     try:
                         user_uuid = uuid.UUID(user_id) if user_id != "guest" else None
                         if user_uuid:
-                            findings = await self.research_service.async_get_findings(user_uuid, topic_name=name, unread_only=False)
-                            window_start = now_ts - window_days * 24 * 3600
-                            any_interaction = any(
-                                (f.get('read', False) or f.get('bookmarked', False) or f.get('integrated', False)) and f.get('research_time', 0) >= window_start
-                                for f in findings
-                            )
+                            # Get topic_id from topic_name (file storage topics don't have topic_id, skip if not found)
+                            topic_id_str = topic.get('topic_id')
+                            if topic_id_str:
+                                topic_id = uuid.UUID(topic_id_str)
+                                findings = await self.research_service.async_get_findings(user_uuid, topic_id=topic_id)
+                                window_start = now_ts - window_days * 24 * 3600
+                                any_interaction = any(
+                                    (f.get('read', False) or f.get('bookmarked', False) or f.get('integrated', False)) and f.get('research_time', 0) >= window_start
+                                    for f in findings
+                                )
+                            else:
+                                any_interaction = False
                         else:
                             any_interaction = False
                     except Exception:
