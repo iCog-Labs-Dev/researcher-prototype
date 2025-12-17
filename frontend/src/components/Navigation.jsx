@@ -7,7 +7,6 @@ import UserProfile from './UserProfile';
 import KnowledgeGraphViewer from './graph/KnowledgeGraphViewer';
 import NotificationBadge from './NotificationBadge';
 import NotificationPanel from './NotificationPanel';
-import AuthModal from './AuthModal';
 import { getCurrentUser } from '../services/api';
 import { generateDisplayName } from '../utils/userUtils';
 import '../styles/Navigation.css';
@@ -31,37 +30,62 @@ const Navigation = () => {
   const [isDashboardsOpen, setIsDashboardsOpen] = useState(false);
 
   const isOnChatPage = location.pathname === '/';
-  const appMode = process.env.REACT_APP_MODE || 'dev';
-  const isTestMode = appMode === 'test';
 
   const handleLogout = () => {
     logout();
     resetSession();
   };
 
+  const isAdmin = (authUser?.role ?? authUser?.metadata?.role) === 'admin';
+
+  const showNoAdminAccessToast = useCallback(() => {
+    window.dispatchEvent(
+      new CustomEvent('showToast', {
+        detail: {
+          id: `access_denied_${Date.now()}`,
+          type: 'access_denied',
+          title: 'Access denied',
+          message: "You don't have access to the admin dashboard.",
+          timestamp: new Date(),
+          read: true,
+        },
+      })
+    );
+  }, []);
+
   // Sync display name and personality from AuthContext user data
   // Use id instead of whole user object to prevent rerender loops
   const authUserId = authUser?.id || '';
+  const authUserDisplayName = authUser?.metadata?.display_name || authUser?.display_name || authUser?.email || '';
+  const authUserPersonality = authUser?.personality;
   const prevPersonalityRef = useRef(null);
 
   useEffect(() => {
-    if (!isAuthenticated || !authUser) {
+    if (!isAuthenticated || !authUserId) {
       return;
     }
 
-    const displayName = authUser.metadata?.display_name || authUser.display_name || authUser.email;
+    const displayName = authUserDisplayName;
     if (displayName && displayName !== userDisplayName) {
       updateUserDisplayName(displayName);
     }
 
     // Only update personality if it actually changed
-    const currentPersonalityStr = JSON.stringify(authUser.personality);
+    const currentPersonalityStr = JSON.stringify(authUserPersonality);
     const prevPersonalityStr = JSON.stringify(prevPersonalityRef.current);
-    if (authUser.personality && currentPersonalityStr !== prevPersonalityStr) {
-      updatePersonality(authUser.personality);
-      prevPersonalityRef.current = authUser.personality;
+    if (authUserPersonality && currentPersonalityStr !== prevPersonalityStr) {
+      updatePersonality(authUserPersonality);
+      prevPersonalityRef.current = authUserPersonality;
     }
-  }, [isAuthenticated, authUserId, authUser?.metadata?.display_name, authUser?.display_name, authUser?.email, authUser?.personality, userDisplayName, updateUserDisplayName, updatePersonality]);
+  }, [
+    isAuthenticated,
+    authUserId,
+    authUserDisplayName,
+    authUserPersonality,
+    userDisplayName,
+    updateUserDisplayName,
+    updatePersonality
+  ]);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -193,6 +217,12 @@ const Navigation = () => {
                 to="/admin"
                 className={`nav-link admin-link ${location.pathname.startsWith('/admin') ? 'active' : ''}`}
                 title="Admin Panel - Prompt Management"
+                onClick={(e) => {
+                  if (isAuthenticated && !isAdmin) {
+                    e.preventDefault();
+                    showNoAdminAccessToast();
+                  }
+                }}
               >
                 🛠️ Admin
               </Link>

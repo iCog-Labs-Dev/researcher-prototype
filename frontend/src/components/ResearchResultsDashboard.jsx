@@ -87,7 +87,6 @@ const ResearchResultsDashboard = () => {
       setError(null);
 
       const findingsResponse = await getResearchFindings(userId, null, filters.unreadOnly);
-        console.log(111111)
       // Group findings by topic
       const groupedFindings = {};
       const findings = findingsResponse.findings || [];
