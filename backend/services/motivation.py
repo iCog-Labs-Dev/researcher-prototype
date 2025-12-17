@@ -57,7 +57,6 @@ class MotivationSystem:
         self.check_interval = config.MOTIVATION_CHECK_INTERVAL
         
         # Research parameters
-        self.max_topics_per_user = config.RESEARCH_MAX_TOPICS_PER_USER
         self.quality_threshold = config.RESEARCH_QUALITY_THRESHOLD
         
         # Initialize topic expansion service
@@ -258,11 +257,11 @@ class MotivationSystem:
             if not active_topics:
                 return False
 
-            topics_by_user: Dict[uuid.UUID, list] = {}
+            unique_users: set = set()
             for topic in active_topics:
-                topics_by_user.setdefault(topic.user_id, []).append(topic)
+                unique_users.add(topic.user_id)
 
-            for user_uuid in topics_by_user.keys():
+            for user_uuid in unique_users:
                 try:
                     topics_needing_research = await self.db_service.get_topics_needing_research(
                         user_uuid,
@@ -396,24 +395,26 @@ class MotivationSystem:
                     "average_quality": 0.0,
                 }
 
-            topics_by_user: Dict[uuid.UUID, List] = {}
+            # Build lookup map: (user_id, topic_name) -> ResearchTopic
+            topic_lookup: Dict[tuple, Any] = {}
+            unique_users: set = set()
             for topic in active_topics:
-                topics_by_user.setdefault(topic.user_id, []).append(topic)
+                topic_lookup[(topic.user_id, topic.name)] = topic
+                unique_users.add(topic.user_id)
 
-            logger.info(f"🎯 Scanning {len(topics_by_user)} users for motivated research topics...")
+            logger.info(f"🎯 Processing {len(active_topics)} active topics across {len(unique_users)} users...")
             
             total_topics_researched = 0
             total_findings_stored = 0
             quality_scores: List[float] = []
             
-            for user_uuid, user_topics in topics_by_user.items():
+            for user_uuid in unique_users:
                 user_id = str(user_uuid)
                 try:
-                    topic_lookup = {t.name: t for t in user_topics}
                     topics_needing_research = await self.db_service.get_topics_needing_research(
                         user_uuid,
                         threshold=self._config.topic_threshold,
-                        limit=self.max_topics_per_user,
+                        limit=None,  # No limit - already limited by MAX_ACTIVE_RESEARCH_TOPICS_PER_USER
                     )
 
                     if not topics_needing_research:
@@ -424,7 +425,7 @@ class MotivationSystem:
                     for topic_score in topics_needing_research:
                         try:
                             topic_name = topic_score.topic_name
-                            research_topic = topic_lookup.get(topic_name)
+                            research_topic = topic_lookup.get((user_uuid, topic_name))
                             if not research_topic:
                                 logger.debug(f"Topic '{topic_name}' missing from active topics lookup; skipping")
                                 continue
@@ -610,7 +611,6 @@ class MotivationSystem:
         return {
             "running": self.is_running,
             "check_interval": self.check_interval,
-            "max_topics_per_user": self.max_topics_per_user,
             "quality_threshold": self.quality_threshold,
             "system_type": "MotivationSystem",
             "features": [
