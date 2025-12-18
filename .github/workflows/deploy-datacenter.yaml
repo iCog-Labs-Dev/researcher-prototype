@@ -32,23 +32,17 @@ jobs:
           python-version: '3.10' 
           cache: 'pip'          
 
-      - name: Install System Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y graphviz
-
       - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          # Устанавливаем инструменты для тестов, если их нет в requirements.txt
-          pip install pytest pytest-asyncio httpx black
+          pip install pytest pytest-asyncio httpx
 
       - name: Run Unit Tests
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-mock-key-for-ci' }}
         run: |
-          pytest -v
+          bash run_tests.sh
         continue-on-error: ${{ github.event_name == 'workflow_dispatch' && inputs.ignore_tests == true }}
   
   frontend-tests:
