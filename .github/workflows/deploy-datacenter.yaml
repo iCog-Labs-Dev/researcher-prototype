@@ -10,6 +10,66 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend  
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10' 
+          cache: 'pip'          
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y graphviz
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # Устанавливаем инструменты для тестов, если их нет в requirements.txt
+          pip install pytest pytest-asyncio httpx black
+
+      - name: Check Formatting (Black)
+        run: black --check .
+
+      - name: Run Unit Tests
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-mock-key-for-ci' }}
+        run: |
+          pytest -v
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend 
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'   
+          cache: 'npm'          
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Unit Tests
+        run: npm run test:unit
+        
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
@@ -50,7 +110,6 @@ jobs:
           docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/qwestor-frontend:latest -f frontend/Dockerfile frontend/
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/qwestor-frontend:latest
           echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/qwestor-frontend:latest" >> $GITHUB_OUTPUT
-
 
   deploy:
     needs: build-and-push
