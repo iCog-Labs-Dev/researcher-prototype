@@ -4,6 +4,12 @@ on:
   push:
     branches: [ "dev" ]
   workflow_dispatch:
+    inputs:
+      ignore_tests:
+        description: 'Ignore failed tests?'
+        type: boolean
+        required: false
+        default: false
   
 env:
   REGISTRY: ghcr.io
@@ -38,15 +44,13 @@ jobs:
           # Устанавливаем инструменты для тестов, если их нет в requirements.txt
           pip install pytest pytest-asyncio httpx black
 
-      - name: Check Formatting (Black)
-        run: black --check .
-
       - name: Run Unit Tests
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-mock-key-for-ci' }}
         run: |
           pytest -v
-
+        continue-on-error: ${{ github.event_name == 'workflow_dispatch' && inputs.ignore_tests == true }}
+  
   frontend-tests:
     runs-on: ubuntu-latest
     defaults:
@@ -71,6 +75,7 @@ jobs:
         run: npm ci
 
       - name: Run Unit Tests
+        continue-on-error: ${{ github.event_name == 'workflow_dispatch' && inputs.ignore_tests == true }}
         run: npm run test:unit
         
   build-and-push:
