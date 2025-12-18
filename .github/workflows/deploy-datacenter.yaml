@@ -40,6 +40,8 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-mock-key-for-ci' }}
         run: |
+          cp .env.example .env
+          export OPENAI_API_KEY=${{'sk-mock-key-for-ci' }}
           bash run_tests.sh
         continue-on-error: ${{ github.event_name == 'workflow_dispatch' && inputs.ignore_tests == true }}
   
