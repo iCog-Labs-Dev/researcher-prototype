@@ -1,8 +1,9 @@
+from uuid import UUID
 from typing import Annotated
-from fastapi import APIRouter, Request, Depends
+import asyncio
+from fastapi import APIRouter, Request, Depends, Query
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from sqlalchemy.ext.asyncio import AsyncSession
-import asyncio
 
 from db import get_session
 from services.logging_config import get_logger
@@ -14,6 +15,7 @@ from schemas.chat import (
     ChatIn,
     ChatOut,
     ChatView,
+    ChatHistoryItem,
 )
 from services.chat import ChatService
 from services.user import UserService
@@ -68,7 +70,9 @@ async def chat(
     result = await chat_graph.ainvoke(state)
 
     if "error" in result:
-        raise CommonError(f"Error in chat endpoint: {result['error']}")
+        logger.error(f"Error in chat endpoint: {result['error']}")
+
+        raise CommonError("Error in chat endpoint")
 
     assistant_message = result["messages"][-1].content
 
@@ -119,6 +123,31 @@ async def get_chats(
                 id=item.id,
                 name=item.name,
                 created_at=item.created_at,
+            )
+        )
+
+    return items
+
+
+@router.get("/{chat_id}", response_model=list[ChatHistoryItem])
+async def get_chats(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    chat_id: UUID,
+    limit: int = Query(10),
+) -> list[ChatHistoryItem]:
+    user_id = str(request.state.user_id)
+
+    service = ChatService()
+    history = await service.get_history(session, user_id, chat_id, limit)
+    items: list[ChatHistoryItem] = []
+
+    for item in history:
+        items.append(
+            ChatHistoryItem(
+                question=item.get("question"),
+                answer=item.get("answer"),
+                created_at=item.get("created_at"),
             )
         )
 
