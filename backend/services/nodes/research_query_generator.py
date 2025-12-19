@@ -30,7 +30,7 @@ def research_query_generator_node(state: ChatState) -> ChatState:
     
     # Format last research time
     if last_researched:
-        last_research_time = datetime.fromtimestamp(last_researched).strftime("%Y-%m-%d")
+        last_research_time = last_researched
     else:
         last_research_time = "Never"
     

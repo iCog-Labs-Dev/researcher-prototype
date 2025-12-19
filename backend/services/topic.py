@@ -75,6 +75,30 @@ class TopicService:
 
             return False, []
 
+    async def async_create_topic(
+        self,
+        user_id: str,
+        name: str,
+        description: str,
+        confidence_score: float,
+        is_active_research: bool,
+        conversation_context: str = "",
+        strict: bool = False,
+    ) -> ResearchTopic:
+        async with SessionLocal.begin() as session:
+            topic = await self._create_topic(
+                session,
+                user_id,
+                name,
+                description,
+                confidence_score,
+                is_active_research=is_active_research,
+                conversation_context=conversation_context,
+                strict=strict,
+            )
+
+        return topic
+
     async def get_count_chats_by_user_id(
         self,
         session: AsyncSession,
