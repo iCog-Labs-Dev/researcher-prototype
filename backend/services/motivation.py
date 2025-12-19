@@ -390,7 +390,7 @@ class MotivationSystem:
             return success_rate
             
         except Exception as e:
-            logger.debug(f"Error getting success rate for {topic_name}: {str(e)}")
+            logger.debug(f"Error getting success rate for topic {topic_id}: {str(e)}")
             return 0.5
 
     async def _conduct_research_cycle(self) -> Dict[str, Any]:
@@ -573,6 +573,13 @@ class MotivationSystem:
             except Exception as cleanup_error:
                 logger.debug(f"Error cleaning up old findings: {cleanup_error}")
             
+            # Update expansion lifecycle for all processed users
+            try:
+                for user_uuid in unique_users:
+                    await self._update_expansion_lifecycle(str(user_uuid))
+            except Exception as e:
+                logger.error(f"Lifecycle update failed: {str(e)}")
+            
             return {
                 "topics_researched": total_topics_researched,
                 "findings_stored": total_findings_stored,
@@ -586,6 +593,126 @@ class MotivationSystem:
                 "findings_stored": 0,
                 "average_quality": 0.0,
             }
+
+    async def get_recent_average_quality(self, user_id: str, topic_id: uuid.UUID, window_days: int) -> float:
+        """Compute recent average quality over window for a topic."""
+        try:
+            user_uuid = uuid.UUID(user_id)
+            
+            now = time.time()
+            window_start = now - (window_days * 24 * 3600)
+            success, findings = await self.research_service.async_get_findings(user_uuid, topic_id=topic_id)
+            if not success:
+                return 0.0
+            scores = [f.quality_score for f in findings if f.created_at and f.created_at.timestamp() >= window_start and isinstance(f.quality_score, (int, float))]
+            if not scores:
+                return 0.0
+            return sum(scores) / len(scores)
+        except Exception:
+            return 0.0
+
+    async def _update_expansion_lifecycle(self, user_id: str) -> None:
+        """Evaluate and update lifecycle state for expansion topics for a user."""
+        try:
+            topics_data = self.research_manager.get_user_topics(user_id)
+            if not topics_data:
+                return
+            now_ts = time.time()
+            promoted = paused = retired = 0
+            changed = False
+            window_days = config.EXPANSION_ENGAGEMENT_WINDOW_DAYS
+            promote_thr = config.EXPANSION_PROMOTE_ENGAGEMENT
+            retire_thr = config.EXPANSION_RETIRE_ENGAGEMENT
+            min_quality = config.EXPANSION_MIN_QUALITY
+            backoff_days = config.EXPANSION_BACKOFF_DAYS
+            retire_ttl_days = config.EXPANSION_RETIRE_TTL_DAYS
+
+            # Fetch active topics from database once per user
+            user_uuid = uuid.UUID(user_id)
+            active_topics = await self.topic_service.async_get_active_research_topics(user_id=user_uuid)
+            # Create a lookup map by topic name
+            topics_by_name = {t.name: t for t in active_topics}
+
+            for sid, session_topics in topics_data.get('sessions', {}).items():
+                for topic in session_topics:
+                    if not topic.get('is_expansion', False):
+                        continue
+                    name = topic.get('topic_name')
+                    depth = int(topic.get('expansion_depth', 0) or 0)
+                    
+                    # Look up topic from database
+                    topic_obj = topics_by_name.get(name)
+                    
+                    engagement = 0.0
+                    try:
+                        if topic_obj:
+                            engagement = await self._get_topic_engagement_score(user_id, topic_obj.id)
+                    except Exception:
+                        engagement = 0.0
+                    avg_quality = await self.get_recent_average_quality(user_id, topic_obj.id, window_days) if topic_obj else 0.0
+
+                    status = topic.get('expansion_status', 'active')
+                    last_eval = float(topic.get('last_evaluated_at', 0) or 0)
+                    backoff_until = float(topic.get('last_backoff_until', 0) or 0)
+
+                    decision_debug = f"topic='{name}' depth={depth} engagement={engagement:.2f} avg_q={avg_quality:.2f} status={status}"
+
+                    # Promote to allow children
+                    if engagement >= promote_thr and avg_quality >= min_quality:
+                        if not topic.get('child_expansion_enabled', False) or status != 'active':
+                            topic['child_expansion_enabled'] = True
+                            topic['expansion_status'] = 'active'
+                            changed = True
+                            promoted += 1
+                            logger.debug(f"Lifecycle promote: {decision_debug}")
+                        topic['last_evaluated_at'] = now_ts
+                        continue
+
+                    # Assess interactions in window via findings read/bookmark/integration
+                    any_interaction = False
+                    try:
+                        if topic_obj:
+                            success, findings = await self.research_service.async_get_findings(user_uuid, topic_id=topic_obj.id)
+                            if success:
+                                window_start = now_ts - window_days * 24 * 3600
+                                any_interaction = any(
+                                    (f.read or f.bookmarked or f.integrated) and f.created_at and f.created_at.timestamp() >= window_start
+                                    for f in findings
+                                )
+                    except Exception:
+                        any_interaction = False
+
+                    # Retire after TTL if still cold (check before pausing again)
+                    if status == 'paused' and last_eval and (now_ts - last_eval) >= retire_ttl_days * 24 * 3600:
+                        if engagement < retire_thr and not any_interaction:
+                            topic['expansion_status'] = 'retired'
+                            topic['last_evaluated_at'] = now_ts
+                            changed = True
+                            retired += 1
+                            logger.debug(f"Lifecycle retire: {decision_debug}")
+                            continue
+
+                    # Pause on cold engagement and no interactions in window
+                    if engagement < retire_thr and not any_interaction:
+                        topic['is_active_research'] = False
+                        topic['child_expansion_enabled'] = False
+                        topic['expansion_status'] = 'paused'
+                        topic['last_backoff_until'] = now_ts + backoff_days * 24 * 3600
+                        topic['last_evaluated_at'] = now_ts
+                        changed = True
+                        paused += 1
+                        logger.debug(f"Lifecycle pause: {decision_debug}")
+                        continue
+
+                    # No action
+                    topic['last_evaluated_at'] = now_ts
+
+            if changed:
+                self.research_manager.save_user_topics(user_id, topics_data)
+            logger.info(f"Lifecycle update for {user_id}: promoted={promoted}, paused={paused}, retired={retired}")
+
+        except Exception as e:
+            logger.error(f"Error updating expansion lifecycle for user {user_id}: {str(e)}")
 
     # NOTE: Research execution lives in Research Engine now
 
