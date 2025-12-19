@@ -1,6 +1,4 @@
-import time
 import uuid
-from datetime import datetime, timezone
 from typing import TypedDict, Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, delete, func, exists
@@ -47,14 +45,16 @@ class ResearchService:
 
     async def async_get_findings(
         self,
-        user_id: uuid.UUID,
-        topic_id: uuid.UUID,
+        user_id: str,
+        topic_id: str,
     ) -> tuple[bool, list[ResearchFinding]]:
         """Async wrapper to get findings by user_id and topic_id."""
         try:
+            user_uuid = uuid.UUID(user_id)
+            topic_uuid = uuid.UUID(topic_id)
             async with SessionLocal() as session:
                 query = select(ResearchFinding).where(
-                    and_(ResearchFinding.user_id == user_id, ResearchFinding.topic_id == topic_id)
+                    and_(ResearchFinding.user_id == user_uuid, ResearchFinding.topic_id == topic_uuid)
                 ).order_by(ResearchFinding.created_at.desc())
 
                 res = await session.execute(query)
@@ -69,15 +69,17 @@ class ResearchService:
 
     async def async_store_research_finding(
         self,
-        user_id: uuid.UUID,
-        topic_id: uuid.UUID,
+        user_id: str,
+        topic_id: str,
         topic_name: str,
         finding_data: FindingPayload,
     ) -> tuple[bool, Optional[str]]:
         try:
+            user_uuid = uuid.UUID(user_id)
+            topic_uuid = uuid.UUID(topic_id)
             async with SessionLocal.begin() as session:
                 query = select(ResearchTopic.id).where(
-                    and_(ResearchTopic.id == topic_id, ResearchTopic.user_id == user_id)
+                    and_(ResearchTopic.id == topic_uuid, ResearchTopic.user_id == user_uuid)
                 )
 
                 res = await session.execute(query)
@@ -90,8 +92,8 @@ class ResearchService:
                     return False, None
 
                 finding = ResearchFinding(
-                    user_id=user_id,
-                    topic_id=topic_id,
+                    user_id=user_uuid,
+                    topic_id=topic_uuid,
                     topic_name=topic_name,
                     quality_score=finding_data.get("quality_score"),
                     findings_content=finding_data.get("findings_content"),

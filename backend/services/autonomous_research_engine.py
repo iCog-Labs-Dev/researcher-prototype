@@ -62,11 +62,9 @@ class AutonomousResearcher:
     async def get_recent_average_quality(self, user_id: str, topic_id: uuid.UUID, window_days: int) -> float:
         """Compute recent average quality over window for a topic."""
         try:
-            user_uuid = uuid.UUID(user_id)
-            
             now = time.time()
             window_start = now - (window_days * 24 * 3600)
-            success, findings = await self.research_service.async_get_findings(user_uuid, topic_id=topic_id)
+            success, findings = await self.research_service.async_get_findings(user_id, str(topic_id))
             if not success:
                 return 0.0
             scores = [f.quality_score for f in findings if f.created_at and f.created_at.timestamp() >= window_start and isinstance(f.quality_score, (int, float))]
@@ -388,20 +386,6 @@ class AutonomousResearcher:
             active_children: List[Dict[str, Any]] = []
 
             for cand in selected:
-                # Breadth control: allow activation only if within limits (using database)
-                try:
-                    user_uuid = uuid.UUID(user_id)
-                    async with SessionLocal() as session:
-                        # Check limit using TopicService
-                        try:
-                            await self.topic_service._check_limit_research_topics(session, user_uuid)
-                            enable_research = True
-                        except CommonError:
-                            enable_research = False
-                except Exception as e:
-                    logger.warning(f"Error checking active topics limit for user {user_id}: {e}")
-                    enable_research = False
-
                 # Build child metadata
                 parent_depth = int(root_topic.get('expansion_depth', 0) or 0)
                 child_depth = min(parent_depth + 1, getattr(config, 'EXPANSION_MAX_DEPTH', 2))
@@ -419,7 +403,7 @@ class AutonomousResearcher:
                     },
                     "expansion_depth": child_depth,
                     "child_expansion_enabled": True,
-                    "expansion_status": "active" if enable_research else "inactive",
+                    "expansion_status": "active",
                     "last_evaluated_at": time.time(),
                 }
 
@@ -429,22 +413,39 @@ class AutonomousResearcher:
                     async with SessionLocal() as session:
                         # Store expansion metadata in conversation_context as JSON
                         conversation_context = json.dumps(extra_meta)
-                        # Check limit if enabling research
-                        if enable_research:
-                            await self.topic_service._check_limit_research_topics(session, user_uuid)
-                        # Create topic with expansion metadata in conversation_context
-                        topic = await self.topic_service._create_topic(
-                            session=session,
-                            user_id=user_uuid,
-                            name=cand.name,
-                            description=desc,
-                            confidence_score=0.8,
-                            conversation_context=conversation_context,
-                            is_active_research=enable_research,
-                            strict=True,
-                        )
-                        await session.commit()
-                        await session.refresh(topic)
+                        # Try to create topic with research enabled - create_topic will check limit internally
+                        try:
+                            topic = await self.topic_service.create_topic(
+                                session=session,
+                                user_id=user_uuid,
+                                name=cand.name,
+                                description=desc,
+                                confidence_score=0.8,
+                                is_active_research=True,
+                            )
+                            # Update conversation_context after creation (create_topic already committed)
+                            async with SessionLocal() as update_session:
+                                await update_session.merge(topic)
+                                topic.conversation_context = conversation_context
+                                await update_session.commit()
+                                await update_session.refresh(topic)
+                            enable_research = True
+                        except CommonError:
+                            # Limit exceeded, create without research enabled
+                            topic = await self.topic_service._create_topic(
+                                session=session,
+                                user_id=user_uuid,
+                                name=cand.name,
+                                description=desc,
+                                confidence_score=0.8,
+                                conversation_context=conversation_context,
+                                is_active_research=False,
+                                strict=True,
+                            )
+                            await session.commit()
+                            await session.refresh(topic)
+                            enable_research = False
+                            extra_meta["expansion_status"] = "inactive"
                         
                         # Convert ResearchTopic to dict format expected by run_langgraph_research
                         topic_dict = {

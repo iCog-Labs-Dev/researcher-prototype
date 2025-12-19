@@ -338,10 +338,8 @@ class MotivationSystem:
     async def _get_topic_engagement_score(self, user_id: str, topic_id: uuid.UUID) -> float:
         """Get engagement score for a topic based on research findings interactions."""
         try:
-            user_uuid = uuid.UUID(user_id)
-            
             # Get all findings for this user and topic from DB
-            success, all_findings = await self.research_service.async_get_findings(user_uuid, topic_id=topic_id)
+            success, all_findings = await self.research_service.async_get_findings(user_id, str(topic_id))
             if not success or not all_findings:
                 return 0.0
             
@@ -597,11 +595,9 @@ class MotivationSystem:
     async def get_recent_average_quality(self, user_id: str, topic_id: uuid.UUID, window_days: int) -> float:
         """Compute recent average quality over window for a topic."""
         try:
-            user_uuid = uuid.UUID(user_id)
-            
             now = time.time()
             window_start = now - (window_days * 24 * 3600)
-            success, findings = await self.research_service.async_get_findings(user_uuid, topic_id=topic_id)
+            success, findings = await self.research_service.async_get_findings(user_id, str(topic_id))
             if not success:
                 return 0.0
             scores = [f.quality_score for f in findings if f.created_at and f.created_at.timestamp() >= window_start and isinstance(f.quality_score, (int, float))]
@@ -672,7 +668,7 @@ class MotivationSystem:
                     any_interaction = False
                     try:
                         if topic_obj:
-                            success, findings = await self.research_service.async_get_findings(user_uuid, topic_id=topic_obj.id)
+                            success, findings = await self.research_service.async_get_findings(user_id, str(topic_obj.id))
                             if success:
                                 window_start = now_ts - window_days * 24 * 3600
                                 any_interaction = any(
