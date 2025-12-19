@@ -49,36 +49,23 @@ class ResearchService:
         self,
         user_id: uuid.UUID,
         topic_id: uuid.UUID,
-    ) -> list[dict]:
-        """Async wrapper to get findings by user_id and topic_id (converts to dict format for compatibility)."""
-        async with SessionLocal() as session:
-            query = (
-                select(ResearchFinding)
-                .where(
-                    and_(
-                        ResearchFinding.user_id == user_id,
-                        ResearchFinding.topic_id == topic_id
-                    )
-                )
-                .order_by(ResearchFinding.created_at.desc())
-            )
-            
-            res = await session.execute(query)
-            findings = list(res.scalars().all())
-            
-            # Convert to dict format for compatibility with existing code
-            return [
-                {
-                    "finding_id": str(f.id),
-                    "topic_name": f.topic_name,
-                    "read": f.read,
-                    "bookmarked": f.bookmarked,
-                    "integrated": f.integrated,
-                    "research_time": f.created_at.timestamp() if f.created_at else None,
-                    "quality_score": f.quality_score,
-                }
-                for f in findings
-            ]
+    ) -> tuple[bool, list[ResearchFinding]]:
+        """Async wrapper to get findings by user_id and topic_id."""
+        try:
+            async with SessionLocal() as session:
+                query = select(ResearchFinding).where(
+                    and_(ResearchFinding.user_id == user_id, ResearchFinding.topic_id == topic_id)
+                ).order_by(ResearchFinding.created_at.desc())
+
+                res = await session.execute(query)
+
+                findings = list(res.scalars().all())
+
+            return True, findings
+        except Exception as e:
+            logger.error(f"Error getting findings for user {user_id}, topic {topic_id}: {str(e)}")
+
+            return False, []
 
     async def async_store_research_finding(
         self,

@@ -335,14 +335,14 @@ class MotivationSystem:
                 return 0.0
             
             # Get all findings for this user and topic from DB
-            all_findings = await self.research_service.async_get_findings(user_uuid, topic_id=topic.id)
-            if not all_findings:
+            success, all_findings = await self.research_service.async_get_findings(user_uuid, topic_id=topic.id)
+            if not success or not all_findings:
                 return 0.0
             
             total_findings = len(all_findings)
-            read_findings = sum(1 for f in all_findings if f.get('read', False))
-            bookmarked_findings = sum(1 for f in all_findings if f.get('bookmarked', False))
-            integrated_findings = sum(1 for f in all_findings if f.get('integrated', False))
+            read_findings = sum(1 for f in all_findings if f.read)
+            bookmarked_findings = sum(1 for f in all_findings if f.bookmarked)
+            integrated_findings = sum(1 for f in all_findings if f.integrated)
             
             # Base engagement: percentage of findings read
             read_percentage = read_findings / total_findings if total_findings > 0 else 0.0
@@ -350,8 +350,8 @@ class MotivationSystem:
             # Bonus for recent reads (findings read in last 7 days get extra weight)
             recent_threshold = time.time() - (7 * 24 * 3600)  # 7 days ago
             recent_reads = sum(1 for f in all_findings 
-                             if f.get('read', False) and 
-                             f.get('research_time', 0) > recent_threshold)
+                             if f.read and 
+                             f.created_at and f.created_at.timestamp() > recent_threshold)
             
             recent_bonus = min(recent_reads * config.ENGAGEMENT_RECENT_BONUS_RATE, config.ENGAGEMENT_RECENT_BONUS_MAX)
             

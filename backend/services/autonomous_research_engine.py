@@ -69,8 +69,10 @@ class AutonomousResearcher:
             
             now = time.time()
             window_start = now - (window_days * 24 * 3600)
-            findings = await self.research_service.async_get_findings(user_uuid, topic_id=topic.id)
-            scores = [f.get("quality_score") for f in findings if f.get("research_time", 0) >= window_start and isinstance(f.get("quality_score"), (int, float))]
+            success, findings = await self.research_service.async_get_findings(user_uuid, topic_id=topic.id)
+            if not success:
+                return 0.0
+            scores = [f.quality_score for f in findings if f.created_at and f.created_at.timestamp() >= window_start and isinstance(f.quality_score, (int, float))]
             if not scores:
                 return 0.0
             return sum(scores) / len(scores)
@@ -314,12 +316,15 @@ class AutonomousResearcher:
                         topic_id_str = topic.get('topic_id')
                         if topic_id_str:
                             topic_id = uuid.UUID(topic_id_str)
-                            findings = await self.research_service.async_get_findings(user_uuid, topic_id=topic_id)
-                            window_start = now_ts - window_days * 24 * 3600
-                            any_interaction = any(
-                                (f.get('read', False) or f.get('bookmarked', False) or f.get('integrated', False)) and f.get('research_time', 0) >= window_start
-                                for f in findings
-                            )
+                            success, findings = await self.research_service.async_get_findings(user_uuid, topic_id=topic_id)
+                            if success:
+                                window_start = now_ts - window_days * 24 * 3600
+                                any_interaction = any(
+                                    (f.read or f.bookmarked or f.integrated) and f.created_at and f.created_at.timestamp() >= window_start
+                                    for f in findings
+                                )
+                            else:
+                                any_interaction = False
                         else:
                             any_interaction = False
                     except Exception:
