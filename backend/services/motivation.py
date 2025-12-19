@@ -303,12 +303,24 @@ class MotivationSystem:
             staleness_pressure = staleness_time * staleness_coefficient * self._config.staleness_scale
             
             # Get engagement-based factors
-            engagement_score = await self._get_topic_engagement_score(
-                user_id, topic.get('topic_name', '')
-            )
-            success_rate = await self._get_topic_success_rate(
-                user_id, topic.get('topic_name', '')
-            )
+            # Get topic_id from topic dict or look it up by name
+            topic_id = None
+            if topic.get('topic_id'):
+                topic_id = uuid.UUID(topic.get('topic_id'))
+            else:
+                # Look up topic_id from topic_name
+                user_uuid = uuid.UUID(user_id)
+                active_topics = await self.topic_service.async_get_active_research_topics(user_id=user_uuid)
+                topic_obj = next((t for t in active_topics if t.name == topic.get('topic_name', '')), None)
+                if topic_obj:
+                    topic_id = topic_obj.id
+            
+            if not topic_id:
+                engagement_score = 0.0
+                success_rate = 0.5
+            else:
+                engagement_score = await self._get_topic_engagement_score(user_id, topic_id)
+                success_rate = await self._get_topic_success_rate(user_id, topic_id)
             
             # Calculate final motivation score
             motivation_score = (
@@ -323,19 +335,13 @@ class MotivationSystem:
             logger.error(f"Error calculating motivation score for topic {topic.get('topic_name')}: {str(e)}")
             return 0.0
 
-    async def _get_topic_engagement_score(self, user_id: str, topic_name: str) -> float:
+    async def _get_topic_engagement_score(self, user_id: str, topic_id: uuid.UUID) -> float:
         """Get engagement score for a topic based on research findings interactions."""
         try:
             user_uuid = uuid.UUID(user_id)
             
-            # Get topic_id from topic_name
-            active_topics = await self.topic_service.async_get_active_research_topics(user_id=user_uuid)
-            topic = next((t for t in active_topics if t.name == topic_name), None)
-            if not topic:
-                return 0.0
-            
             # Get all findings for this user and topic from DB
-            success, all_findings = await self.research_service.async_get_findings(user_uuid, topic_id=topic.id)
+            success, all_findings = await self.research_service.async_get_findings(user_uuid, topic_id=topic_id)
             if not success or not all_findings:
                 return 0.0
             
@@ -368,17 +374,17 @@ class MotivationSystem:
             return min(total_score, config.ENGAGEMENT_SCORE_MAX)
             
         except Exception as e:
-            logger.debug(f"Error calculating engagement score for {topic_name}: {str(e)}")
+            logger.debug(f"Error calculating engagement score for topic {topic_id}: {str(e)}")
             return 0.0
 
-    async def _get_topic_success_rate(self, user_id: str, topic_name: str) -> float:
+    async def _get_topic_success_rate(self, user_id: str, topic_id: uuid.UUID) -> float:
         """Calculate research success rate from user engagement patterns."""
         try:
             if not self.personalization_manager:
                 return 0.5  # Default neutral success rate
             
             # Use engagement as proxy for success rate
-            engagement_score = await self._get_topic_engagement_score(user_id, topic_name)
+            engagement_score = await self._get_topic_engagement_score(user_id, topic_id)
             success_rate = 0.3 + (engagement_score * 0.4)  # Range: 0.3-0.7
             
             return success_rate

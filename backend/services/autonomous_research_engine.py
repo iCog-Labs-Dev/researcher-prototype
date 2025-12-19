@@ -3,6 +3,7 @@ Autonomous Research Engine using LangGraph for conducting background research on
 """
 
 import asyncio
+import json
 import time
 import uuid
 from datetime import timezone
@@ -24,6 +25,8 @@ from services.motivation import MotivationSystem
 from services.topic_expansion_service import TopicExpansionService
 from services.topic import TopicService
 from services.research import ResearchService
+from db import SessionLocal
+from exceptions import CommonError
 
 
 class AutonomousResearcher:
@@ -56,20 +59,14 @@ class AutonomousResearcher:
         self.topic_service = TopicService()
         self.research_service = ResearchService()
 
-    async def get_recent_average_quality(self, user_id: str, topic_name: str, window_days: int) -> float:
+    async def get_recent_average_quality(self, user_id: str, topic_id: uuid.UUID, window_days: int) -> float:
         """Compute recent average quality over window for a topic."""
         try:
             user_uuid = uuid.UUID(user_id)
             
-            # Get topic_id from topic_name
-            active_topics = await self.topic_service.async_get_active_research_topics(user_id=user_uuid)
-            topic = next((t for t in active_topics if t.name == topic_name), None)
-            if not topic:
-                return 0.0
-            
             now = time.time()
             window_start = now - (window_days * 24 * 3600)
-            success, findings = await self.research_service.async_get_findings(user_uuid, topic_id=topic.id)
+            success, findings = await self.research_service.async_get_findings(user_uuid, topic_id=topic_id)
             if not success:
                 return 0.0
             scores = [f.quality_score for f in findings if f.created_at and f.created_at.timestamp() >= window_start and isinstance(f.quality_score, (int, float))]
@@ -277,20 +274,29 @@ class AutonomousResearcher:
             backoff_days = config.EXPANSION_BACKOFF_DAYS
             retire_ttl_days = config.EXPANSION_RETIRE_TTL_DAYS
 
+            # Fetch active topics from database once per user
+            user_uuid = uuid.UUID(user_id)
+            active_topics = await self.topic_service.async_get_active_research_topics(user_id=user_uuid)
+            # Create a lookup map by topic name
+            topics_by_name = {t.name: t for t in active_topics}
+
             for sid, session_topics in topics_data.get('sessions', {}).items():
                 for topic in session_topics:
                     if not topic.get('is_expansion', False):
                         continue
                     name = topic.get('topic_name')
                     depth = int(topic.get('expansion_depth', 0) or 0)
+                    
+                    # Look up topic from database
+                    topic_obj = topics_by_name.get(name)
+                    
                     engagement = 0.0
                     try:
-                        engagement = 0.0
-                        if self.motivation_system:
-                            engagement = await self.motivation_system._get_topic_engagement_score(user_id, name)
+                        if self.motivation_system and topic_obj:
+                            engagement = await self.motivation_system._get_topic_engagement_score(user_id, topic_obj.id)
                     except Exception:
                         engagement = 0.0
-                    avg_quality = await self.get_recent_average_quality(user_id, name, window_days)
+                    avg_quality = await self.get_recent_average_quality(user_id, topic_obj.id, window_days) if topic_obj else 0.0
 
                     status = topic.get('expansion_status', 'active')
                     last_eval = float(topic.get('last_evaluated_at', 0) or 0)
@@ -310,23 +316,16 @@ class AutonomousResearcher:
                         continue
 
                     # Assess interactions in window via findings read/bookmark/integration
+                    any_interaction = False
                     try:
-                        user_uuid = uuid.UUID(user_id)
-                        # Get topic_id from topic_name (file storage topics don't have topic_id, skip if not found)
-                        topic_id_str = topic.get('topic_id')
-                        if topic_id_str:
-                            topic_id = uuid.UUID(topic_id_str)
-                            success, findings = await self.research_service.async_get_findings(user_uuid, topic_id=topic_id)
+                        if topic_obj:
+                            success, findings = await self.research_service.async_get_findings(user_uuid, topic_id=topic_obj.id)
                             if success:
                                 window_start = now_ts - window_days * 24 * 3600
                                 any_interaction = any(
                                     (f.read or f.bookmarked or f.integrated) and f.created_at and f.created_at.timestamp() >= window_start
                                     for f in findings
                                 )
-                            else:
-                                any_interaction = False
-                        else:
-                            any_interaction = False
                     except Exception:
                         any_interaction = False
 
@@ -583,9 +582,19 @@ class AutonomousResearcher:
             active_children: List[Dict[str, Any]] = []
 
             for cand in selected:
-                # Breadth control: allow activation only if within limits
-                limit_check = self.research_manager.check_active_topics_limit(user_id, enabling_new=True)
-                enable_research = bool(limit_check.get("allowed", False))
+                # Breadth control: allow activation only if within limits (using database)
+                try:
+                    user_uuid = uuid.UUID(user_id)
+                    async with SessionLocal() as session:
+                        # Check limit using TopicService
+                        try:
+                            await self.topic_service._check_limit_research_topics(session, user_uuid)
+                            enable_research = True
+                        except CommonError:
+                            enable_research = False
+                except Exception as e:
+                    logger.warning(f"Error checking active topics limit for user {user_id}: {e}")
+                    enable_research = False
 
                 # Build child metadata
                 parent_depth = int(root_topic.get('expansion_depth', 0) or 0)
@@ -608,16 +617,48 @@ class AutonomousResearcher:
                     "last_evaluated_at": time.time(),
                 }
 
-                res = self.research_manager.add_custom_topic(
-                    user_id=user_id,
-                    topic_name=cand.name,
-                    description=desc,
-                    confidence_score=0.8,
-                    enable_research=enable_research,
-                    extra=extra_meta,
-                )
-                if res and res.get('success') and res.get('topic', {}).get('is_active_research', False):
-                    active_children.append(res['topic'])
+                # Create topic in database using TopicService
+                try:
+                    user_uuid = uuid.UUID(user_id)
+                    async with SessionLocal() as session:
+                        # Store expansion metadata in conversation_context as JSON
+                        conversation_context = json.dumps(extra_meta)
+                        # Check limit if enabling research
+                        if enable_research:
+                            await self.topic_service._check_limit_research_topics(session, user_uuid)
+                        # Create topic with expansion metadata in conversation_context
+                        topic = await self.topic_service._create_topic(
+                            session=session,
+                            user_id=user_uuid,
+                            name=cand.name,
+                            description=desc,
+                            confidence_score=0.8,
+                            conversation_context=conversation_context,
+                            is_active_research=enable_research,
+                            strict=True,
+                        )
+                        await session.commit()
+                        await session.refresh(topic)
+                        
+                        # Convert ResearchTopic to dict format expected by run_langgraph_research
+                        topic_dict = {
+                            "topic_id": str(topic.id),
+                            "topic_name": topic.name,
+                            "description": topic.description,
+                            "is_active_research": topic.is_active_research,
+                            "expansion_depth": child_depth,
+                            "expansion_status": extra_meta["expansion_status"],
+                            **extra_meta  # Include all expansion metadata
+                        }
+                        if topic.is_active_research:
+                            active_children.append(topic_dict)
+                except CommonError as e:
+                    logger.warning(f"Cannot create expansion topic {cand.name} for user {user_id}: {e}")
+                    enable_research = False
+                    continue
+                except Exception as e:
+                    logger.error(f"Error creating expansion topic {cand.name} for user {user_id}: {e}")
+                    continue
 
             # Research active children immediately
             for child in active_children:
