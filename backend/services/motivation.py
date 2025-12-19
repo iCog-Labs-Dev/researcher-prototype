@@ -326,9 +326,7 @@ class MotivationSystem:
     async def _get_topic_engagement_score(self, user_id: str, topic_name: str) -> float:
         """Get engagement score for a topic based on research findings interactions."""
         try:
-            user_uuid = uuid.UUID(user_id) if user_id != "guest" else None
-            if not user_uuid:
-                return 0.0
+            user_uuid = uuid.UUID(user_id)
             
             # Get topic_id from topic_name
             active_topics = await self.topic_service.async_get_active_research_topics(user_id=user_uuid)
@@ -601,10 +599,7 @@ class MotivationSystem:
     async def get_motivation_statistics(self, user_id: str) -> Dict[str, Any]:
         """Get motivation statistics for a user."""
         try:
-            user_uuid = uuid.UUID(user_id) if user_id != "guest" else None
-            if not user_uuid:
-                return {}
-            
+            user_uuid = uuid.UUID(user_id)
             return await self.db_service.get_motivation_statistics(user_uuid)
             
         except Exception as e:

@@ -59,9 +59,7 @@ class AutonomousResearcher:
     async def get_recent_average_quality(self, user_id: str, topic_name: str, window_days: int) -> float:
         """Compute recent average quality over window for a topic."""
         try:
-            user_uuid = uuid.UUID(user_id) if user_id != "guest" else None
-            if not user_uuid:
-                return 0.0
+            user_uuid = uuid.UUID(user_id)
             
             # Get topic_id from topic_name
             active_topics = await self.topic_service.async_get_active_research_topics(user_id=user_uuid)
@@ -311,20 +309,17 @@ class AutonomousResearcher:
 
                     # Assess interactions in window via findings read/bookmark/integration
                     try:
-                        user_uuid = uuid.UUID(user_id) if user_id != "guest" else None
-                        if user_uuid:
-                            # Get topic_id from topic_name (file storage topics don't have topic_id, skip if not found)
-                            topic_id_str = topic.get('topic_id')
-                            if topic_id_str:
-                                topic_id = uuid.UUID(topic_id_str)
-                                findings = await self.research_service.async_get_findings(user_uuid, topic_id=topic_id)
-                                window_start = now_ts - window_days * 24 * 3600
-                                any_interaction = any(
-                                    (f.get('read', False) or f.get('bookmarked', False) or f.get('integrated', False)) and f.get('research_time', 0) >= window_start
-                                    for f in findings
-                                )
-                            else:
-                                any_interaction = False
+                        user_uuid = uuid.UUID(user_id)
+                        # Get topic_id from topic_name (file storage topics don't have topic_id, skip if not found)
+                        topic_id_str = topic.get('topic_id')
+                        if topic_id_str:
+                            topic_id = uuid.UUID(topic_id_str)
+                            findings = await self.research_service.async_get_findings(user_uuid, topic_id=topic_id)
+                            window_start = now_ts - window_days * 24 * 3600
+                            any_interaction = any(
+                                (f.get('read', False) or f.get('bookmarked', False) or f.get('integrated', False)) and f.get('research_time', 0) >= window_start
+                                for f in findings
+                            )
                         else:
                             any_interaction = False
                     except Exception:
