@@ -1,5 +1,6 @@
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import TypedDict, Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, delete, func, exists
@@ -32,7 +33,7 @@ class ResearchService:
         topic_id: uuid.UUID = None,
         unread_only: bool = False,
     ) -> list[ResearchFinding]:
-        query = select(ResearchFinding).where(ResearchFinding.user_id == user_id).order_by(ResearchFinding.research_time.desc())
+        query = select(ResearchFinding).where(ResearchFinding.user_id == user_id).order_by(ResearchFinding.created_at.desc())
 
         if topic_id:
             query = query.where(ResearchFinding.topic_id == topic_id)
@@ -59,7 +60,7 @@ class ResearchService:
                         ResearchFinding.topic_id == topic_id
                     )
                 )
-                .order_by(ResearchFinding.research_time.desc())
+                .order_by(ResearchFinding.created_at.desc())
             )
             
             res = await session.execute(query)
@@ -73,7 +74,7 @@ class ResearchService:
                     "read": f.read,
                     "bookmarked": f.bookmarked,
                     "integrated": f.integrated,
-                    "research_time": f.research_time,
+                    "research_time": f.created_at.timestamp() if f.created_at else None,
                     "quality_score": f.quality_score,
                 }
                 for f in findings
@@ -132,10 +133,9 @@ class ResearchService:
         """Cleanup old research findings globally for all users."""
         try:
             async with SessionLocal.begin() as session:
-                cutoff_time = time.time() - (retention_days * 24 * 3600)
                 query = (
                     delete(ResearchFinding)
-                    .where(ResearchFinding.research_time < cutoff_time)
+                    .where(ResearchFinding.created_at < (func.now() - func.make_interval(0, 0, 0, retention_days)))
                     .returning(ResearchFinding.topic_id)
                 )
 
