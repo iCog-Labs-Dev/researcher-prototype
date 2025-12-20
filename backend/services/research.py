@@ -48,10 +48,13 @@ class ResearchService:
         user_id: str,
         topic_id: str,
     ) -> tuple[bool, list[ResearchFinding]]:
+        """Async wrapper to get findings by user_id and topic_id."""
         try:
+            user_uuid = uuid.UUID(user_id)
+            topic_uuid = uuid.UUID(topic_id)
             async with SessionLocal() as session:
                 query = select(ResearchFinding).where(
-                    and_(ResearchFinding.user_id == user_id, ResearchFinding.topic_id == topic_id)
+                    and_(ResearchFinding.user_id == user_uuid, ResearchFinding.topic_id == topic_uuid)
                 ).order_by(ResearchFinding.created_at.desc())
 
                 res = await session.execute(query)
@@ -72,9 +75,11 @@ class ResearchService:
         finding_data: FindingPayload,
     ) -> tuple[bool, Optional[str]]:
         try:
+            user_uuid = uuid.UUID(user_id)
+            topic_uuid = uuid.UUID(topic_id)
             async with SessionLocal.begin() as session:
                 query = select(ResearchTopic.id).where(
-                    and_(ResearchTopic.id == topic_id, ResearchTopic.user_id == user_id)
+                    and_(ResearchTopic.id == topic_uuid, ResearchTopic.user_id == user_uuid)
                 )
 
                 res = await session.execute(query)
@@ -87,8 +92,8 @@ class ResearchService:
                     return False, None
 
                 finding = ResearchFinding(
-                    user_id=user_id,
-                    topic_id=topic_id,
+                    user_id=user_uuid,
+                    topic_id=topic_uuid,
                     topic_name=topic_name,
                     quality_score=finding_data.get("quality_score"),
                     findings_content=finding_data.get("findings_content"),
@@ -104,7 +109,7 @@ class ResearchService:
                 session.add(finding)
                 await session.flush()
 
-            return True, finding.id
+            return True, str(finding.id)
         except Exception as e:
             logger.error(f"Error storing research finding for user {user_id}, topic '{topic_name}': {str(e)}")
 
@@ -114,6 +119,7 @@ class ResearchService:
         self,
         retention_days: int,
     ) -> bool:
+        """Cleanup old research findings globally for all users."""
         try:
             async with SessionLocal.begin() as session:
                 query = (
