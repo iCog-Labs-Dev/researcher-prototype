@@ -3,7 +3,6 @@ Autonomous Research Engine using LangGraph for conducting background research on
 """
 
 import asyncio
-import json
 import time
 import uuid
 from datetime import timezone
@@ -409,56 +408,44 @@ class AutonomousResearcher:
 
                 # Create topic in database using TopicService
                 try:
-                    user_uuid = uuid.UUID(user_id)
-                    async with SessionLocal() as session:
-                        # Store expansion metadata in conversation_context as JSON
-                        conversation_context = json.dumps(extra_meta)
-                        # Try to create topic with research enabled - create_topic will check limit internally
-                        try:
-                            topic = await self.topic_service.create_topic(
-                                session=session,
-                                user_id=user_uuid,
-                                name=cand.name,
-                                description=desc,
-                                confidence_score=0.8,
-                                is_active_research=True,
-                            )
-                            # Update conversation_context after creation (create_topic already committed)
-                            async with SessionLocal() as update_session:
-                                await update_session.merge(topic)
-                                topic.conversation_context = conversation_context
-                                await update_session.commit()
-                                await update_session.refresh(topic)
-                            enable_research = True
-                        except CommonError:
-                            # Limit exceeded, create without research enabled
-                            topic = await self.topic_service._create_topic(
-                                session=session,
-                                user_id=user_uuid,
-                                name=cand.name,
-                                description=desc,
-                                confidence_score=0.8,
-                                conversation_context=conversation_context,
-                                is_active_research=False,
-                                strict=True,
-                            )
-                            await session.commit()
-                            await session.refresh(topic)
-                            enable_research = False
-                            extra_meta["expansion_status"] = "inactive"
-                        
-                        # Convert ResearchTopic to dict format expected by run_langgraph_research
-                        topic_dict = {
-                            "topic_id": str(topic.id),
-                            "topic_name": topic.name,
-                            "description": topic.description,
-                            "is_active_research": topic.is_active_research,
-                            "expansion_depth": child_depth,
-                            "expansion_status": extra_meta["expansion_status"],
-                            **extra_meta  # Include all expansion metadata
-                        }
-                        if topic.is_active_research:
-                            active_children.append(topic_dict)
+                    # Try to create topic with research enabled - async_create_topic will check limit internally
+                    try:
+                        topic = await self.topic_service.async_create_topic(
+                            user_id=user_id,
+                            name=cand.name,
+                            description=desc,
+                            confidence_score=0.8,
+                            is_active_research=True,
+                            conversation_context="",
+                            strict=True,
+                        )
+                        enable_research = True
+                    except CommonError:
+                        # Limit exceeded, create without research enabled
+                        topic = await self.topic_service.async_create_topic(
+                            user_id=user_id,
+                            name=cand.name,
+                            description=desc,
+                            confidence_score=0.8,
+                            is_active_research=False,
+                            conversation_context="",
+                            strict=True,
+                        )
+                        enable_research = False
+                        extra_meta["expansion_status"] = "inactive"
+                    
+                    # Convert ResearchTopic to dict format expected by run_langgraph_research
+                    topic_dict = {
+                        "topic_id": str(topic.id),
+                        "topic_name": topic.name,
+                        "description": topic.description,
+                        "is_active_research": topic.is_active_research,
+                        "expansion_depth": child_depth,
+                        "expansion_status": extra_meta["expansion_status"],
+                        **extra_meta  # Include all expansion metadata
+                    }
+                    if topic.is_active_research:
+                        active_children.append(topic_dict)
                 except CommonError as e:
                     logger.warning(f"Cannot create expansion topic {cand.name} for user {user_id}: {e}")
                     enable_research = False

@@ -86,9 +86,13 @@ class TopicService:
         strict: bool = False,
     ) -> ResearchTopic:
         async with SessionLocal.begin() as session:
+            user_uuid = uuid.UUID(user_id)
+            if is_active_research:
+                await self._check_limit_research_topics(session, user_uuid)
+            
             topic = await self._create_topic(
                 session,
-                user_id,
+                user_uuid,
                 name,
                 description,
                 confidence_score,
