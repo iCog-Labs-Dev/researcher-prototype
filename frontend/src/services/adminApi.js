@@ -1,55 +1,23 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const RAW_API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const NORMALIZED_API_URL = RAW_API_URL.replace(/\/+$/, '');
+const API_BASE_URL = `${NORMALIZED_API_URL}/v2/admin`;
 
 // Create axios instance for admin requests
 const adminApi = axios.create({
-  baseURL: `${API_BASE_URL}/v2/admin`,
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Token management
-class TokenManager {
-  constructor() {
-    this.token = localStorage.getItem('admin_token');
-  }
-
-  setToken(token) {
-    this.token = token;
-    localStorage.setItem('admin_token', token);
-    this.updateHeaders();
-  }
-
-  clearToken() {
-    this.token = null;
-    localStorage.removeItem('admin_token');
-    this.updateHeaders();
-  }
-
-  getToken() {
-    return this.token;
-  }
-
-  updateHeaders() {
-    if (this.token) {
-      adminApi.defaults.headers.common['Authorization'] = `Bearer ${this.token}`;
-    } else {
-      delete adminApi.defaults.headers.common['Authorization'];
-    }
-  }
-}
-
-const tokenManager = new TokenManager();
-tokenManager.updateHeaders(); // Set initial headers
-
-// Request interceptor to add token
+// Request interceptor to add the normal user auth token
 adminApi.interceptors.request.use(
   (config) => {
-    const token = tokenManager.getToken();
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    const authToken = localStorage.getItem('auth_token');
+    if (authToken) {
+      config.headers.Authorization = `Bearer ${authToken}`;
     }
     return config;
   },
@@ -63,39 +31,13 @@ adminApi.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid
-      tokenManager.clearToken();
-      // Redirect to login or show login modal
-      window.location.href = '/admin/login';
+      // Not authorized for admin endpoints (or token expired).
+      // We no longer have a separate /admin/login password flow.
+      window.location.href = '/';
     }
     return Promise.reject(error);
   }
 );
-
-// Authentication APIs
-export const adminLogin = async (password) => {
-  try {
-    const response = await adminApi.post('/login', { password });
-    const { access_token } = response.data;
-    tokenManager.setToken(access_token);
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
-};
-
-export const verifyToken = async () => {
-  try {
-    const response = await adminApi.get('/verify');
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
-};
-
-export const adminLogout = () => {
-  tokenManager.clearToken();
-};
 
 // Prompt management APIs
 export const getAllPrompts = async () => {
@@ -305,14 +247,4 @@ export const triggerManualResearch = async (userId) => {
     console.error('Error triggering manual research:', error);
     throw error;
   }
-};
-
-// Utility functions
-export const isAuthenticated = () => {
-  return !!tokenManager.getToken();
-};
-
-export const getAuthHeaders = () => {
-  const token = tokenManager.getToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
 };

@@ -2,7 +2,6 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { SessionProvider } from './context/SessionContext';
-import { AdminProvider } from './context/AdminContext';
 import { NotificationProvider } from './context/NotificationContext';
 import ChatPage from './components/ChatPage';
 import TopicsDashboard from './components/TopicsDashboard';
@@ -20,37 +19,40 @@ function App() {
   return (
     <AuthProvider>
       <SessionProvider>
-        <AdminProvider>
-          <NotificationProvider>
-            <Router>
-              <div className="app">
-                <Routes>
-                  {/* Public routes - no authentication required */}
-                  <Route path="/admin/login" element={<AdminLogin />} />
+        <NotificationProvider>
+          <Router>
+            <div className="app">
+              <Routes>
+                {/* Legacy route - kept for compatibility, but no longer uses an admin password */}
+                <Route path="/admin/login" element={<AdminLogin />} />
 
-                  {/* Admin routes - protected with admin authentication */}
-                  <Route path="/admin" element={
+                {/* Admin routes - protected by user role */}
+                <Route
+                  path="/admin"
+                  element={
                     <ProtectedAdminRoute>
                       <AdminDashboard />
                     </ProtectedAdminRoute>
-                  } />
+                  }
+                />
 
-                  {/* Main app routes - protected with user authentication */}
-                  <Route element={
+                {/* Main app routes - protected with user authentication */}
+                <Route
+                  element={
                     <ProtectedRoute>
                       <Layout />
                     </ProtectedRoute>
-                  }>
-                    <Route index element={<ChatPage />} />
-                    <Route path="topics" element={<TopicsDashboard />} />
-                    <Route path="research-results" element={<ResearchResultsDashboard />} />
-                  </Route>
-                </Routes>
-                <ToastNotifications />
-              </div>
-            </Router>
-          </NotificationProvider>
-        </AdminProvider>
+                  }
+                >
+                  <Route index element={<ChatPage />} />
+                  <Route path="topics" element={<TopicsDashboard />} />
+                  <Route path="research-results" element={<ResearchResultsDashboard />} />
+                </Route>
+              </Routes>
+              <ToastNotifications />
+            </div>
+          </Router>
+        </NotificationProvider>
       </SessionProvider>
     </AuthProvider>
   );

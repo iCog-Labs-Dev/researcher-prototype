@@ -41,6 +41,8 @@ const ToastNotifications = () => {
         return '✅';
       case 'system_status':
         return '⚙️';
+      case 'access_denied':
+        return '🚫';
       default:
         return '📢';
     }

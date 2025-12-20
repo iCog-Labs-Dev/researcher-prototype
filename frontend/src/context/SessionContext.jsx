@@ -16,10 +16,10 @@ export const useSession = () => {
 
 export const SessionProvider = ({ children }) => {
   const { user, isAuthenticated } = useAuth();
-  
+
   // Memoize user id to prevent unnecessary rerenders
   const userId = useMemo(() => user?.id || '', [user?.id]);
-  
+
   const [messages, setMessages] = useState(() => [
     { ...DEFAULT_SYSTEM_MESSAGE }
   ]);
@@ -31,8 +31,8 @@ export const SessionProvider = ({ children }) => {
   const previousUserIdRef = useRef(null);
 
   // Memoize user properties to prevent unnecessary rerenders
-  const userDisplayNameFromAuth = useMemo(() => 
-    user?.metadata?.display_name || user?.display_name || user?.email || '', 
+  const userDisplayNameFromAuth = useMemo(() =>
+    user?.metadata?.display_name || user?.display_name || user?.email || '',
     [user?.metadata?.display_name, user?.display_name, user?.email]
   );
   const userPersonalityFromAuth = useMemo(() => user?.personality, [user?.personality]);
@@ -102,9 +102,10 @@ export const SessionProvider = ({ children }) => {
     setSessionId(newSessionId);
     // If initial messages provided, use them; otherwise start with system message
     if (initialMessages && Array.isArray(initialMessages) && initialMessages.length > 0) {
-      setMessages(initialMessages);
+        //TODO if we need to enable initial message when switching sessions
+      // setMessages(initialMessages);
     } else {
-      setMessages([{ ...DEFAULT_SYSTEM_MESSAGE }]);
+      // setMessages([{ ...DEFAULT_SYSTEM_MESSAGE }]);
     }
     setConversationTopics([]);
   }, []);
