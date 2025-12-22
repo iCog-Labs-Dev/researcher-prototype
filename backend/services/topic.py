@@ -87,6 +87,7 @@ class TopicService:
     ) -> ResearchTopic:
         async with SessionLocal.begin() as session:
             user_uuid = uuid.UUID(user_id)
+
             if is_active_research:
                 await self._check_limit_research_topics(session, user_uuid)
             
