@@ -48,3 +48,10 @@ class ChatView(BaseModel):
     id: UUID
     name: str
     created_at: datetime
+
+
+class ChatHistoryItem(BaseModel):
+    """View model for chat history items."""
+    question: str
+    answer: str
+    created_at: datetime

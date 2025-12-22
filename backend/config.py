@@ -231,3 +231,7 @@ JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "120"))
 
 # Google auth
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+
+# Chat memory
+CHAT_MEMORY_URL = os.getenv("CHAT_MEMORY_URL")
+CHAT_MEMORY_TIMEOUT = int(os.getenv("CHAT_MEMORY_TIMEOUT", "10"))
