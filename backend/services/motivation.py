@@ -138,7 +138,7 @@ class MotivationSystem:
                 
                 # Check if research is needed
                 research_needed = await self.check_for_research_needed()
-                
+
                 if research_needed:
                     logger.info("🎯 Research needed - starting research cycle")
                     result = await self._conduct_research_cycle()
@@ -253,7 +253,7 @@ class MotivationSystem:
             if not self._config:
                 return False
             
-            active_topics = await self.topic_service.async_get_active_research_topics()
+            _, active_topics = await self.topic_service.async_get_active_research_topics()
             if not active_topics:
                 return False
 
@@ -394,7 +394,7 @@ class MotivationSystem:
     async def _conduct_research_cycle(self) -> Dict[str, Any]:
         """Conduct a complete research cycle for all users with motivated topics."""
         try:
-            active_topics = await self.topic_service.async_get_active_research_topics()
+            _, active_topics = await self.topic_service.async_get_active_research_topics()
             if not active_topics:
                 logger.info("🎯 No active research topics found in database")
                 return {
