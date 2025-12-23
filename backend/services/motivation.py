@@ -135,14 +135,16 @@ class MotivationSystem:
                 
                 # Update motivation scores for all topics
                 await self.update_scores()
-                
+
+                logger.info("🎯 Starting research cycle")
+                result = await self._conduct_research_cycle()
+
                 # Check if research is needed
                 research_needed = await self.check_for_research_needed()
 
                 if research_needed:
-                    logger.info("🎯 Research needed - starting research cycle")
-                    result = await self._conduct_research_cycle()
-                    
+                    logger.info("🎯 Research needed")
+
                     # Update motivation based on research results
                     topics_researched = result.get("topics_researched", 0)
                     if topics_researched > 0:
