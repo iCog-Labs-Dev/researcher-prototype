@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db import get_session
 from services.logging_config import get_logger
 from dependencies import inject_user_id
-from graph_builder import chat_graph
+from builders.chat import chat_graph
 from services.status_manager import queue_status
 from exceptions import CommonError
 from schemas.chat import (

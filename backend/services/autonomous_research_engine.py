@@ -19,7 +19,7 @@ import config
 from storage.profile_manager import ProfileManager
 from storage.research_manager import ResearchManager
 from services.personalization_manager import PersonalizationManager
-from research_graph_builder import research_graph
+from builders.research import research_graph
 from services.motivation import MotivationSystem
 from services.topic_expansion_service import TopicExpansionService
 from services.topic import TopicService
