@@ -310,7 +310,7 @@ class MotivationSystem:
             else:
                 # Look up topic_id from topic_name
                 user_uuid = uuid.UUID(user_id)
-                active_topics = await self.topic_service.async_get_active_research_topics(user_id=user_uuid)
+                _, active_topics = await self.topic_service.async_get_active_research_topics(user_id=user_uuid)
                 topic_obj = next((t for t in active_topics if t.name == topic.get('topic_name', '')), None)
                 if topic_obj:
                     topic_id = topic_obj.id
@@ -625,7 +625,7 @@ class MotivationSystem:
 
             # Fetch active topics from database once per user
             user_uuid = uuid.UUID(user_id)
-            active_topics = await self.topic_service.async_get_active_research_topics(user_id=user_uuid)
+            _, active_topics = await self.topic_service.async_get_active_research_topics(user_id=user_uuid)
             # Create a lookup map by topic name
             topics_by_name = {t.name: t for t in active_topics}
 
