@@ -82,8 +82,7 @@ class ChatService:
         except (httpx.TimeoutException, httpx.HTTPError) as e:
             logger.error(f"Chat memory request failed: {str(e)}")
 
-            # TODO need to uncomment it after starting the chat memory
-            # raise CommonError("Chat memory request failed")
+            raise CommonError("Chat memory request failed")
 
     async def get_history(
         self,
@@ -123,8 +122,4 @@ class ChatService:
         except (httpx.TimeoutException, httpx.HTTPError) as e:
             logger.error(f"Chat memory request failed: {str(e)}")
 
-            # TODO need to delete it after starting the chat memory
-            return []
-
-            # TODO need to uncomment it after starting the chat memory
-            # raise CommonError("Chat memory request failed")
+            raise CommonError("Chat memory request failed")
