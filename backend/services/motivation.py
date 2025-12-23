@@ -471,29 +471,6 @@ class MotivationSystem:
                                 last_researched=time.time()
                             )
 
-                            # Dual-write: persist finding summary into DB when available
-                            try:
-                                from models.research_finding import ResearchFinding
-                                storage_results = result if result else {}
-                                if storage_results.get("stored"):
-                                    finding_id = storage_results.get("finding_id")
-                                    quality = storage_results.get("quality_score")
-                                    self.session.add(
-                                        ResearchFinding(
-                                            topic_id=research_topic.id,
-                                            user_id=user_uuid,
-                                            topic_name=topic_name,
-                                            finding_id=finding_id,
-                                            read=False,
-                                            bookmarked=False,
-                                            integrated=False,
-                                            research_time=time.time(),
-                                            quality_score=quality,
-                                        )
-                                    )
-                            except Exception as e:
-                                logger.debug(f"Dual-write finding failed for {topic_name}: {e}")
-
                             # --- Topic expansion wiring ---
                             try:
                                 from services.autonomous_research_engine import get_autonomous_researcher
@@ -527,27 +504,6 @@ class MotivationSystem:
                                                 last_researched=time.time()
                                             )
 
-                                        # Dual-write for child
-                                        try:
-                                            storage_results = child_res if child_res else {}
-                                            if storage_results.get("stored") and child_topic_id:
-                                                finding_id = storage_results.get("finding_id")
-                                                quality = storage_results.get("quality_score")
-                                                self.session.add(
-                                                    ResearchFinding(
-                                                        topic_id=uuid.UUID(str(child_topic_id)),
-                                                        user_id=user_uuid,
-                                                        topic_name=child_name,
-                                                        finding_id=finding_id,
-                                                        read=False,
-                                                        bookmarked=False,
-                                                        integrated=False,
-                                                        research_time=time.time(),
-                                                        quality_score=quality,
-                                                    )
-                                                )
-                                        except Exception as ee:
-                                            logger.debug(f"Dual-write finding failed for child {child_name}: {ee}")
                             except Exception as ex:
                                 logger.debug(f"Expansion wiring failed for {topic_name}: {ex}")
                             
