@@ -1,17 +1,77 @@
-name: Build and Deploy
+name: Build and Deploy Qwestor Dev
 
 on:
   push:
     branches: [ "dev" ]
   workflow_dispatch:
+    inputs:
+      ignore_tests:
+        description: 'Ignore failed tests?'
+        type: boolean
+        required: false
+        default: false
   
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend  
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11' 
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Unit Tests
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-mock-key-for-ci' }}
+        run: |
+          cp .env.example .env
+          export OPENAI_API_KEY=${{'sk-mock-key-for-ci' }}
+          bash run_tests.sh
+        continue-on-error: ${{ github.event_name == 'workflow_dispatch' && inputs.ignore_tests == true }}
+  
+  frontend-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend 
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'   
+          cache: 'npm'          
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Run Unit Tests
+        continue-on-error: ${{ github.event_name == 'workflow_dispatch' && inputs.ignore_tests == true }}
+        run: npm run test:unit
+        
   build-and-push:
     runs-on: ubuntu-latest
+    needs: [frontend-tests, backend-tests]
     permissions:
       contents: read
       packages: write
@@ -50,7 +110,6 @@ jobs:
           docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/qwestor-frontend:latest -f frontend/Dockerfile frontend/
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/qwestor-frontend:latest
           echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/qwestor-frontend:latest" >> $GITHUB_OUTPUT
-
 
   deploy:
     needs: build-and-push
