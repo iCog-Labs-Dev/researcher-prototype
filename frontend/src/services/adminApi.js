@@ -167,7 +167,7 @@ export const getPromptUsageMap = async () => {
 // Debug APIs (moved from api.js - these are now in /v2/admin/debug/*)
 export const getMotivationStatus = async () => {
   try {
-    const response = await adminApi.get('/debug/motivation');
+    const response = await adminApi.get('/debug/status');
     return response.data;
   } catch (error) {
     console.error('Error fetching motivation status:', error);
@@ -245,6 +245,16 @@ export const triggerManualResearch = async (userId) => {
     return response.data;
   } catch (error) {
     console.error('Error triggering manual research:', error);
+    throw error;
+  }
+};
+
+export const getResearchEngineStatus = async () => {
+  try {
+    const response = await adminApi.get('/debug/status');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching research engine status:', error);
     throw error;
   }
 };

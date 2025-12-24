@@ -73,26 +73,16 @@ export const getAllChatSessions = async () => {
   }
 };
 
-// Create or switch to a chat session
-export const createOrSwitchSession = async (sessionId = null) => {
+// Get chat history for a specific chat session
+export const getChatHistory = async (chatId, limit = 1000) => {
+  console.log('111Fetching chat history for chat ID:', chatId);
   try {
-    // For session initialization, send a minimal user message
-    // The backend will create or retrieve the session based on session_id
-    const payload = {
-      messages: [{ role: 'user', content: 'Hello' }],
-      temperature: 0.7,
-      max_tokens: 1000,
-    };
-
-    // Include session_id if provided (switching to existing session)
-    if (sessionId) {
-      payload.session_id = sessionId;
-    }
-
-    const response = await api.post('/chat', payload);
+    const response = await api.get(`/chat/${chatId}`, {
+      params: { limit }
+    });
     return response.data;
   } catch (error) {
-    console.error('Error creating/switching session:', error);
+    console.error('Error fetching chat history:', error);
     throw error;
   }
 };
@@ -521,17 +511,6 @@ export const deleteAllTopicFindings = async (topicName) => {
     throw error;
   }
 };
-
-export const getResearchEngineStatus = async () => {
-  try {
-    const response = await api.get('/research/status');
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching research engine status:', error);
-    throw error;
-  }
-};
-
 
 export const getActiveResearchTopics = async () => {
   try {

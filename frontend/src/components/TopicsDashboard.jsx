@@ -14,12 +14,13 @@ import {
     cleanupTopics,
     deleteNonActivatedTopics,
     enableTopicResearchById,
-    disableTopicResearchById, getResearchEngineStatus,
+    disableTopicResearchById,
 } from '../services/api';
 import {
   startResearchEngine,
   stopResearchEngine,
-  triggerManualResearch
+  triggerManualResearch,
+  getResearchEngineStatus
 } from '../services/adminApi';
 import '../styles/TopicsDashboard.css';
 
