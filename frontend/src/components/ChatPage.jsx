@@ -87,10 +87,6 @@ const ChatPage = () => {
     setIsLoading(true);
 
     try {
-      // Trigger user activity for motivation system (fire and forget)
-      triggerUserActivity().catch(err => {
-        console.warn('Failed to trigger user activity for motivation system:', err);
-      });
 
       // Prepare messages for API
       const apiMessages = updatedMessages.map(msg => ({
@@ -124,7 +120,7 @@ const ChatPage = () => {
       const responseSessionId = response.session_id ? String(response.session_id) : null;
       if (responseSessionId && responseSessionId !== sessionId) {
         setSessionId(responseSessionId);
-        
+
         // If this was a new session and we got a session_id, refresh the sessions list
         if (sessionWasCreated && typeof window.refreshSessionsList === 'function') {
           window.refreshSessionsList();

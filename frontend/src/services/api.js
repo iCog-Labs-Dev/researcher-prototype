@@ -498,17 +498,6 @@ export const deleteAllTopicFindings = async (topicName) => {
   }
 };
 
-export const getResearchEngineStatus = async () => {
-  try {
-    const response = await api.get('/research/status');
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching research engine status:', error);
-    throw error;
-  }
-};
-
-
 export const getActiveResearchTopics = async () => {
   try {
     const response = await api.get(`/topic/user/research`);

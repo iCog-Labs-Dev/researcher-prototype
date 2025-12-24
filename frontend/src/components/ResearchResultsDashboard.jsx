@@ -93,6 +93,10 @@ const ResearchResultsDashboard = () => {
 
       findings.forEach(finding => {
         const topicName = finding.topic_name;
+        // Debug: Check if finding_id exists, log if missing
+        if (!finding.finding_id && !finding.id) {
+          console.warn('Finding missing ID field:', finding);
+        }
         if (!groupedFindings[topicName]) {
           groupedFindings[topicName] = [];
         }
@@ -192,7 +196,10 @@ const ResearchResultsDashboard = () => {
     // Bookmarked filter
     if (filters.bookmarkedOnly) {
       topics = topics.filter(topic =>
-        (researchData[topic] || []).some(finding => (finding.bookmarked || bookmarkedFindings.has(finding.finding_id)))
+        (researchData[topic] || []).some(finding => {
+          const findingId = finding.finding_id || finding.id;
+          return finding.bookmarked || (findingId && bookmarkedFindings.has(findingId));
+        })
       );
     }
 
@@ -242,9 +249,14 @@ const ResearchResultsDashboard = () => {
 
   // Handle finding expand/collapse and mark-as-read per finding
   const toggleFinding = async (topicName, findingId, isAlreadyRead) => {
+    if (!findingId) {
+      console.error('Cannot toggle finding: findingId is undefined');
+      return;
+    }
+
     const newExpanded = new Set(expandedFindings);
     const isExpanding = !newExpanded.has(findingId);
-
+    
     if (newExpanded.has(findingId)) {
       newExpanded.delete(findingId);
     } else {
@@ -645,6 +657,7 @@ const ResearchResultsDashboard = () => {
         ) : (
           <div className="topics-list">
             {filteredTopics.map(topicName => {
+                console.log(filteredTopics, 1111)
               let findings = researchData[topicName];
               if (filters.bookmarkedOnly) {
                 findings = findings.filter(f => (f.bookmarked || bookmarkedFindings.has(f.finding_id)));
@@ -697,9 +710,11 @@ const ResearchResultsDashboard = () => {
                   {/* Show list by default (topics default to expanded); users can collapse per topic */}
                   {isExpanded && (
                   <div className="findings-list">
-                      {findings.map((finding, index) => (
+                      {findings.map((finding, index) => {
+                        const findingId = finding.finding_id || finding.id;
+                        return (
                         <div
-                          key={finding.finding_id || index}
+                          key={findingId || index}
                           className={`finding-item ${!finding.read ? 'unread' : ''}`}
                         >
                           <div className="finding-header">
@@ -716,7 +731,12 @@ const ResearchResultsDashboard = () => {
                               className="finding-title"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                toggleFinding(topicName, finding.finding_id, !!finding.read);
+                                const findingId = finding.finding_id || finding.id;
+                                if (findingId) {
+                                  toggleFinding(topicName, findingId, !!finding.read);
+                                } else {
+                                  console.error('Finding ID is missing:', finding);
+                                }
                               }}
                               title={finding.findings_summary || (finding.key_insights && finding.key_insights[0]) || 'Open result'}
                             >
@@ -726,33 +746,37 @@ const ResearchResultsDashboard = () => {
                               <span className="finding-title-text">
                                 {(finding.findings_summary || (finding.key_insights && finding.key_insights[0]) || 'Open result')}
                               </span>
-                              <span className={`finding-toggle ${expandedFindings.has(finding.finding_id) ? 'expanded' : ''}`}>▼</span>
+                              <span className={`finding-toggle ${expandedFindings.has(findingId) ? 'expanded' : ''}`}>▼</span>
                             </div>
 
                             <div className="finding-actions">
                               <button
-                                className={`bookmark-btn ${bookmarkedFindings.has(finding.finding_id) ? 'bookmarked' : ''}`}
+                                className={`bookmark-btn ${bookmarkedFindings.has(findingId) ? 'bookmarked' : ''}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  toggleBookmark(finding.finding_id, topicName);
+                                  if (findingId) {
+                                    toggleBookmark(findingId, topicName);
+                                  }
                                 }}
-                                title={bookmarkedFindings.has(finding.finding_id) ? 'Remove bookmark' : 'Bookmark'}
+                                title={bookmarkedFindings.has(findingId) ? 'Remove bookmark' : 'Bookmark'}
                               >
-                                {bookmarkedFindings.has(finding.finding_id) ? '⭐' : '☆'}
+                                {bookmarkedFindings.has(findingId) ? '⭐' : '☆'}
                               </button>
 
 
                               {!finding.integrated && (
                                 <button
-                                  className={`integrate-btn ${integratingFindings.has(finding.finding_id) ? 'integrating' : ''}`}
+                                  className={`integrate-btn ${integratingFindings.has(findingId) ? 'integrating' : ''}`}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleIntegrateFinding(finding.finding_id);
+                                    if (findingId) {
+                                      handleIntegrateFinding(findingId);
+                                    }
                                   }}
                                   title="Add to Knowledge Graph"
-                                  disabled={integratingFindings.has(finding.finding_id)}
+                                  disabled={integratingFindings.has(findingId)}
                                 >
-                                  {integratingFindings.has(finding.finding_id) ? '⏳' : '🧠'}
+                                  {integratingFindings.has(findingId) ? '⏳' : '🧠'}
                                 </button>
                               )}
 
@@ -766,7 +790,9 @@ const ResearchResultsDashboard = () => {
                                 className="delete-finding-btn"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleDeleteFinding(finding.finding_id, finding.findings_summary);
+                                  if (findingId) {
+                                    handleDeleteFinding(findingId, finding.findings_summary);
+                                  }
                                 }}
                                 title="Delete this finding"
                               >
@@ -775,7 +801,7 @@ const ResearchResultsDashboard = () => {
                             </div>
                           </div>
 
-                          {expandedFindings.has(finding.finding_id) && (
+                          {expandedFindings.has(findingId) && (
                           <div className="finding-content">
                             {/* Display formatted content with citations if available, otherwise fallback to summary */}
                             {finding.formatted_content ? (
@@ -786,7 +812,7 @@ const ResearchResultsDashboard = () => {
                                 const sourcesContent = parts.length > 1 ? parts[1] : null;
 
                                 // Build link renderer with context for this finding
-                                const linkRenderer = createFindingLinkRenderer(topicName, finding.finding_id);
+                                const linkRenderer = createFindingLinkRenderer(topicName, findingId);
                                 const components = { a: linkRenderer };
 
                                 return (
@@ -798,12 +824,14 @@ const ResearchResultsDashboard = () => {
                                           className="sources-toggle"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            handleSourcesToggle(finding.finding_id);
+                                            if (findingId) {
+                                              handleSourcesToggle(findingId);
+                                            }
                                           }}
                                         >
-                                          {showSourcesForFinding.has(finding.finding_id) ? 'Hide Sources' : 'Show Sources'}
+                                          {showSourcesForFinding.has(findingId) ? 'Hide Sources' : 'Show Sources'}
                                         </button>
-                                        {showSourcesForFinding.has(finding.finding_id) && (
+                                        {showSourcesForFinding.has(findingId) && (
                                           <ReactMarkdown components={components}>{`**Sources:**${sourcesContent}`}</ReactMarkdown>
                                         )}
                                       </div>
@@ -830,7 +858,8 @@ const ResearchResultsDashboard = () => {
                           </div>
                           )}
                         </div>
-                      ))}
+                      );
+                      })}
                     </div>
                   )}
                 </div>
