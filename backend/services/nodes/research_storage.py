@@ -63,7 +63,7 @@ async def research_storage_node(state: ChatState) -> ChatState:
         logger.info(f"💾 Research Storage: ⚠️ Quality score {overall_quality_score:.2f} below threshold {quality_threshold} - not storing")
 
         # Still update last researched time to avoid immediate retry
-        success = await topic_service.async_update_topic_last_researched(user_id, topic_id)
+        success = await topic_service.async_update_topic_last_researched(topic_id)
 
         if success:
             state["module_results"]["research_storage"] = {
@@ -90,7 +90,7 @@ async def research_storage_node(state: ChatState) -> ChatState:
         logger.info(f"💾 Research Storage: ⚠️ Findings are duplicate - not storing")
         
         # Still update last researched time
-        success = await topic_service.async_update_topic_last_researched(user_id, topic_id)
+        success = await topic_service.async_update_topic_last_researched(topic_id)
 
         if success:
             state["module_results"]["research_storage"] = {
@@ -164,7 +164,7 @@ async def research_storage_node(state: ChatState) -> ChatState:
                     asyncio.create_task(notification_service.notify_new_research(
                         user_id=user_id,
                         topic_id=topic_id,
-                        result_id=finding_id,
+                        result_id=str(finding_id),
                         topic_name=topic_name
                     ))
                 else:
@@ -172,7 +172,7 @@ async def research_storage_node(state: ChatState) -> ChatState:
                     loop.run_until_complete(notification_service.notify_new_research(
                         user_id=user_id,
                         topic_id=topic_id,
-                        result_id=finding_id,
+                        result_id=str(finding_id),
                         topic_name=topic_name
                     ))
                 
@@ -185,7 +185,7 @@ async def research_storage_node(state: ChatState) -> ChatState:
             state["module_results"]["research_storage"] = {
                 "success": True,
                 "stored": True,
-                "finding_id": finding_id,
+                "finding_id": str(finding_id),
                 "quality_score": overall_quality_score,
                 "insights_count": len(quality_assessment.get("key_insights", [])),
                 "content_length": len(research_content),

@@ -293,6 +293,7 @@ class AutonomousResearcher:
     async def run_langgraph_research(self, user_id: str, topic: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Run LangGraph research workflow for a single topic and return the result."""
         try:
+            topic_id = topic.get("topic_id")
             topic_name = topic["topic_name"]
             topic_description = topic.get("description", "")
             last_researched = topic.get("last_researched")
@@ -309,6 +310,7 @@ class AutonomousResearcher:
                 "module_results": {},
                 "workflow_context": {
                     "research_context": {
+                        "topic_id": topic_id,
                         "topic_name": topic_name,
                         "topic_description": topic_description,
                         "user_id": user_id,

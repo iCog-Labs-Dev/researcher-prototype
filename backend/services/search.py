@@ -91,9 +91,9 @@ class PerplexitySearchService(BaseSearchService):
         try:
             # Get personalization context
             user_id = state.get("user_id")
-            source_preferences = self._get_source_preferences(user_id)
-            content_preferences = self._get_content_preferences(user_id)
-            
+            source_preferences = await self._get_source_preferences(user_id)
+            content_preferences = await self._get_content_preferences(user_id)
+
             # Configure search parameters based on preferences
             web_search_mode = source_preferences.get("web_search_mode", "comprehensive")
             
@@ -182,13 +182,13 @@ class PerplexitySearchService(BaseSearchService):
                 "source": self.source_name
             }
     
-    def _get_source_preferences(self, user_id: str) -> dict:
+    async def _get_source_preferences(self, user_id: str) -> dict:
         """Get user's source preferences from personalization context."""
         if not user_id:
             return {}
         
         try:
-            _, personalization_context = self.user_service.async_get_personalization_context(user_id)
+            _, personalization_context = await self.user_service.async_get_personalization_context(user_id)
 
             content_prefs = personalization_context.get("content_preferences", {})
             source_preferences = content_prefs.get("source_types", {})
@@ -198,12 +198,12 @@ class PerplexitySearchService(BaseSearchService):
             logger.warning(f"🔍 {self.source_name}: ⚠️ Could not retrieve personalization context for user {user_id}: {str(e)}")
             return {}
 
-    def _get_content_preferences(self, user_id: str) -> dict:
+    async def _get_content_preferences(self, user_id: str) -> dict:
         """Get full content preferences from personalization context."""
         if not user_id:
             return {}
         try:
-            _, personalization_context = self.user_service.async_get_personalization_context(user_id)
+            _, personalization_context = await self.user_service.async_get_personalization_context(user_id)
 
             return personalization_context.get("content_preferences", {})
         except Exception as e:
