@@ -3,7 +3,7 @@ import { useAuth } from './AuthContext';
 
 const SessionContext = createContext();
 
-// Move defaultSystemMessage outside component to prevent recreation
+// Default greeting shown only for NEW sessions (UI only; not sent as a user message)
 const DEFAULT_SYSTEM_MESSAGE = { role: 'system', content: "Hello! I'm your AI assistant. How can I help you today?" };
 
 export const useSession = () => {
@@ -20,13 +20,17 @@ export const SessionProvider = ({ children }) => {
   // Memoize user id to prevent unnecessary rerenders
   const userId = useMemo(() => user?.id || '', [user?.id]);
 
-  const [messages, setMessages] = useState(() => [
-    { ...DEFAULT_SYSTEM_MESSAGE }
-  ]);
+  const [messages, setMessages] = useState(() => [{ ...DEFAULT_SYSTEM_MESSAGE }]);
   const [userDisplayName, setUserDisplayName] = useState('');
   const [personality, setPersonality] = useState(null);
   const [conversationTopics, setConversationTopics] = useState([]);
-  const [sessionId, setSessionId] = useState(null);
+  const [sessionIdState, setSessionIdState] = useState(null);
+  const sessionIdRef = useRef(null);
+  const setSessionId = useCallback((nextSessionId) => {
+    sessionIdRef.current = nextSessionId;
+    setSessionIdState(nextSessionId);
+  }, []);
+  const getSessionId = useCallback(() => sessionIdRef.current, []);
 
   const previousUserIdRef = useRef(null);
 
@@ -44,6 +48,7 @@ export const SessionProvider = ({ children }) => {
       setUserDisplayName('');
       setPersonality(null);
       setConversationTopics([]);
+      setSessionId(null);
       previousUserIdRef.current = null;
       prevPersonalityRef.current = null;
       return;
@@ -66,11 +71,12 @@ export const SessionProvider = ({ children }) => {
     if (previousUserIdRef.current && previousUserIdRef.current !== userId) {
       setMessages([{ ...DEFAULT_SYSTEM_MESSAGE }]);
       setConversationTopics([]);
+      setSessionId(null);
       prevPersonalityRef.current = null;
     }
 
     previousUserIdRef.current = userId;
-  }, [isAuthenticated, userId, userDisplayNameFromAuth, userPersonalityFromAuth, userDisplayName]);
+  }, [isAuthenticated, userId, userDisplayNameFromAuth, userPersonalityFromAuth, userDisplayName, setSessionId]);
 
   const updateMessages = useCallback((newMessages) => {
     setMessages(newMessages);
@@ -96,25 +102,25 @@ export const SessionProvider = ({ children }) => {
     setMessages([{ ...DEFAULT_SYSTEM_MESSAGE }]);
     setConversationTopics([]);
     setSessionId(null);
-  }, []);
+  }, [setSessionId]);
 
   const switchSession = useCallback((newSessionId, initialMessages = null) => {
     setSessionId(newSessionId);
-    // If initial messages provided, use them; otherwise start with system message
-    if (initialMessages && Array.isArray(initialMessages) && initialMessages.length > 0) {
-        //TODO if we need to enable initial message when switching sessions
-      // setMessages(initialMessages);
+    // We currently don't load chat history for sessions; start with an empty UI.
+    // The system message is still added automatically to API payloads when sending.
+    if (initialMessages && Array.isArray(initialMessages)) {
+      setMessages(initialMessages);
     } else {
-      // setMessages([{ ...DEFAULT_SYSTEM_MESSAGE }]);
+      setMessages([]);
     }
     setConversationTopics([]);
-  }, []);
+  }, [setSessionId]);
 
   const startNewSession = useCallback(() => {
     setSessionId(null);
     setMessages([{ ...DEFAULT_SYSTEM_MESSAGE }]);
     setConversationTopics([]);
-  }, []);
+  }, [setSessionId]);
 
   const value = useMemo(() => ({
     // State
@@ -123,7 +129,7 @@ export const SessionProvider = ({ children }) => {
     userDisplayName,
     personality,
     conversationTopics,
-    sessionId,
+    sessionId: sessionIdState,
 
     // Actions
     updateMessages,
@@ -135,7 +141,8 @@ export const SessionProvider = ({ children }) => {
     switchSession,
     startNewSession,
     setSessionId,
-  }), [userId, messages, userDisplayName, personality, conversationTopics, sessionId, updateMessages, addMessage, updatePersonality, updateUserDisplayName, updateConversationTopics, resetSession, switchSession, startNewSession]);
+    getSessionId,
+  }), [userId, messages, userDisplayName, personality, conversationTopics, sessionIdState, updateMessages, addMessage, updatePersonality, updateUserDisplayName, updateConversationTopics, resetSession, switchSession, startNewSession, setSessionId, getSessionId]);
 
   return (
     <SessionContext.Provider value={value}>

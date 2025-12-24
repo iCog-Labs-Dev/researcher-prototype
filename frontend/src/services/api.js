@@ -73,30 +73,6 @@ export const getAllChatSessions = async () => {
   }
 };
 
-// Create or switch to a chat session
-export const createOrSwitchSession = async (sessionId = null) => {
-  try {
-    // For session initialization, send a minimal user message
-    // The backend will create or retrieve the session based on session_id
-    const payload = {
-      messages: [{ role: 'user', content: 'Hello' }],
-      temperature: 0.7,
-      max_tokens: 1000,
-    };
-
-    // Include session_id if provided (switching to existing session)
-    if (sessionId) {
-      payload.session_id = sessionId;
-    }
-
-    const response = await api.post('/chat', payload);
-    return response.data;
-  } catch (error) {
-    console.error('Error creating/switching session:', error);
-    throw error;
-  }
-};
-
 // Send a chat message
 export const sendChatMessage = async (messages, temperature = 0.7, maxTokens = 1000, personality = null, sessionId = null) => {
   try {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from '../context/SessionContext';
-import { getAllChatSessions, createOrSwitchSession } from '../services/api';
+import { getAllChatSessions } from '../services/api';
 import '../styles/SessionHistory.css';
 
 const SessionHistory = () => {
@@ -34,39 +34,14 @@ const SessionHistory = () => {
       // Convert to string for comparison
       const clickedSessionIdStr = String(clickedSessionId);
       const currentSessionIdStr = sessionId ? String(sessionId) : null;
-      
+
       // If clicking on the same session, do nothing
       if (clickedSessionIdStr === currentSessionIdStr) {
         return;
       }
-      
-      // Switch to the selected session - send POST v2/chat with session_id
-      const response = await createOrSwitchSession(clickedSessionId);
-      
-      // Construct messages from the POST response
-      // We sent "Hello" as user message, so we have:
-      // - System message (default)
-      // - User message: "Hello" (what we sent to initialize)
-      // - Assistant message: response.response (from POST response)
-      const initialMessages = [
-        { role: 'system', content: "Hello! I'm your AI assistant. How can I help you today?" },
-        { role: 'user', content: 'Hello' },
-        {
-          role: 'assistant',
-          content: response.response || '',
-          routingInfo: response.routing_analysis,
-          follow_up_questions: response.follow_up_questions || [],
-        }
-      ];
-      
-      // Update session ID in context and set messages from POST response
-      if (response.session_id) {
-        switchSession(String(response.session_id), initialMessages);
-      }
-      
-      // Refresh sessions list to get updated data
-      const updatedSessions = await getAllChatSessions();
-      setSessions(updatedSessions || []);
+      // Switch to the selected session locally (do not send any auto-message).
+      // The backend session will be used when the user sends the next real message.
+      switchSession(clickedSessionIdStr);
     } catch (err) {
       console.error('Error switching session:', err);
       setError('Failed to switch session');
@@ -76,8 +51,7 @@ const SessionHistory = () => {
   // Handle creating a new session
   const handleNewSession = async () => {
     try {
-      // Reset to default messages (just system message) - don't send POST yet
-      // The session will be created when user sends their first message
+      // Reset locally - the session will be created when user sends their first message
       startNewSession();
     } catch (err) {
       console.error('Error creating new session:', err);
@@ -120,14 +94,14 @@ const SessionHistory = () => {
               const sessionIdStr = String(session.id);
               const currentSessionIdStr = sessionId ? String(sessionId) : null;
               const isActive = sessionIdStr === currentSessionIdStr;
-              
+
               return (
-                <li 
-                  key={session.id} 
+                <li
+                  key={session.id}
                   className={isActive ? 'active' : ''}
                 >
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     onClick={() => handleSessionClick(session.id)}
                     title={session.name || session.id}
                   >

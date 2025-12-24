@@ -69,9 +69,7 @@ describe('ChatPage Comprehensive Tests', () => {
     
     mockSessionContext = {
       userId: 'test-user',
-      messages: [
-        { role: 'system', content: 'Hello! I\'m your AI assistant.' }
-      ],
+      messages: [],
       personality: { style: 'helpful', tone: 'friendly' },
       userDisplayName: 'Test User',
       conversationTopics: [],
