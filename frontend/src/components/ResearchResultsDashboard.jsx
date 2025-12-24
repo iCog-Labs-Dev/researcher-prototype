@@ -256,7 +256,7 @@ const ResearchResultsDashboard = () => {
 
     const newExpanded = new Set(expandedFindings);
     const isExpanding = !newExpanded.has(findingId);
-    
+
     if (newExpanded.has(findingId)) {
       newExpanded.delete(findingId);
     } else {
@@ -657,7 +657,6 @@ const ResearchResultsDashboard = () => {
         ) : (
           <div className="topics-list">
             {filteredTopics.map(topicName => {
-                console.log(filteredTopics, 1111)
               let findings = researchData[topicName];
               if (filters.bookmarkedOnly) {
                 findings = findings.filter(f => (f.bookmarked || bookmarkedFindings.has(f.finding_id)));
