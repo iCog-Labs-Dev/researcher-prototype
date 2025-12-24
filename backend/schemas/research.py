@@ -35,7 +35,6 @@ class ResearchFindingItemOut(BaseModel):
     topic_name: str
     read: bool
     bookmarked: bool
-    research_time: float
     quality_score: Optional[float] = None
     created_at: datetime
 
