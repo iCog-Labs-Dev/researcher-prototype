@@ -1,10 +1,8 @@
-import time
 from uuid import UUID
 from typing import Optional, Annotated
-from fastapi import APIRouter, Request, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Request, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import config
 from db import get_session
 from services.logging_config import get_logger
 from dependencies import (
@@ -14,10 +12,8 @@ from dependencies import (
 from schemas.research import (
     BookmarkUpdateInOut,
     MotivationConfigUpdate,
-    ExpansionIn,
     ResearchFindingsOut,
 )
-from services.autonomous_research_engine import initialize_autonomous_researcher
 from services.research import ResearchService
 
 router = APIRouter(prefix="/research", tags=["v2/research"], dependencies=[Depends(inject_user_id)])
@@ -55,13 +51,6 @@ async def mark_research_finding_read(
     service = ResearchService()
     await service.mark_finding_as_read(session, user_id, finding_id)
 
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@router.post("/findings/{finding_id}/integrate", deprecated=True, description="Deprecated: Zep integration disabled")
-async def integrate_research_finding(
-    finding_id: UUID,
-):
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -108,28 +97,8 @@ async def delete_all_topic_findings(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/status")
-async def get_research_engine_status(
-    request: Request,
-):
-    """Get the current status of the autonomous research engine."""
-
-    try:
-        if hasattr(request.app.state, "autonomous_researcher"):
-            status = request.app.state.autonomous_researcher.get_status()
-            return status
-        else:
-            return {"enabled": False, "running": False, "error": "Autonomous researcher not initialized"}
-
-    except Exception as e:
-        logger.error(f"Error getting research engine status: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error getting research status: {str(e)}")
-
-
-@router.post("/debug/expand", deprecated=True, description="Deprecated: Zep integration disabled")
-async def debug_expand_topics(
-    body: ExpansionIn
-):
+@router.post("/findings/{finding_id}/integrate", deprecated=True, description="Deprecated: Zep integration disabled")
+async def integrate_research_finding():
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
