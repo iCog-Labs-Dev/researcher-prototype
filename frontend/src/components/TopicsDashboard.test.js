@@ -43,7 +43,7 @@ describe('TopicsDashboard Component', () => {
       active: 1,
       inactive: 1,
     });
-    api.getResearchEngineStatus.mockResolvedValue({
+    adminApi.getResearchEngineStatus = jest.fn().mockResolvedValue({
       available: true,
       enabled: true,
       running: false,
@@ -131,7 +131,7 @@ describe('TopicsDashboard Component', () => {
     );
 
     await waitFor(() => {
-      expect(api.getResearchEngineStatus).toHaveBeenCalled();
+      expect(adminApi.getResearchEngineStatus).toHaveBeenCalled();
     }, { timeout: 3000 });
   });
 
