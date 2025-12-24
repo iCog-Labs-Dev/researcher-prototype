@@ -34,8 +34,6 @@ class MotivationConfigUpdate(BaseModel):
 
 
 from dependencies import (
-    profile_manager,
-    research_manager,
     zep_manager,
     _motivation_config_override,
 )
@@ -62,7 +60,7 @@ async def lifespan(app: FastAPI):
         logger.info("🔬 Initializing Autonomous Research Engine...")
         logger.info(f"App startup - Config override: {_motivation_config_override}")
         app.state.autonomous_researcher = initialize_autonomous_researcher(
-            profile_manager, research_manager, _motivation_config_override
+            _motivation_config_override
         )
         await app.state.autonomous_researcher.start()
         logger.info("🔬 Autonomous Research Engine initialized successfully")
