@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from '../context/SessionContext';
-import { getAllChatSessions } from '../services/api';
+import { getAllChatSessions, getChatHistory } from '../services/api';
 import '../styles/SessionHistory.css';
 
 const SessionHistory = () => {
@@ -8,6 +8,8 @@ const SessionHistory = () => {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [loadingHistoryForSession, setLoadingHistoryForSession] = useState(null);
 
   // Fetch all sessions on component mount
   useEffect(() => {
@@ -28,8 +30,37 @@ const SessionHistory = () => {
     fetchSessions();
   }, []); // Only fetch on mount
 
+  // Transform chat history API response to message format
+  const transformChatHistoryToMessages = (history) => {
+    if (!Array.isArray(history) || history.length === 0) {
+      return [];
+    }
+
+    const messages = [];
+    history.forEach((item) => {
+      // Add user message (question)
+      if (item.question) {
+        messages.push({
+          role: 'user',
+          content: item.question,
+          created_at: item.created_at
+        });
+      }
+      // Add assistant message (answer)
+      if (item.answer) {
+        messages.push({
+          role: 'assistant',
+          content: item.answer,
+          created_at: item.created_at
+        });
+      }
+    });
+
+    return messages;
+  };
+
   // Handle clicking on a session
-  const handleSessionClick = async (clickedSessionId) => {
+  const handleSessionClick = async (clickedSessionId, session) => {
     try {
       // Convert to string for comparison
       const clickedSessionIdStr = String(clickedSessionId);
@@ -39,12 +70,28 @@ const SessionHistory = () => {
       if (clickedSessionIdStr === currentSessionIdStr) {
         return;
       }
-      // Switch to the selected session locally (do not send any auto-message).
-      // The backend session will be used when the user sends the next real message.
-      switchSession(clickedSessionIdStr);
+
+      // Fetch chat history for the selected session
+      setLoadingHistory(true);
+      setLoadingHistoryForSession(clickedSessionIdStr);
+      try {
+        const history = await getChatHistory(clickedSessionIdStr, 1000);
+        const transformedMessages = transformChatHistoryToMessages(history);
+
+        // Switch to the selected session with loaded history
+        switchSession(clickedSessionIdStr, transformedMessages);
+      } catch (historyError) {
+        console.error('Error loading chat history:', historyError);
+        // Still switch to the session even if history fails to load
+        switchSession(clickedSessionIdStr, []);
+      } finally {
+        setLoadingHistory(false);
+        setLoadingHistoryForSession(null);
+      }
     } catch (err) {
       console.error('Error switching session:', err);
       setError('Failed to switch session');
+      setLoadingHistory(false);
     }
   };
 
@@ -102,10 +149,15 @@ const SessionHistory = () => {
                 >
                   <button
                     type="button"
-                    onClick={() => handleSessionClick(session.id)}
+                    onClick={() => handleSessionClick(session.id, session)}
                     title={session.name || session.id}
+                    disabled={loadingHistory && loadingHistoryForSession === sessionIdStr}
                   >
-                    {session.name || 'Untitled Session'}
+                    {loadingHistory && loadingHistoryForSession === sessionIdStr ? (
+                      <>Loading history...</>
+                    ) : (
+                      session.name || 'Untitled Session'
+                    )}
                   </button>
                 </li>
               );

@@ -73,6 +73,20 @@ export const getAllChatSessions = async () => {
   }
 };
 
+// Get chat history for a specific chat session
+export const getChatHistory = async (chatId, limit = 1000) => {
+  console.log('111Fetching chat history for chat ID:', chatId);
+  try {
+    const response = await api.get(`/chat/${chatId}`, {
+      params: { limit }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching chat history:', error);
+    throw error;
+  }
+};
+
 // Send a chat message
 export const sendChatMessage = async (messages, temperature = 0.7, maxTokens = 1000, personality = null, sessionId = null) => {
   try {
