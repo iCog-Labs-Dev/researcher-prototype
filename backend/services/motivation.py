@@ -13,9 +13,6 @@ from sqlalchemy import update, func, select
 import sqlalchemy as sa
 from services.logging_config import get_logger
 from database.motivation_repository import MotivationRepository
-from storage.profile_manager import ProfileManager
-from storage.research_manager import ResearchManager
-from services.personalization_manager import PersonalizationManager
 from services.topic_expansion_service import TopicExpansionService
 from services.topic import TopicService
 from services.research import ResearchService
@@ -40,16 +37,10 @@ class MotivationSystem:
     def __init__(
         self, 
         session: AsyncSession,
-        profile_manager: ProfileManager,
-        research_manager: ResearchManager,
-        personalization_manager: Optional[PersonalizationManager] = None
     ):
         """Initialize the enhanced motivation system."""
         self.session = session
         self.db_service = MotivationRepository(session)
-        self.profile_manager = profile_manager
-        self.research_manager = research_manager
-        self.personalization_manager = personalization_manager
         
         # Research loop state
         self.is_running = False
@@ -62,9 +53,9 @@ class MotivationSystem:
         # Initialize topic expansion service
         try:
             from dependencies import zep_manager as _zep_manager_singleton
-            self.topic_expansion_service = TopicExpansionService(_zep_manager_singleton, self.research_manager)
+            self.topic_expansion_service = TopicExpansionService(_zep_manager_singleton, None)
         except Exception:
-            self.topic_expansion_service = TopicExpansionService(None, self.research_manager)
+            self.topic_expansion_service = TopicExpansionService(None, None)
         
         # Concurrency control
         self._expansion_semaphore = asyncio.Semaphore(max(1, config.EXPANSION_MAX_PARALLEL))
@@ -378,10 +369,7 @@ class MotivationSystem:
     async def _get_topic_success_rate(self, user_id: str, topic_id: uuid.UUID) -> float:
         """Calculate research success rate from user engagement patterns."""
         try:
-            if not self.personalization_manager:
-                return 0.5  # Default neutral success rate
-            
-            # Use engagement as proxy for success rate
+            # Use engagement as proxy for success rate (database-backed)
             engagement_score = await self._get_topic_engagement_score(user_id, topic_id)
             success_rate = 0.3 + (engagement_score * 0.4)  # Range: 0.3-0.7
             
@@ -610,9 +598,6 @@ class MotivationSystem:
     async def _update_expansion_lifecycle(self, user_id: str) -> None:
         """Evaluate and update lifecycle state for expansion topics for a user."""
         try:
-            topics_data = self.research_manager.get_user_topics(user_id)
-            if not topics_data:
-                return
             now_ts = time.time()
             promoted = paused = retired = 0
             changed = False
@@ -623,88 +608,96 @@ class MotivationSystem:
             backoff_days = config.EXPANSION_BACKOFF_DAYS
             retire_ttl_days = config.EXPANSION_RETIRE_TTL_DAYS
 
-            # Fetch active topics from database once per user
             user_uuid = uuid.UUID(user_id)
-            active_topics = await self.topic_service.async_get_active_research_topics(user_id=user_uuid)
-            # Create a lookup map by topic name
-            topics_by_name = {t.name: t for t in active_topics}
+            # Fetch topic scores for this user and filter to expansion topics using meta_data
+            topic_scores = await self.db_service.get_user_topic_scores(user_uuid, active_only=False, limit=None, order_by_motivation=False)
 
-            for sid, session_topics in topics_data.get('sessions', {}).items():
-                for topic in session_topics:
-                    if not topic.get('is_expansion', False):
-                        continue
-                    name = topic.get('topic_name')
-                    depth = int(topic.get('expansion_depth', 0) or 0)
-                    
-                    # Look up topic from database
-                    topic_obj = topics_by_name.get(name)
-                    
+            for ts in topic_scores:
+                meta = ts.meta_data or {}
+                if not meta.get('is_expansion', False):
+                    continue
+                name = ts.topic_name
+                depth = int(meta.get('expansion_depth', 0) or 0)
+                
+                # Compute engagement and recent average quality from DB-backed findings
+                engagement = 0.0
+                try:
+                    engagement = await self._get_topic_engagement_score(user_id, ts.topic_id)
+                except Exception:
                     engagement = 0.0
-                    try:
-                        if topic_obj:
-                            engagement = await self._get_topic_engagement_score(user_id, topic_obj.id)
-                    except Exception:
-                        engagement = 0.0
-                    avg_quality = await self.get_recent_average_quality(user_id, topic_obj.id, window_days) if topic_obj else 0.0
+                avg_quality = await self.get_recent_average_quality(user_id, ts.topic_id, window_days)
 
-                    status = topic.get('expansion_status', 'active')
-                    last_eval = float(topic.get('last_evaluated_at', 0) or 0)
-                    backoff_until = float(topic.get('last_backoff_until', 0) or 0)
+                status = meta.get('expansion_status', 'active')
+                last_eval = float(meta.get('last_evaluated_at', 0) or 0)
+                backoff_until = float(meta.get('last_backoff_until', 0) or 0)
 
-                    decision_debug = f"topic='{name}' depth={depth} engagement={engagement:.2f} avg_q={avg_quality:.2f} status={status}"
+                decision_debug = f"topic='{name}' depth={depth} engagement={engagement:.2f} avg_q={avg_quality:.2f} status={status}"
 
-                    # Promote to allow children
-                    if engagement >= promote_thr and avg_quality >= min_quality:
-                        if not topic.get('child_expansion_enabled', False) or status != 'active':
-                            topic['child_expansion_enabled'] = True
-                            topic['expansion_status'] = 'active'
-                            changed = True
-                            promoted += 1
-                            logger.debug(f"Lifecycle promote: {decision_debug}")
-                        topic['last_evaluated_at'] = now_ts
-                        continue
-
-                    # Assess interactions in window via findings read/bookmark/integration
-                    any_interaction = False
-                    try:
-                        if topic_obj:
-                            success, findings = await self.research_service.async_get_findings(user_id, str(topic_obj.id))
-                            if success:
-                                window_start = now_ts - window_days * 24 * 3600
-                                any_interaction = any(
-                                    (f.read or f.bookmarked or f.integrated) and f.created_at and f.created_at.timestamp() >= window_start
-                                    for f in findings
-                                )
-                    except Exception:
-                        any_interaction = False
-
-                    # Retire after TTL if still cold (check before pausing again)
-                    if status == 'paused' and last_eval and (now_ts - last_eval) >= retire_ttl_days * 24 * 3600:
-                        if engagement < retire_thr and not any_interaction:
-                            topic['expansion_status'] = 'retired'
-                            topic['last_evaluated_at'] = now_ts
-                            changed = True
-                            retired += 1
-                            logger.debug(f"Lifecycle retire: {decision_debug}")
-                            continue
-
-                    # Pause on cold engagement and no interactions in window
-                    if engagement < retire_thr and not any_interaction:
-                        topic['is_active_research'] = False
-                        topic['child_expansion_enabled'] = False
-                        topic['expansion_status'] = 'paused'
-                        topic['last_backoff_until'] = now_ts + backoff_days * 24 * 3600
-                        topic['last_evaluated_at'] = now_ts
+                # Promote to allow children
+                if engagement >= promote_thr and avg_quality >= min_quality:
+                    if not meta.get('child_expansion_enabled', False) or status != 'active':
+                        meta['child_expansion_enabled'] = True
+                        meta['expansion_status'] = 'active'
                         changed = True
-                        paused += 1
-                        logger.debug(f"Lifecycle pause: {decision_debug}")
+                        promoted += 1
+                        logger.debug(f"Lifecycle promote: {decision_debug}")
+                    meta['last_evaluated_at'] = now_ts
+                    if changed:
+                        await self.db_service.update_topic_score(
+                            user_uuid,
+                            ts.topic_name,
+                            meta_data=meta,
+                        )
+                    continue
+
+                # Assess interactions in window via findings read/bookmark/integration
+                any_interaction = False
+                try:
+                    success, findings = await self.research_service.async_get_findings(user_id, str(ts.topic_id))
+                    if success:
+                        window_start = now_ts - window_days * 24 * 3600
+                        any_interaction = any(
+                            (f.read or f.bookmarked or f.integrated) and f.created_at and f.created_at.timestamp() >= window_start
+                            for f in findings
+                        )
+                except Exception:
+                    any_interaction = False
+
+                # Retire after TTL if still cold (check before pausing again)
+                if status == 'paused' and last_eval and (now_ts - last_eval) >= retire_ttl_days * 24 * 3600:
+                    if engagement < retire_thr and not any_interaction:
+                        meta['expansion_status'] = 'retired'
+                        meta['last_evaluated_at'] = now_ts
+                        changed = True
+                        retired += 1
+                        logger.debug(f"Lifecycle retire: {decision_debug}")
+                        await self.db_service.update_topic_score(
+                            user_uuid,
+                            ts.topic_name,
+                            meta_data=meta,
+                        )
                         continue
 
-                    # No action
-                    topic['last_evaluated_at'] = now_ts
+                # Pause on cold engagement and no interactions in window
+                if engagement < retire_thr and not any_interaction:
+                    meta['is_active_research'] = False
+                    meta['child_expansion_enabled'] = False
+                    meta['expansion_status'] = 'paused'
+                    meta['last_backoff_until'] = now_ts + backoff_days * 24 * 3600
+                    meta['last_evaluated_at'] = now_ts
+                    changed = True
+                    paused += 1
+                    logger.debug(f"Lifecycle pause: {decision_debug}")
+                    await self.db_service.update_topic_score(
+                        user_uuid,
+                        ts.topic_name,
+                        meta_data=meta,
+                    )
+                    continue
 
-            if changed:
-                self.research_manager.save_user_topics(user_id, topics_data)
+                # No action
+                meta['last_evaluated_at'] = now_ts
+
             logger.info(f"Lifecycle update for {user_id}: promoted={promoted}, paused={paused}, retired={retired}")
 
         except Exception as e:

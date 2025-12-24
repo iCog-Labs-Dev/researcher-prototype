@@ -16,9 +16,6 @@ logger = get_logger(__name__)
 
 # Import configuration and existing components
 import config
-from storage.profile_manager import ProfileManager
-from storage.research_manager import ResearchManager
-from services.personalization_manager import PersonalizationManager
 from research_graph_builder import research_graph
 from services.motivation import MotivationSystem
 from services.topic_expansion_service import TopicExpansionService
@@ -33,19 +30,10 @@ class AutonomousResearcher:
     LangGraph-based autonomous research engine that conducts background research on subscribed topics.
     """
 
-    def __init__(self, profile_manager: ProfileManager, research_manager: ResearchManager, motivation_config_override: dict = None, personalization_manager: PersonalizationManager = None):
+    def __init__(self, motivation_config_override: dict = None):
         """Initialize the autonomous researcher."""
-        self.profile_manager = profile_manager
-        self.research_manager = research_manager
         self.is_running = False
         self.research_task = None
-        
-        # Use provided PersonalizationManager or create one using the same storage as profile_manager
-        if personalization_manager:
-            self.personalization_manager = personalization_manager
-        else:
-            # Extract storage manager from profile_manager to avoid duplication
-            self.personalization_manager = PersonalizationManager(profile_manager.storage, profile_manager)
         
         # Initialize motivation system (will be set up in start() method with database session)
         self.motivation_system = None
@@ -96,9 +84,6 @@ class AutonomousResearcher:
             self.db_session = SessionLocal()
             self.motivation_system = MotivationSystem(
                 session=self.db_session,
-                profile_manager=self.profile_manager,
-                research_manager=self.research_manager,
-                personalization_manager=self.personalization_manager
             )
             await self.motivation_system.start()
             logger.info("🔬 Motivation system initialized and started")
@@ -368,12 +353,12 @@ class AutonomousResearcher:
         """Generate expansion candidates for a root topic, create child topics respecting breadth limits, and research active children."""
         results: List[Dict[str, Any]] = []
         try:
-            # Initialize TopicExpansionService similar to engine init
+            # Initialize TopicExpansionService
             try:
                 from dependencies import zep_manager as _zep_manager_singleton  # type: ignore
-                topic_expansion_service = TopicExpansionService(_zep_manager_singleton, self.research_manager)
+                topic_expansion_service = TopicExpansionService(_zep_manager_singleton, None)
             except Exception:
-                topic_expansion_service = TopicExpansionService(None, self.research_manager)  # type: ignore[arg-type]
+                topic_expansion_service = TopicExpansionService(None, None)  # type: ignore[arg-type]
 
             # Generate candidates
             candidates = await topic_expansion_service.generate_candidates(user_id, root_topic)
@@ -478,10 +463,10 @@ def get_autonomous_researcher() -> Optional[AutonomousResearcher]:
     return autonomous_researcher
 
 
-def initialize_autonomous_researcher(profile_manager: ProfileManager, research_manager: ResearchManager, motivation_config_override: dict = None) -> AutonomousResearcher:
+def initialize_autonomous_researcher(motivation_config_override: dict = None) -> AutonomousResearcher:
     """Initialize the global LangGraph autonomous researcher instance."""
     global autonomous_researcher
-    autonomous_researcher = AutonomousResearcher(profile_manager, research_manager, motivation_config_override)
+    autonomous_researcher = AutonomousResearcher(motivation_config_override)
     return autonomous_researcher
 
 

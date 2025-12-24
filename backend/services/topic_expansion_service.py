@@ -10,7 +10,7 @@ from langchain_openai import ChatOpenAI
 from services.logging_config import get_logger
 import config
 from storage.zep_manager import ZepManager
-from storage.research_manager import ResearchManager
+from services.topic import TopicService
 from prompts import ADJACENT_TOPIC_SELECTOR_PROMPT
 from llm_models import ExpansionSelection
 
@@ -28,9 +28,10 @@ class ExpansionCandidate:
 
 
 class TopicExpansionService:
-    def __init__(self, zep_manager: ZepManager, research_manager: ResearchManager) -> None:
+    def __init__(self, zep_manager: ZepManager, _unused: object = None) -> None:
         self.zep = zep_manager
-        self.research = research_manager
+        # Use database-backed topics via TopicService instead of file-based ResearchManager
+        self.topic_service = TopicService()
         self.metrics: Dict[str, int] = {
             "expansion_candidates_total": 0,
             "expansion_llm_accepted": 0,
@@ -108,18 +109,16 @@ class TopicExpansionService:
             s2 = re.sub(r"[\(\)\[\]\{\}\'\"]", "", s2)
             return s2
 
-        # Gather existing topic names (prefer all topics; fallback to active topics)
+        # Gather existing topic names from database-backed research topics
+        existing_names: List[str] = []
         try:
-            topics_data = self.research.get_user_topics(user_id)
-            existing_names: List[str] = []
-            for session_topics in topics_data.get("sessions", {}).values():
-                for t in session_topics:
-                    n = t.get("topic_name")
-                    if n:
-                        existing_names.append(n)
+            import uuid
+            user_uuid = uuid.UUID(user_id)
+            success, active_topics = await self.topic_service.async_get_active_research_topics(user_id=user_uuid)
+            if success and active_topics:
+                existing_names = [t.name for t in active_topics if getattr(t, "name", None)]
         except Exception:
-            actives = self.research.get_active_research_topics(user_id)
-            existing_names = [t.get("topic_name") for t in actives if t.get("topic_name")]
+            existing_names = []
 
         existing_norms = {norm_name(n) for n in existing_names}
 
