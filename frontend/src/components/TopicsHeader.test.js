@@ -30,7 +30,8 @@ describe('TopicsHeader Component', () => {
     onShowMotivation: jest.fn(),
     onShowEngineSettings: jest.fn(),
     onDeleteNonActivated: jest.fn(),
-    onAddCustomTopic: jest.fn()
+    onAddCustomTopic: jest.fn(),
+    isAdmin: true // Default to admin for tests that check Research Engine Status
   };
 
   beforeEach(() => {
@@ -108,6 +109,18 @@ describe('TopicsHeader Component', () => {
     const timingButton = screen.getByTitle(/Configure research timing/i);
     fireEvent.click(timingButton);
     expect(defaultProps.onShowEngineSettings).toHaveBeenCalled();
+  });
+
+  test('does not show research engine status for non-admin users', () => {
+    render(<TopicsHeader {...defaultProps} isAdmin={false} />);
+    expect(screen.queryByText(/Research Engine:/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Enable/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Run/i)).not.toBeInTheDocument();
+  });
+
+  test('shows research engine status for admin users', () => {
+    render(<TopicsHeader {...defaultProps} isAdmin={true} />);
+    expect(screen.getByText(/Research Engine: Inactive/i)).toBeInTheDocument();
   });
 
   test('displays selection count when topics are selected', () => {

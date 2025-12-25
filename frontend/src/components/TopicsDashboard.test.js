@@ -3,10 +3,12 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import TopicsDashboard from './TopicsDashboard';
 import { useSession } from '../context/SessionContext';
+import { useAuth } from '../context/AuthContext';
 import * as api from '../services/api';
 import * as adminApi from '../services/adminApi';
 
 jest.mock('../context/SessionContext');
+jest.mock('../context/AuthContext');
 jest.mock('../services/api');
 jest.mock('../services/adminApi');
 
@@ -34,6 +36,9 @@ describe('TopicsDashboard Component', () => {
     jest.clearAllMocks();
     useSession.mockReturnValue({
       userId: 'user-123',
+    });
+    useAuth.mockReturnValue({
+      user: { role: 'user' }, // Default to non-admin user
     });
     api.getAllTopicSuggestions.mockResolvedValue({
       topic_suggestions: mockTopics,
