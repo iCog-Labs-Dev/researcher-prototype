@@ -18,7 +18,8 @@ const TopicsHeader = ({
   onShowMotivation,
   onShowEngineSettings,
   onDeleteNonActivated,
-  onAddCustomTopic
+  onAddCustomTopic,
+  isAdmin = false
 }) => {
 
 
@@ -69,8 +70,8 @@ const TopicsHeader = ({
         </div>
       </div>
 
-      {/* Research Engine Status */}
-      {researchEngineStatus && (
+      {/* Research Engine Status - Only show for admin users */}
+      {isAdmin && researchEngineStatus && (
         <div className="research-engine-status">
           <div className="status-indicator">
             <div className={`status-dot ${researchEngineStatus.running ? 'active' : 'inactive'}`}></div>

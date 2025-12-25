@@ -4,7 +4,7 @@ import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import TypingIndicator from './TypingIndicator';
 import ConversationTopics from './ConversationTopics';
-import { sendChatMessage, triggerUserActivity } from '../services/api';
+import { sendChatMessage } from '../services/api';
 import { useEngagementTracking } from '../utils/engagementTracker';
 import '../App.css';
 import SessionHistory from "./SessionHistory";
@@ -86,11 +86,6 @@ const ChatPage = () => {
     setIsLoading(true);
 
     try {
-      // Trigger user activity for motivation system (fire and forget)
-      triggerUserActivity().catch(err => {
-        console.warn('Failed to trigger user activity for motivation system:', err);
-      });
-
       // Prepare messages for API
       const apiMessages = updatedMessages.map(msg => ({
         role: msg.role,

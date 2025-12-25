@@ -601,15 +601,4 @@ export const loginWithGoogle = async (idToken) => {
   }
 };
 
-// Trigger user activity for motivation system
-export const triggerUserActivity = async () => {
-  try {
-    const response = await api.post('/research/debug/trigger-user-activity');
-    return response.data;
-  } catch (error) {
-    console.error('Error triggering user activity:', error);
-    throw error;
-  }
-};
-
 export default api;
