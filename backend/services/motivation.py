@@ -466,8 +466,6 @@ class MotivationSystem:
 
                             # --- Topic expansion wiring ---
                             try:
-                                from services.autonomous_research_engine import get_autonomous_researcher
-                                researcher = get_autonomous_researcher()
                                 if not researcher:
                                     logger.warning("Autonomous researcher not initialized; skipping expansions")
                                     child_runs = []

@@ -79,7 +79,6 @@ class AutonomousResearcher:
 
         # Initialize motivation system with database session
         try:
-            from db import SessionLocal
             # Create a persistent session for the motivation system
             self.db_session = SessionLocal()
             self.motivation_system = MotivationSystem(
