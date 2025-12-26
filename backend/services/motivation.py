@@ -388,7 +388,6 @@ class MotivationSystem:
         # result of get_topics_needing_research is empty
         # need only analyze async_get_active_research_topics
         # and only run run_langgraph_research
-        """
         try:
             _, active_topics = await self.topic_service.async_get_active_research_topics()
             if not active_topics:
@@ -538,94 +537,6 @@ class MotivationSystem:
             
         except Exception as e:
             logger.error(f"🎯 Error in research cycle: {str(e)}", exc_info=True)
-            return {
-                "topics_researched": 0,
-                "findings_stored": 0,
-                "average_quality": 0.0,
-            }
-        """
-
-        from services.autonomous_research_engine import get_autonomous_researcher
-        researcher = get_autonomous_researcher()
-
-        try:
-            _, active_topics = await self.topic_service.async_get_active_research_topics()
-            if not active_topics or not researcher:
-                if not active_topics:
-                    logger.info("🔬 No active research topics found")
-                if not researcher:
-                    logger.warning("Autonomous researcher not initialized; skipping research")
-
-                return {
-                    "topics_researched": 0,
-                    "findings_stored": 0,
-                    "average_quality": 0.0,
-                }
-
-            logger.info(f"🔬 Processing {len(active_topics)} active research topics...")
-
-            total_topics_researched = 0
-            total_findings_stored = 0
-            quality_scores: List[float] = []
-            processed_users: set = set()
-
-            for topic in active_topics:
-                try:
-                    user_id = str(topic.user_id)
-                    processed_users.add(user_id)
-                    root_name = topic.name
-                    logger.info(f"🔬 Researching topic: {root_name} for user {user_id}")
-
-                    topic_payload = {
-                        "topic_id": str(topic.id),
-                        "topic_name": topic.name,
-                        "description": topic.description,
-                        "last_researched": topic.last_researched.astimezone(timezone.utc).strftime("%Y-%m-%d") if topic.last_researched else None,
-                        "is_active_research": topic.is_active_research,
-                    }
-
-                    result = await researcher.run_langgraph_research(user_id, topic_payload)
-
-                    if result:
-                        total_topics_researched += 1
-                        if result.get("stored", False):
-                            total_findings_stored += 1
-                        if result.get("quality_score"):
-                            quality_scores.append(result.get("quality_score"))
-
-                    await asyncio.sleep(config.RESEARCH_TOPIC_DELAY)
-
-                except Exception as e:
-                    logger.error(
-                        f"🔬 Error researching topic {topic.name} for user {topic.user_id}: {str(e)}"
-                    )
-                    continue
-
-            logger.info(
-                f"🔬 LangGraph research cycle completed: {total_topics_researched} topics researched, {total_findings_stored} findings stored"
-            )
-
-            avg_quality = sum(quality_scores) / len(quality_scores) if quality_scores else 0.0
-
-            try:
-                await self.research_service.async_cleanup_old_research_findings(config.RESEARCH_FINDINGS_RETENTION_DAYS)
-            except Exception as cleanup_error:
-                logger.debug(f"Error cleaning up old findings: {cleanup_error}")
-
-            try:
-                for user_id in processed_users:
-                    await self._update_expansion_lifecycle(user_id)
-            except Exception as e:
-                logger.error(f"Lifecycle update failed: {str(e)}")
-
-            return {
-                "topics_researched": total_topics_researched,
-                "findings_stored": total_findings_stored,
-                "average_quality": avg_quality,
-            }
-
-        except Exception as e:
-            logger.error(f"🔬 Error in research cycle: {str(e)}", exc_info=True)
             return {
                 "topics_researched": 0,
                 "findings_stored": 0,
