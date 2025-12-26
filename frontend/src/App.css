@@ -202,6 +202,7 @@
 .message.assistant,
 .message.system {
   display: flex;
+  min-height: fit-content;
   justify-content: flex-start;
 }
 

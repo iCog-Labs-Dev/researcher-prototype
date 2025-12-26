@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from '../context/SessionContext';
-import { getAllChatSessions, createOrSwitchSession } from '../services/api';
+import { getAllChatSessions, getChatHistory } from '../services/api';
 import '../styles/SessionHistory.css';
 
 const SessionHistory = () => {
@@ -8,6 +8,8 @@ const SessionHistory = () => {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [loadingHistoryForSession, setLoadingHistoryForSession] = useState(null);
 
   // Fetch all sessions on component mount
   useEffect(() => {
@@ -28,56 +30,75 @@ const SessionHistory = () => {
     fetchSessions();
   }, []); // Only fetch on mount
 
+  // Transform chat history API response to message format
+  const transformChatHistoryToMessages = (history) => {
+    if (!Array.isArray(history) || history.length === 0) {
+      return [];
+    }
+
+    const messages = [];
+    history.forEach((item) => {
+      // Add user message (question)
+      if (item.question) {
+        messages.push({
+          role: 'user',
+          content: item.question,
+          created_at: item.created_at
+        });
+      }
+      // Add assistant message (answer)
+      if (item.answer) {
+        messages.push({
+          role: 'assistant',
+          content: item.answer,
+          created_at: item.created_at
+        });
+      }
+    });
+
+    return messages;
+  };
+
   // Handle clicking on a session
-  const handleSessionClick = async (clickedSessionId) => {
+  const handleSessionClick = async (clickedSessionId, session) => {
     try {
       // Convert to string for comparison
       const clickedSessionIdStr = String(clickedSessionId);
       const currentSessionIdStr = sessionId ? String(sessionId) : null;
-      
+
       // If clicking on the same session, do nothing
       if (clickedSessionIdStr === currentSessionIdStr) {
         return;
       }
-      
-      // Switch to the selected session - send POST v2/chat with session_id
-      const response = await createOrSwitchSession(clickedSessionId);
-      
-      // Construct messages from the POST response
-      // We sent "Hello" as user message, so we have:
-      // - System message (default)
-      // - User message: "Hello" (what we sent to initialize)
-      // - Assistant message: response.response (from POST response)
-      const initialMessages = [
-        { role: 'system', content: "Hello! I'm your AI assistant. How can I help you today?" },
-        { role: 'user', content: 'Hello' },
-        {
-          role: 'assistant',
-          content: response.response || '',
-          routingInfo: response.routing_analysis,
-          follow_up_questions: response.follow_up_questions || [],
-        }
-      ];
-      
-      // Update session ID in context and set messages from POST response
-      if (response.session_id) {
-        switchSession(String(response.session_id), initialMessages);
+
+      // Fetch chat history for the selected session
+      setLoadingHistory(true);
+      setLoadingHistoryForSession(clickedSessionIdStr);
+      try {
+        const history = await getChatHistory(clickedSessionIdStr, 1000);
+        const transformedMessages = transformChatHistoryToMessages(history);
+
+        // Switch to the selected session with loaded history
+        switchSession(clickedSessionIdStr, transformedMessages);
+      } catch (historyError) {
+        console.error('Error loading chat history:', historyError);
+        // Still switch to the session even if history fails to load
+        switchSession(clickedSessionIdStr, []);
+      } finally {
+        setLoadingHistory(false);
+        setLoadingHistoryForSession(null);
       }
-      
-      // Refresh sessions list to get updated data
-      const updatedSessions = await getAllChatSessions();
-      setSessions(updatedSessions || []);
     } catch (err) {
       console.error('Error switching session:', err);
       setError('Failed to switch session');
+      setLoadingHistory(false);
     }
   };
 
   // Handle creating a new session
   const handleNewSession = async () => {
     try {
-      // Reset to default messages (just system message) - don't send POST yet
-      // The session will be created when user sends their first message
+      // Reset locally - the session will be created when user sends their first message
       startNewSession();
     } catch (err) {
       console.error('Error creating new session:', err);
@@ -120,18 +141,23 @@ const SessionHistory = () => {
               const sessionIdStr = String(session.id);
               const currentSessionIdStr = sessionId ? String(sessionId) : null;
               const isActive = sessionIdStr === currentSessionIdStr;
-              
+
               return (
-                <li 
-                  key={session.id} 
+                <li
+                  key={session.id}
                   className={isActive ? 'active' : ''}
                 >
-                  <button 
-                    type="button" 
-                    onClick={() => handleSessionClick(session.id)}
+                  <button
+                    type="button"
+                    onClick={() => handleSessionClick(session.id, session)}
                     title={session.name || session.id}
+                    disabled={loadingHistory && loadingHistoryForSession === sessionIdStr}
                   >
-                    {session.name || 'Untitled Session'}
+                    {loadingHistory && loadingHistoryForSession === sessionIdStr ? (
+                      <>Loading history...</>
+                    ) : (
+                      session.name || 'Untitled Session'
+                    )}
                   </button>
                 </li>
               );

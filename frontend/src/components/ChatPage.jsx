@@ -5,7 +5,6 @@ import ChatInput from './ChatInput';
 import TypingIndicator from './TypingIndicator';
 import ConversationTopics from './ConversationTopics';
 import { sendChatMessage } from '../services/api';
-import { triggerUserActivity } from '../services/api';
 import { useEngagementTracking } from '../utils/engagementTracker';
 import '../App.css';
 import SessionHistory from "./SessionHistory";
@@ -19,6 +18,7 @@ const ChatPage = () => {
     updateConversationTopics,
     sessionId,
     setSessionId,
+    getSessionId,
   } = useSession();
 
   const { trackSessionContinuation } = useEngagementTracking();
@@ -70,8 +70,11 @@ const ChatPage = () => {
   const handleSendMessage = async (message) => {
     if (isLoading) return; // Prevent sending when already loading
 
+    // Always prefer the latest selected session id (ref-based, updates synchronously on click).
+    const effectiveSessionId = (typeof getSessionId === 'function' ? getSessionId() : sessionId) || null;
+
     // Track if this is a new session (sessionId is null)
-    const isNewSession = !sessionId;
+    const isNewSession = !effectiveSessionId;
 
     // Add user message to chat
     const updatedMessages = [...messages, { role: 'user', content: message }];
@@ -83,11 +86,6 @@ const ChatPage = () => {
     setIsLoading(true);
 
     try {
-      // Trigger user activity for motivation system (fire and forget)
-      triggerUserActivity().catch(err => {
-        console.warn('Failed to trigger user activity for motivation system:', err);
-      });
-
       // Prepare messages for API
       const apiMessages = updatedMessages.map(msg => ({
         role: msg.role,
@@ -111,15 +109,16 @@ const ChatPage = () => {
         0.7,  // temperature
         1000,  // max tokens
         personality, // Include personality in the request
-        sessionId, // Include session_id if available
+        effectiveSessionId, // Include session_id if available
       );
       console.log('Chat response:', response);
 
       // Update session ID if returned from API (for new sessions)
       const sessionWasCreated = isNewSession && response.session_id;
-      if (response.session_id && response.session_id !== sessionId) {
-        setSessionId(response.session_id);
-        
+      const responseSessionId = response.session_id ? String(response.session_id) : null;
+      if (responseSessionId && responseSessionId !== sessionId) {
+        setSessionId(responseSessionId);
+
         // If this was a new session and we got a session_id, refresh the sessions list
         if (sessionWasCreated && typeof window.refreshSessionsList === 'function') {
           window.refreshSessionsList();

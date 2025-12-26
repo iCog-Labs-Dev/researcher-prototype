@@ -69,9 +69,7 @@ describe('ChatPage Comprehensive Tests', () => {
     
     mockSessionContext = {
       userId: 'test-user',
-      messages: [
-        { role: 'system', content: 'Hello! I\'m your AI assistant.' }
-      ],
+      messages: [],
       personality: { style: 'helpful', tone: 'friendly' },
       userDisplayName: 'Test User',
       conversationTopics: [],
@@ -83,7 +81,6 @@ describe('ChatPage Comprehensive Tests', () => {
     useSession.mockReturnValue(mockSessionContext);
     
     api.sendChatMessage = jest.fn();
-    api.triggerUserActivity = jest.fn().mockResolvedValue({});
   });
 
   describe('Message Sending - Core Functionality', () => {
@@ -250,39 +247,4 @@ describe('ChatPage Comprehensive Tests', () => {
     });
   });
 
-  describe('User Activity Tracking', () => {
-    test('triggers user activity on message send', async () => {
-      api.sendChatMessage.mockResolvedValue({ response: 'Test response' });
-      
-      render(<ChatPage />);
-      
-      const sendButton = screen.getByTestId('send-button');
-      
-      fireEvent.click(sendButton);
-
-      await waitFor(() => {
-        expect(api.triggerUserActivity).toHaveBeenCalled();
-      });
-    });
-
-    test('handles user activity trigger failure gracefully', async () => {
-      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-      
-      api.triggerUserActivity.mockRejectedValue(new Error('Activity service down'));
-      api.sendChatMessage.mockResolvedValue({ response: 'Test response' });
-      
-      render(<ChatPage />);
-      
-      const sendButton = screen.getByTestId('send-button');
-      
-      fireEvent.click(sendButton);
-
-      await waitFor(() => {
-        expect(api.sendChatMessage).toHaveBeenCalled();
-      });
-      expect(consoleWarnSpy).toHaveBeenCalled();
-
-      consoleWarnSpy.mockRestore();
-    });
-  });
 }); 

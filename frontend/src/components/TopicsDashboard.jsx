@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from '../context/SessionContext';
+import { useAuth } from '../context/AuthContext';
 import TopicsHeader from './TopicsHeader';
 import TopicsFilters from './TopicsFilters';
 import MotivationStats from './MotivationStats';
@@ -14,17 +15,20 @@ import {
     cleanupTopics,
     deleteNonActivatedTopics,
     enableTopicResearchById,
-    disableTopicResearchById, getResearchEngineStatus,
+    disableTopicResearchById,
 } from '../services/api';
 import {
   startResearchEngine,
   stopResearchEngine,
-  triggerManualResearch
+  triggerManualResearch,
+  getResearchEngineStatus
 } from '../services/adminApi';
 import '../styles/TopicsDashboard.css';
 
 const TopicsDashboard = () => {
   const { userId } = useSession();
+  const { user: authUser } = useAuth();
+  const isAdmin = (authUser?.role ?? authUser?.metadata?.role) === 'admin';
   const [topics, setTopics] = useState([]);
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
@@ -510,6 +514,7 @@ const formatDate = (dateString) => {
         onShowEngineSettings={() => setShowEngineSettings(true)}
         onDeleteNonActivated={handleDeleteNonActivated}
         onAddCustomTopic={handleShowAddTopicForm}
+        isAdmin={isAdmin}
       />
 
       <ErrorModal
