@@ -110,7 +110,7 @@ class TopicExpansionService:
             return s2
 
         # Gather existing topic names from database-backed research topics
-        existing_names: List[str] = []
+            existing_names: List[str] = []
         try:
             import uuid
             user_uuid = uuid.UUID(user_id)
