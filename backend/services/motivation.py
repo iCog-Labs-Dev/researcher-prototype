@@ -398,12 +398,8 @@ class MotivationSystem:
                     "average_quality": 0.0,
                 }
 
-            # Build lookup map: (user_id, topic_name) -> ResearchTopic
-            topic_lookup: Dict[tuple, Any] = {}
-            unique_users: set = set()
-            for topic in active_topics:
-                topic_lookup[(topic.user_id, topic.name)] = topic
-                unique_users.add(topic.user_id)
+            # Collect unique users for lifecycle updates
+            unique_users: set = {topic.user_id for topic in active_topics}
 
             logger.info(f"🎯 Processing {len(active_topics)} active topics across {len(unique_users)} users...")
             
@@ -411,103 +407,84 @@ class MotivationSystem:
             total_findings_stored = 0
             quality_scores: List[float] = []
             
-            for user_uuid in unique_users:
-                user_id = str(user_uuid)
+            # Research all active topics directly (without filtering by motivation score)
+            for topic in active_topics:
                 try:
-                    topics_needing_research = await self.db_service.get_topics_needing_research(
-                        user_uuid,
-                        threshold=self._config.topic_threshold,
-                        limit=None,  # No limit - already limited by MAX_ACTIVE_RESEARCH_TOPICS_PER_USER
+                    user_uuid = topic.user_id
+                    user_id = str(user_uuid)
+                    topic_name = topic.name
+                    
+                    logger.info(f"🎯 Researching topic: {topic_name} for user {user_id}")
+
+                    topic_data = {
+                        "topic_id": str(topic.id),
+                        "topic_name": topic.name,
+                        "description": topic.description,
+                        "last_researched": topic.last_researched.astimezone(timezone.utc).strftime("%Y-%m-%d") if topic.last_researched else None,
+                        "is_active_research": topic.is_active_research,
+                    }
+                    
+                    # Research the topic via research engine instance
+                    from services.autonomous_research_engine import get_autonomous_researcher
+                    researcher = get_autonomous_researcher()
+                    if not researcher:
+                        logger.warning("Autonomous researcher not initialized; skipping research")
+                        continue
+                    result = await researcher.run_langgraph_research(user_id, topic_data)
+                    
+                    total_topics_researched += 1
+                    if result and result.get("stored", False):
+                        total_findings_stored += 1
+                    if result and result.get("quality_score"):
+                        quality_scores.append(result.get("quality_score"))
+                    
+                    # Update last_researched timestamp
+                    await self.db_service.create_or_update_topic_score(
+                        user_id=user_uuid,
+                        topic_id=topic.id,
+                        topic_name=topic_name,
+                        last_researched=time.time()
                     )
 
-                    if not topics_needing_research:
-                        continue
+                    # --- Topic expansion wiring ---
+                    try:
+                        if not researcher:
+                            logger.warning("Autonomous researcher not initialized; skipping expansions")
+                            child_runs = []
+                        else:
+                            child_runs = await researcher.process_expansions_for_root(user_id, topic_data)
+                        if child_runs:
+                            for cr in child_runs:
+                                child = cr.get("topic", {})
+                                child_res = cr.get("result", {})
+                                child_name = child.get('topic_name')
+                                if not child_name:
+                                    continue
+                                logger.info(f"🎯 Researched expansion topic: {child_name} for user {user_id}")
+                                total_topics_researched += 1
+                                if child_res and child_res.get("stored", False):
+                                    total_findings_stored += 1
+                                if child_res and child_res.get("quality_score"):
+                                    quality_scores.append(child_res.get("quality_score"))
 
-                    logger.info(f"🎯 User {user_id} has {len(topics_needing_research)} motivated topics")
+                                # Update last_researched for child
+                                child_topic_id = child.get("topic_id")
+                                if child_topic_id:
+                                    await self.db_service.create_or_update_topic_score(
+                                        user_id=user_uuid,
+                                        topic_id=uuid.UUID(str(child_topic_id)),
+                                        topic_name=child_name,
+                                        last_researched=time.time()
+                                    )
+
+                    except Exception as ex:
+                        logger.debug(f"Expansion wiring failed for {topic_name}: {ex}")
                     
-                    for topic_score in topics_needing_research:
-                        try:
-                            topic_name = topic_score.topic_name
-                            research_topic = topic_lookup.get((user_uuid, topic_name))
-                            if not research_topic:
-                                logger.debug(f"Topic '{topic_name}' missing from active topics lookup; skipping")
-                                continue
-                            logger.info(f"🎯 Researching motivated topic: {topic_name} for user {user_id}")
-
-                            topic_data = {
-                                "topic_id": str(research_topic.id),
-                                "topic_name": research_topic.name,
-                                "description": research_topic.description,
-                                "last_researched": research_topic.last_researched.astimezone(timezone.utc).strftime("%Y-%m-%d") if research_topic.last_researched else None,
-                                "is_active_research": research_topic.is_active_research,
-                            }
-                            
-                            # Research the topic via research engine instance
-                            from services.autonomous_research_engine import get_autonomous_researcher
-                            researcher = get_autonomous_researcher()
-                            if not researcher:
-                                logger.warning("Autonomous researcher not initialized; skipping research")
-                                continue
-                            result = await researcher.run_langgraph_research(user_id, topic_data)
-                            
-                            total_topics_researched += 1
-                            if result and result.get("stored", False):
-                                total_findings_stored += 1
-                            if result and result.get("quality_score"):
-                                quality_scores.append(result.get("quality_score"))
-                            
-                            # Update last_researched timestamp
-                            await self.db_service.create_or_update_topic_score(
-                                user_id=user_uuid,
-                                topic_id=research_topic.id,
-                                topic_name=topic_name,
-                                last_researched=time.time()
-                            )
-
-                            # --- Topic expansion wiring ---
-                            try:
-                                if not researcher:
-                                    logger.warning("Autonomous researcher not initialized; skipping expansions")
-                                    child_runs = []
-                                else:
-                                    child_runs = await researcher.process_expansions_for_root(user_id, topic_data)
-                                if child_runs:
-                                    for cr in child_runs:
-                                        child = cr.get("topic", {})
-                                        child_res = cr.get("result", {})
-                                        child_name = child.get('topic_name')
-                                        if not child_name:
-                                            continue
-                                        logger.info(f"🎯 Researched expansion topic: {child_name} for user {user_id}")
-                                        total_topics_researched += 1
-                                        if child_res and child_res.get("stored", False):
-                                            total_findings_stored += 1
-                                        if child_res and child_res.get("quality_score"):
-                                            quality_scores.append(child_res.get("quality_score"))
-
-                                        # Update last_researched for child
-                                        child_topic_id = child.get("topic_id")
-                                        if child_topic_id:
-                                            await self.db_service.create_or_update_topic_score(
-                                                user_id=user_uuid,
-                                                topic_id=uuid.UUID(str(child_topic_id)),
-                                                topic_name=child_name,
-                                                last_researched=time.time()
-                                            )
-
-                            except Exception as ex:
-                                logger.debug(f"Expansion wiring failed for {topic_name}: {ex}")
-                            
-                            # Small delay between topics
-                            await asyncio.sleep(config.RESEARCH_TOPIC_DELAY)
-                            
-                        except Exception as e:
-                            logger.error(f"🎯 Error researching topic {topic_name}: {str(e)}")
-                            continue
+                    # Small delay between topics
+                    await asyncio.sleep(config.RESEARCH_TOPIC_DELAY)
                     
-                
                 except Exception as e:
-                    logger.error(f"🎯 Error processing user {user_id}: {str(e)}")
+                    logger.error(f"🎯 Error researching topic {topic_name}: {str(e)}")
                     continue
             
             avg_quality = sum(quality_scores) / len(quality_scores) if quality_scores else 0.0
@@ -526,6 +503,13 @@ class MotivationSystem:
                     await self._update_expansion_lifecycle(str(user_uuid))
             except Exception as e:
                 logger.error(f"Lifecycle update failed: {str(e)}")
+            
+            # Update motivation scores for all researched topics (after research is complete)
+            try:
+                await self.update_scores()
+                logger.info("🎯 Updated motivation scores after research cycle")
+            except Exception as e:
+                logger.error(f"Error updating motivation scores: {str(e)}")
             
             return {
                 "topics_researched": total_topics_researched,
