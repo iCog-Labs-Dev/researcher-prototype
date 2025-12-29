@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 
 # Import configuration and existing components
 import config
-from research_graph_builder import research_graph
+from builders.research import research_graph
 from services.motivation import MotivationSystem
 from services.topic_expansion_service import TopicExpansionService
 from services.topic import TopicService
