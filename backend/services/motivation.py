@@ -472,27 +472,6 @@ class MotivationSystem:
                                 last_researched=time.time()
                             )
 
-                            # Dual-write: persist finding summary into DB when available
-                            try:
-                                storage_results = result if result else {}
-                                if storage_results.get("stored"):
-                                    finding_id = storage_results.get("finding_id")
-                                    quality = storage_results.get("quality_score")
-                                    self.session.add(
-                                        ResearchFinding(
-                                            user_id=user_uuid,
-                                            topic_name=topic_name,
-                                            finding_id=finding_id,
-                                            read=False,
-                                            bookmarked=False,
-                                            integrated=False,
-                                            research_time=time.time(),
-                                            quality_score=quality,
-                                        )
-                                    )
-                            except Exception as e:
-                                logger.debug(f"Dual-write finding failed for {topic_name}: {e}")
-
                             # --- Topic expansion wiring ---
                             try:
                                 child_runs = await researcher.process_expansions_for_root(user_id, topic_data)
@@ -562,14 +541,6 @@ class MotivationSystem:
                 "topics_researched": total_topics_researched,
                 "findings_stored": total_findings_stored,
                 "average_quality": avg_quality,
-            }
-            
-        except Exception as e:
-            logger.error(f"🎯 Error in research cycle: {str(e)}", exc_info=True)
-            return {
-                "topics_researched": 0,
-                "findings_stored": 0,
-                "average_quality": 0.0,
             }
             
         except Exception as e:
