@@ -463,7 +463,7 @@ export const getResearchFindings = async (userId, topicName = null, unreadOnly =
 
 export const setFindingBookmarked = async (findingId, bookmarked) => {
   try {
-    const response = await api.post(`/research/${findingId}/bookmark`, { bookmarked });
+    const response = await api.post(`/research/findings/${findingId}/bookmark`, { bookmarked });
     return response.data;
   } catch (error) {
     console.error('Error updating finding bookmark:', error);
@@ -473,7 +473,7 @@ export const setFindingBookmarked = async (findingId, bookmarked) => {
 
 export const markFindingAsRead = async (findingId) => {
   try {
-    const response = await api.post(`/research/${findingId}/mark_read`);
+    const response = await api.post(`/research/findings/${findingId}/mark_read`);
     return response.data;
   } catch (error) {
     console.error('Error marking finding as read:', error);
@@ -483,7 +483,7 @@ export const markFindingAsRead = async (findingId) => {
 
 export const integrateResearchFinding = async (findingId) => {
   try {
-    const response = await api.post(`/research/${findingId}/integrate`);
+    const response = await api.post(`/research/findings/${findingId}/integrate`);
     return response.data;
   } catch (error) {
     console.error('Error integrating research finding:', error);
@@ -494,7 +494,7 @@ export const integrateResearchFinding = async (findingId) => {
 // Delete research findings functions
 export const deleteResearchFinding = async (findingId) => {
   try {
-    const response = await api.delete(`/research/${findingId}`);
+    const response = await api.delete(`/research/findings/${findingId}`);
     return response.data;
   } catch (error) {
     console.error('Error deleting research finding:', error);
@@ -502,9 +502,9 @@ export const deleteResearchFinding = async (findingId) => {
   }
 };
 
-export const deleteAllTopicFindings = async (topicName) => {
+export const deleteAllTopicFindings = async (topicId) => {
   try {
-    const response = await api.delete(`/research/topic/${encodeURIComponent(topicName)}`);
+    const response = await api.delete(`/research/findings/topic/${topicId}`);
     return response.data;
   } catch (error) {
     console.error('Error deleting all topic findings:', error);
