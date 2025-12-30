@@ -153,11 +153,46 @@ jobs:
       #     scp -r k8s/* k3s-server:~/app-deploy/
 
       - name: Apply K8s manifests
+        env:
+            FRONTEND_BASIC_AUTH_DEV: ${{ secrets.FRONTEND_BASIC_AUTH_DEV}}
+            BACKEND_VECTOR_DB_SECRET_DEV: ${{ secrets.BACKEND_VECTOR_DB_SECRET_DEV }} 
+            BACKEND_CONFIG_DEV: ${{ secrets.BACKEND_CONFIG_DEV }} 
+            BACKEND_SECRETS_DEV: ${{ secrets.BACKEND_SECRETS_DEV }} 
+            BACKEND_CHAT_MEMORY_CONFIG_DEV: ${{ secrets.BACKEND_CHAT_MEMORY_CONFIG_DEV }} 
+
+
         run: |
+          FRONTEND_BASIC_AUTH_DEV=$(printf "%s" "${{ secrets.FRONTEND_BASIC_AUTH_DEV }}" | base64 -w0)
+          BACKEND_VECTOR_DB_SECRET_DEV=$(printf "%s" "${{ secrets.BACKEND_VECTOR_DB_SECRET_DEV }}" | base64 -w0)
+          BACKEND_CONFIG_DEV=$(printf "%s" "${{ secrets.BACKEND_CONFIG_DEV }}" | base64 -w0)
+          BACKEND_SECRETS_DEV=$(printf "%s" "${{ secrets.BACKEND_SECRETS_DEV }}" | base64 -w0)
+          BACKEND_CHAT_MEMORY_CONFIG_DEV=$(printf "%s" "${{ secrets.BACKEND_CHAT_MEMORY_CONFIG_DEV }}" | base64 -w0)
+
           ssh k3s-server "
             export KUBECONFIG=~/.kube/config
-            kubectl apply -f ~/k8s/
-            
+
+            echo '$FRONTEND_BASIC_AUTH_DEV' | base64 -d > .frontend_basic_auth_dev
+            kubectl create secret generic basic-auth-secret --namespace qwestor-dev --from-env-file=.frontend_basic_auth_dev --dry-run=client -o yaml | kubectl apply -f -
+            rm .frontend_basic_auth_dev
+
+            echo '$BACKEND_VECTOR_DB_SECRET_DEV' | base64 -d > .backend_vector_db_secret_dev
+            kubectl create secret generic vector-db-secret --namespace qwestor-dev --from-env-file=.backend_vector_db_secret_dev --dry-run=client -o yaml | kubectl apply -f -
+            rm .backend_vector_db_secret_dev
+
+            echo '$BACKEND_CONFIG_DEV' | base64 -d > .backend_config_dev
+            kubectl create secret generic app-config --namespace qwestor-dev --from-env-file=.backend_config_dev --dry-run=client -o yaml | kubectl apply -f -
+            rm .backend_config_dev
+
+            echo '$BACKEND_SECRETS_DEV' | base64 -d > .backend_secrets_dev
+            kubectl create secret generic app-secrets --namespace qwestor-dev --from-env-file=.backend_secrets_dev --dry-run=client -o yaml | kubectl apply -f -
+            rm .backend_secrets_dev
+
+            echo '$BACKEND_CHAT_MEMORY_CONFIG_DEV' | base64 -d > .backend_chat_memory_config_dev
+            kubectl create secret generic backend-chat-memory-config --namespace qwestor-dev --from-env-file=.backend_chat_memory_config_dev --dry-run=client -o yaml | kubectl apply -f -
+            rm .backend_chat_memory_config_dev
+          
+          kubectl apply -f ~/k8s/
             kubectl rollout restart deployment/backend -n qwestor-dev
             kubectl rollout restart deployment/frontend -n qwestor-dev
+            kubectl rollout restart deployment/backend-chat-memory -n qwestor-dev
           " 
