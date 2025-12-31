@@ -1165,3 +1165,5 @@ navigate('/topics');
 **Good luck with the frontend! 🚀**
 
 For backend information, see the main project `HANDOVER.md` or `AGENTS.md`.
+
+

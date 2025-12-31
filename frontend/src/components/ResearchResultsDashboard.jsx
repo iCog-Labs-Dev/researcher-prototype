@@ -357,13 +357,18 @@ const ResearchResultsDashboard = () => {
   };
 
   // Handle delete all findings for a topic
-  const handleDeleteAllTopicFindings = async (topicName) => {
+  const handleDeleteAllTopicFindings = async (topicName, topicId) => {
     if (!window.confirm(`Are you sure you want to delete ALL findings for topic "${topicName}"? This action cannot be undone.`)) {
       return;
     }
 
+    if (!topicId) {
+      setError('Topic ID is missing. Cannot delete findings.');
+      return;
+    }
+
     try {
-      await deleteAllTopicFindings(topicName);
+      await deleteAllTopicFindings(topicId);
       await loadResearchData();
     } catch (err) {
       console.error('Error deleting all topic findings:', err);
@@ -692,7 +697,9 @@ const ResearchResultsDashboard = () => {
                         className="delete-topic-btn"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDeleteAllTopicFindings(topicName);
+                          // Get topic_id from the first finding (all findings in a group have the same topic_id)
+                          const topicId = findings[0]?.topic_id;
+                          handleDeleteAllTopicFindings(topicName, topicId);
                         }}
                         title={`Delete all ${findings.length} findings for this topic`}
                       >
