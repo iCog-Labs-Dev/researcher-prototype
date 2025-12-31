@@ -36,6 +36,13 @@ class ResearchFindingItemOut(BaseModel):
     read: bool
     bookmarked: bool
     quality_score: Optional[float] = None
+    findings_content: Optional[str] = None
+    formatted_content: Optional[str] = None
+    findings_summary: Optional[str] = None
+    research_query: Optional[str] = None
+    source_urls: Optional[List[str]] = None
+    citations: Optional[List[str]] = None
+    key_insights: Optional[List[str]] = None
     created_at: datetime
 
 

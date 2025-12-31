@@ -27,6 +27,19 @@ def upgrade() -> None:
                existing_type=sa.TEXT(),
                type_=postgresql.CITEXT(),
                existing_nullable=False)
+    
+    # Clean up duplicates before creating unique constraint
+    # Keep the most recent topic for each (user_id, name) pair
+    op.execute("""
+        DELETE FROM research_topics
+        WHERE id NOT IN (
+            SELECT DISTINCT ON (user_id, LOWER(name))
+                id
+            FROM research_topics
+            ORDER BY user_id, LOWER(name), created_at DESC
+        )
+    """)
+    
     op.create_unique_constraint('uq_research_topics_user_name', 'research_topics', ['user_id', 'name'])
     # ### end Alembic commands ###
 

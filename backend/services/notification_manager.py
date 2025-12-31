@@ -5,10 +5,12 @@ import json
 import logging
 import asyncio
 import time
+import uuid
 from typing import Dict, Set, Optional
 from fastapi import WebSocket, WebSocketDisconnect
 from datetime import datetime, timezone
-from dependencies import profile_manager
+from db import SessionLocal
+from services.user import UserService
 from services.email_service import email_service
 import config
 
@@ -104,8 +106,14 @@ class NotificationService:
 
         # Also send email notification if the user has an email
         try:
-            user_data = profile_manager.get_user(user_id)
-            email = (user_data or {}).get("metadata", {}).get("email")
+            async with SessionLocal() as session:
+                user_service = UserService()
+                try:
+                    user = await user_service.get_user(session, uuid.UUID(user_id), with_profile=True)
+                    email = user.profile.meta_data.get("email") if user.profile and user.profile.meta_data else None
+                except Exception:
+                    email = None
+            
             if email:
                 subject = "New research finding available"
                 topic_part = f" on '{topic_name}'" if topic_name else ""
@@ -153,8 +161,14 @@ class NotificationService:
 
         # Also send email notification if the user has an email
         try:
-            user_data = profile_manager.get_user(user_id)
-            email = (user_data or {}).get("metadata", {}).get("email")
+            async with SessionLocal() as session:
+                user_service = UserService()
+                try:
+                    user = await user_service.get_user(session, uuid.UUID(user_id), with_profile=True)
+                    email = user.profile.meta_data.get("email") if user.profile and user.profile.meta_data else None
+                except Exception:
+                    email = None
+            
             if email:
                 subject = "Research update completed"
                 topic_part = f" for '{topic_name}'" if topic_name else ""
