@@ -108,10 +108,10 @@ class TopicExpansionService:
             s2 = re.sub(r"[\(\)\[\]\{\}\'\"]", "", s2)
             return s2
 
-        # Gather existing topic names (prefer all topics; fallback to active topics)
+        # Gather existing topic names from database-backed research topics
+        existing_names: List[str] = []
         try:
             topics_data = self.research.get_user_topics(user_id)
-            existing_names: List[str] = []
             for session_topics in topics_data.get("sessions", {}).values():
                 for t in session_topics:
                     n = t.get("topic_name")
