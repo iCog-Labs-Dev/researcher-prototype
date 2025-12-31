@@ -23,6 +23,7 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
   const [personalizationData, setPersonalizationData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('personality');
   const [editedStyle, setEditedStyle] = useState('');
   const [editedTone, setEditedTone] = useState('');
@@ -80,7 +81,10 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
   };
 
   const handleSavePersonality = async () => {
+    if (isSaving) return; // Prevent multiple clicks
+    
     try {
+      setIsSaving(true);
       console.log('👤 UserProfile: Saving personality changes for user:', userId);
 
       const updatedPersonality = {
@@ -136,20 +140,25 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
       }
 
       setIsEditing(false);
+      setIsSaving(false);
 
       // Notify parent component
       if (onProfileUpdated) {
-        onProfileUpdated(updatedPersonality);
+onProfileUpdated(updatedPersonality);
       }
     } catch (error) {
       console.error('👤 UserProfile: ❌ Error updating personality for user:', userId, error);
       console.error('👤 UserProfile: ❌ Failed personality update data:', { editedStyle, editedTone });
+      setIsSaving(false);
       alert('Failed to update personality settings');
     }
   };
 
   const handleSavePreferences = async () => {
+    if (isSaving) return; // Prevent multiple clicks
+    
     try {
+      setIsSaving(true);
       console.log('👤 UserProfile: Saving preferences for user:', userId);
       console.log('👤 UserProfile: New preferences data:', editedPreferences);
 
@@ -160,18 +169,24 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
       // Update local state
       setPreferences(editedPreferences);
       setIsEditing(false);
+      setIsSaving(false);
 
-      // Reload personalization data to show updates
-      const newPersonalizationData = await getUserPersonalizationData().catch(() => null);
-      setPersonalizationData(newPersonalizationData);
-
-      if (newPersonalizationData) {
-        console.log('👤 UserProfile: 🔄 Refreshed personalization data after preference update');
-      }
+      // Reload personalization data to show updates (async, don't block)
+      getUserPersonalizationData()
+        .then(newPersonalizationData => {
+          setPersonalizationData(newPersonalizationData);
+          if (newPersonalizationData) {
+            console.log('👤 UserProfile: 🔄 Refreshed personalization data after preference update');
+          }
+        })
+        .catch(() => {
+          // Silently fail - preferences are already saved
+        });
 
     } catch (error) {
       console.error('👤 UserProfile: ❌ Error updating preferences for user:', userId, error);
       console.error('👤 UserProfile: ❌ Failed preferences update data:', editedPreferences);
+      setIsSaving(false);
       alert('Failed to update preferences');
     }
   };
@@ -290,8 +305,9 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
           <button
             className="save-profile-btn"
             onClick={handleSavePersonality}
+            disabled={isSaving}
           >
-            Save Changes
+            {isSaving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
       ) : (
@@ -409,8 +425,9 @@ const UserProfile = ({ userId, onProfileUpdated }) => {
             <button
               className="save-profile-btn"
               onClick={handleSavePreferences}
+              disabled={isSaving}
             >
-              Save Preferences
+              {isSaving ? 'Saving...' : 'Save Preferences'}
             </button>
           </div>
         ) : (
