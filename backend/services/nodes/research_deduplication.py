@@ -76,7 +76,7 @@ async def research_deduplication_node(state: ChatState) -> ChatState:
         
         # Prepare existing findings text for comparison
         existing_text = "\n\n".join([
-            f"Finding {i+1}:\n{finding.get('findings_summary', finding.get('findings_content', ''))}"
+            f"Finding {i+1}:\n{(finding.findings_summary or finding.findings_content or '')}"
             for i, finding in enumerate(recent_findings)
         ])
         
