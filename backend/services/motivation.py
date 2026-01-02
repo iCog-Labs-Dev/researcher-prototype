@@ -432,17 +432,21 @@ class MotivationSystem:
                     
                     logger.info(f"🎯 User {user_id} has {len(topics_needing_research)} motivated topics")
                     
+                    # Fetch all active topics for this user once before the loop
+                    topics = await self.topic_service.get_active_research_topics_by_user_id(
+                        self.session,
+                        user_uuid
+                    )
+                    # Build lookup map: topic_name -> ResearchTopic
+                    topic_lookup = {t.name: t for t in topics}
+                    
                     for topic_score in topics_needing_research:
                         try:
                             topic_name = topic_score.topic_name
                             logger.info(f"🎯 Researching motivated topic: {topic_name} for user {user_id}")
                             
-                            # Get full topic data from TopicService
-                            topics = await self.topic_service.get_active_research_topics_by_user_id(
-                                self.session,
-                                user_uuid
-                            )
-                            topic = next((t for t in topics if t.name == topic_name), None)
+                            # Get full topic data from lookup map
+                            topic = topic_lookup.get(topic_name)
                             if not topic:
                                 logger.warning(f"Topic {topic_name} not found for user {user_id}")
                                 continue
