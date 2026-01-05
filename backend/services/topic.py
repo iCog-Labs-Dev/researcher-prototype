@@ -224,6 +224,27 @@ class TopicService:
 
         topic.is_active_research = enable
 
+        # Also create/update TopicScore record for motivation system
+        from database.motivation_repository import MotivationRepository
+        motivation_repo = MotivationRepository(session)
+        
+        # For newly enabled topics, set high motivation score (1.0) since they've never been researched
+        # This ensures they're immediately eligible for research
+        motivation_score = None
+        if enable:
+            # Check if this is a new topic (never researched)
+            existing_score = await motivation_repo.get_topic_score(user_id, topic.name)
+            if not existing_score or existing_score.last_researched is None:
+                motivation_score = 1.0  # High priority for new topics
+        
+        await motivation_repo.create_or_update_topic_score(
+            user_id=user_id,
+            topic_id=topic_id,
+            topic_name=topic.name,
+            is_active_research=enable,
+            motivation_score=motivation_score
+        )
+
         await session.commit()
 
         return topic.is_active_research
@@ -421,7 +442,7 @@ class TopicService:
             conversation_context=conversation_context,
             is_active_research=is_active_research,
         ).on_conflict_do_nothing(
-            index_elements=["user_id", "name"]
+            constraint="uq_research_topics_user_name"
         ).returning(ResearchTopic)
 
         res = await session.execute(query)

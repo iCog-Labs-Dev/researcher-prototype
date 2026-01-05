@@ -42,6 +42,16 @@
   background-color: var(--primary-hover-color);
 }
 
+.edit-profile-btn:disabled, .save-profile-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: var(--primary-color);
+}
+
+.edit-profile-btn:disabled:hover, .save-profile-btn:disabled:hover {
+  background-color: var(--primary-color);
+}
+
 .cancel-edit-btn {
   background-color: var(--secondary-color);
   color: var(--button-text-color);
