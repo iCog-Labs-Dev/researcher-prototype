@@ -40,6 +40,35 @@ const ResearchResultsDashboard = () => {
   const scrollContainerRef = useRef(null);
   const scrollPositionRef = useRef(null);
 
+  // Helper function to get timestamp from finding (handles both created_at and research_time)
+  const getFindingTimestamp = (finding) => {
+    // New format: created_at (ISO datetime string)
+    if (finding.created_at) {
+      const date = new Date(finding.created_at);
+      if (!isNaN(date.getTime())) {
+        return date.getTime() / 1000; // Convert to Unix timestamp in seconds
+      }
+    }
+    // Old format: research_time (Unix timestamp in seconds) - for backward compatibility
+    if (finding.research_time) {
+      return finding.research_time;
+    }
+    return 0;
+  };
+
+  // Helper function to format date from finding
+  const formatFindingDate = (finding) => {
+    const timestamp = getFindingTimestamp(finding);
+    if (timestamp === 0) {
+      return 'Unknown date';
+    }
+    const date = new Date(timestamp * 1000);
+    if (isNaN(date.getTime())) {
+      return 'Invalid date';
+    }
+    return date.toLocaleDateString();
+  };
+
   // Custom link renderer factory to track source clicks with context
   const createFindingLinkRenderer = (topicName, findingId) => ({ href, children, ...props }) => {
     const isExternal = href && (href.startsWith('http://') || href.startsWith('https://'));
@@ -106,7 +135,7 @@ const ResearchResultsDashboard = () => {
       // Sort findings within each topic by date
       Object.keys(groupedFindings).forEach(topic => {
         groupedFindings[topic].sort((a, b) =>
-          (b.research_time || 0) - (a.research_time || 0)
+          getFindingTimestamp(b) - getFindingTimestamp(a)
         );
       });
 
@@ -188,7 +217,7 @@ const ResearchResultsDashboard = () => {
 
       topics = topics.filter(topic =>
         researchData[topic].some(finding =>
-          (finding.research_time || 0) >= cutoff
+          getFindingTimestamp(finding) >= cutoff
         )
       );
     }
@@ -219,8 +248,8 @@ const ResearchResultsDashboard = () => {
 
         case 'date':
         default:
-          const aLatest = Math.max(...aFindings.map(f => f.research_time || 0));
-          const bLatest = Math.max(...bFindings.map(f => f.research_time || 0));
+          const aLatest = Math.max(...aFindings.map(f => getFindingTimestamp(f)));
+          const bLatest = Math.max(...bFindings.map(f => getFindingTimestamp(f)));
           return filters.sortOrder === 'desc' ? bLatest - aLatest : aLatest - bLatest;
       }
     });
@@ -423,7 +452,7 @@ const ResearchResultsDashboard = () => {
 
         researchData[topic].forEach((finding, index) => {
           content += `Finding ${index + 1}:\n`;
-          content += `Date: ${new Date(finding.research_time * 1000).toLocaleDateString()}\n`;
+          content += `Date: ${formatFindingDate(finding)}\n`;
           content += `Quality Score: ${finding.quality_score?.toFixed(2) || 'N/A'}\n`;
           content += `Summary: ${finding.findings_summary || 'No summary'}\n\n`;
 
@@ -688,7 +717,7 @@ const ResearchResultsDashboard = () => {
                           Quality: {avgQuality.toFixed(1)}
                         </span>
                         <span className="last-updated">
-                          {new Date(latestFinding.research_time * 1000).toLocaleDateString()}
+                          {formatFindingDate(latestFinding)}
                         </span>
                       </div>
                     </div>
@@ -726,7 +755,7 @@ const ResearchResultsDashboard = () => {
                           <div className="finding-header">
                             <div className="finding-meta">
                               <span className="finding-date">
-                                {new Date(finding.research_time * 1000).toLocaleDateString()}
+                                {formatFindingDate(finding)}
                               </span>
                               <span className="quality-badge">
                                 {finding.quality_score?.toFixed(1) || 'N/A'}
