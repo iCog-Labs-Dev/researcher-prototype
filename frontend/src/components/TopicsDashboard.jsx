@@ -415,7 +415,7 @@ const formatDate = (dateString) => {
   // Handle enabling research for a topic
   const handleEnableResearch = async (topic) => {
     if (!topic.topic_id) {
-      console.error('Topic missing topic_id:', topic);
+      console.error('Topic missing topic_id:', topic.name || 'Unknown topic');
       setError('Topic ID is missing. Please refresh the page and try again.');
       return;
     }
@@ -423,7 +423,7 @@ const formatDate = (dateString) => {
     // Validate UUID format (basic check)
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (typeof topic.topic_id === 'string' && !uuidRegex.test(topic.topic_id)) {
-      console.error('Invalid topic_id format (not a UUID):', topic.topic_id, topic);
+      console.error('Invalid topic_id format (not a UUID):', topic.topic_id, 'for topic:', topic.name || 'Unknown');
       setError('Topic ID format is invalid. This topic may need to be recreated.');
       return;
     }
@@ -445,9 +445,9 @@ const formatDate = (dateString) => {
       // Refresh data to ensure UI is in sync with backend state
       setTimeout(() => loadData(), 500);
     } catch (error) {
-      console.error('Error enabling research:', error);
-      console.error('Failed topic:', topic);
-      console.error('Error details:', error.response?.data || error.message);
+      // Only log error message, not full error object or response data
+      const errorMsg = error.response?.data?.detail?.error || error.response?.data?.detail || error.message || 'Unknown error';
+      console.error('Error enabling research for topic:', topic.name || topic.topic_id, '-', errorMsg);
 
       // Revert optimistic update on error
       setTopics(prevTopics =>
@@ -481,7 +481,7 @@ const formatDate = (dateString) => {
   // Handle disabling research for a topic
   const handleDisableResearch = async (topic) => {
     if (!topic.topic_id) {
-      console.error('Topic missing topic_id:', topic);
+      console.error('Topic missing topic_id:', topic.name || 'Unknown topic');
       setError('Topic ID is missing. Please refresh the page and try again.');
       return;
     }
@@ -489,7 +489,7 @@ const formatDate = (dateString) => {
     // Validate UUID format (basic check)
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (typeof topic.topic_id === 'string' && !uuidRegex.test(topic.topic_id)) {
-      console.error('Invalid topic_id format (not a UUID):', topic.topic_id, topic);
+      console.error('Invalid topic_id format (not a UUID):', topic.topic_id, 'for topic:', topic.name || 'Unknown');
       setError('Topic ID format is invalid. This topic may need to be recreated.');
       return;
     }
@@ -512,9 +512,9 @@ const formatDate = (dateString) => {
       // This is important because the research cycle may be running
       setTimeout(() => loadData(), 500);
     } catch (error) {
-      console.error('Error disabling research:', error);
-      console.error('Failed topic:', topic);
-      console.error('Error details:', error.response?.data || error.message);
+      // Only log error message, not full error object or response data
+      const errorMsg = error.response?.data?.detail?.error || error.response?.data?.detail || error.message || 'Unknown error';
+      console.error('Error disabling research for topic:', topic.name || topic.topic_id, '-', errorMsg);
       
       // Revert optimistic update on error
       setTopics(prevTopics =>
@@ -526,8 +526,17 @@ const formatDate = (dateString) => {
       );
       setActiveTopicsCount(prev => prev + 1);
       
-      const errorMsg = error.response?.data?.detail || error.message || 'Failed to disable research. Please try again.';
-      setError(errorMsg);
+      // Extract error message for user display
+      let errorMessage = 'Failed to disable research. Please try again.';
+      if (error.response?.data?.detail) {
+        const detail = error.response.data.detail;
+        if (typeof detail === 'object' && detail.error) {
+          errorMessage = detail.error;
+        } else if (typeof detail === 'string') {
+          errorMessage = detail;
+        }
+      }
+      setError(errorMessage);
       // Refresh topics to get correct state
       loadData();
     }
