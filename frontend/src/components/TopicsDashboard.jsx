@@ -414,11 +414,22 @@ const formatDate = (dateString) => {
 
   // Handle enabling research for a topic
   const handleEnableResearch = async (topic) => {
-    try {
-      // Use the new safe ID-based API instead of index-based
-      await enableTopicResearchById(topic.topic_id);
+    if (!topic.topic_id) {
+      console.error('Topic missing topic_id:', topic.name || 'Unknown topic');
+      setError('Topic ID is missing. Please refresh the page and try again.');
+      return;
+    }
 
-      // Optimistically update the UI and active count
+    // Validate UUID format (basic check)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (typeof topic.topic_id === 'string' && !uuidRegex.test(topic.topic_id)) {
+      console.error('Invalid topic_id format (not a UUID):', topic.topic_id, 'for topic:', topic.name || 'Unknown');
+      setError('Topic ID format is invalid. This topic may need to be recreated.');
+      return;
+    }
+
+    try {
+      // Optimistically update the UI and active count first
       setTopics(prevTopics =>
         prevTopics.map(t =>
           t.topic_id === topic.topic_id
@@ -427,8 +438,26 @@ const formatDate = (dateString) => {
         )
       );
       setActiveTopicsCount(prev => prev + 1);
+
+      // Use the new safe ID-based API instead of index-based
+      await enableTopicResearchById(topic.topic_id);
+
+      // Refresh data to ensure UI is in sync with backend state
+      setTimeout(() => loadData(), 500);
     } catch (error) {
-      console.error('Error enabling research:', error);
+      // Only log error message, not full error object or response data
+      const errorMsg = error.response?.data?.detail?.error || error.response?.data?.detail || error.message || 'Unknown error';
+      console.error('Error enabling research for topic:', topic.name || topic.topic_id, '-', errorMsg);
+
+      // Revert optimistic update on error
+      setTopics(prevTopics =>
+        prevTopics.map(t =>
+          t.topic_id === topic.topic_id
+            ? { ...t, is_active_research: false }
+            : t
+        )
+      );
+      setActiveTopicsCount(prev => Math.max(0, prev - 1));
 
       let errorMessage = 'Failed to enable research. Please try again.';
 
@@ -444,18 +473,30 @@ const formatDate = (dateString) => {
 
       setError(errorMessage);
 
-      // Don't refresh immediately so user can see the error message
-      // loadData() will be called by the retry button or auto-refresh
+      // Delay refresh slightly so error modal can display first
+      // This ensures users can see the error message before the UI refreshes
+      setTimeout(() => loadData(), 200);
     }
   };
 
   // Handle disabling research for a topic
   const handleDisableResearch = async (topic) => {
-    try {
-      // Use the new safe ID-based API instead of index-based
-      await disableTopicResearchById(topic.topic_id);
+    if (!topic.topic_id) {
+      console.error('Topic missing topic_id:', topic.name || 'Unknown topic');
+      setError('Topic ID is missing. Please refresh the page and try again.');
+      return;
+    }
 
-      // Optimistically update the UI and active count
+    // Validate UUID format (basic check)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (typeof topic.topic_id === 'string' && !uuidRegex.test(topic.topic_id)) {
+      console.error('Invalid topic_id format (not a UUID):', topic.topic_id, 'for topic:', topic.name || 'Unknown');
+      setError('Topic ID format is invalid. This topic may need to be recreated.');
+      return;
+    }
+
+    try {
+      // Optimistically update the UI and active count first
       setTopics(prevTopics =>
         prevTopics.map(t =>
           t.topic_id === topic.topic_id
@@ -463,12 +504,43 @@ const formatDate = (dateString) => {
             : t
         )
       );
-      setActiveTopicsCount(prev => prev - 1);
+      setActiveTopicsCount(prev => Math.max(0, prev - 1));
+
+      // Use the new safe ID-based API instead of index-based
+      await disableTopicResearchById(topic.topic_id);
+
+      // Refresh data to ensure UI is in sync with backend state
+      // This is important because the research cycle may be running
+      setTimeout(() => loadData(), 500);
     } catch (error) {
-      console.error('Error disabling research:', error);
-      setError('Failed to disable research. Please try again.');
-      // Refresh topics to get correct state
-      loadData();
+      // Only log error message, not full error object or response data
+      const errorMsg = error.response?.data?.detail?.error || error.response?.data?.detail || error.message || 'Unknown error';
+      console.error('Error disabling research for topic:', topic.name || topic.topic_id, '-', errorMsg);
+      
+      // Revert optimistic update on error
+      setTopics(prevTopics =>
+        prevTopics.map(t =>
+          t.topic_id === topic.topic_id
+            ? { ...t, is_active_research: true }
+            : t
+        )
+      );
+      setActiveTopicsCount(prev => prev + 1);
+      
+      // Extract error message for user display
+      let errorMessage = 'Failed to disable research. Please try again.';
+      if (error.response?.data?.detail) {
+        const detail = error.response.data.detail;
+        if (typeof detail === 'object' && detail.error) {
+          errorMessage = detail.error;
+        } else if (typeof detail === 'string') {
+          errorMessage = detail;
+        }
+      }
+      setError(errorMessage);
+      // Delay refresh slightly so error modal can display first
+      // This ensures users can see the error message before the UI refreshes
+      setTimeout(() => loadData(), 200);
     }
   };
 

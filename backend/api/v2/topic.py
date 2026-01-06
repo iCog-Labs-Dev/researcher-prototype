@@ -270,7 +270,7 @@ async def enable_disable_research_by_topic_id(
     topic_id: UUID,
     enable: bool = Query(True, description="True to enable, False to disable"),
 ) -> TopicEnableOut:
-    user_id = str(request.state.user_id)
+    user_id = request.state.user_id  # Keep as UUID, don't convert to string
 
     service = TopicService()
     result = await service.update_active_research(session, user_id, topic_id, enable)

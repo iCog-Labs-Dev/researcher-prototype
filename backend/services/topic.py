@@ -226,6 +226,7 @@ class TopicService:
 
         # Also create/update TopicScore record for motivation system
         from database.motivation_repository import MotivationRepository
+        from models.motivation import TopicScore
         motivation_repo = MotivationRepository(session)
         
         # For newly enabled topics, set high motivation score (1.0) since they've never been researched
@@ -236,16 +237,47 @@ class TopicService:
             existing_score = await motivation_repo.get_topic_score(user_id, topic.name)
             if not existing_score or existing_score.last_researched is None:
                 motivation_score = 1.0  # High priority for new topics
+            logger.info(f"✅ Enabled research for topic '{topic.name}' (user: {user_id})")
+        else:
+            logger.info(f"🛑 Disabled research for topic '{topic.name}' (user: {user_id})")
         
-        await motivation_repo.create_or_update_topic_score(
-            user_id=user_id,
-            topic_id=topic_id,
-            topic_name=topic.name,
-            is_active_research=enable,
-            motivation_score=motivation_score
-        )
+        # Update TopicScore directly in the same transaction (don't use repository.update which commits)
+        # The is_active_research flag alone is sufficient - get_topics_needing_research filters by it
+        existing_score = await motivation_repo.get_topic_score(user_id, topic.name)
+        if existing_score:
+            # Update existing TopicScore in the same transaction
+            existing_score.is_active_research = enable
+            if motivation_score is not None:
+                existing_score.motivation_score = motivation_score
+            session.add(existing_score)
+            logger.info(f"📊 Updated TopicScore for '{topic.name}': is_active_research={enable}")
+        else:
+            # Create new TopicScore if it doesn't exist
+            if not topic_id:
+                raise ValueError("topic_id is required when creating a topic score")
+            new_score = TopicScore(
+                user_id=user_id,
+                topic_id=topic_id,
+                topic_name=topic.name,
+                is_active_research=enable,
+                motivation_score=motivation_score or 0.0,
+                engagement_score=0.0,
+                success_rate=0.5,
+                staleness_pressure=0.0,
+                staleness_coefficient=1.0,
+                total_findings=0,
+                read_findings=0,
+                bookmarked_findings=0,
+                integrated_findings=0,
+                meta_data={}
+            )
+            session.add(new_score)
+            logger.info(f"📊 Created TopicScore for '{topic.name}': is_active_research={enable}")
 
         await session.commit()
+        
+        # Refresh topic to ensure we have latest state
+        await session.refresh(topic)
 
         return topic.is_active_research
 

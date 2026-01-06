@@ -9,8 +9,9 @@ from typing import List, Dict, Any, Optional, Union
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import update, func, select, distinct
+from sqlalchemy import update, func, select, and_, distinct
 import sqlalchemy as sa
+from db import SessionLocal
 from services.logging_config import get_logger
 from database.motivation_repository import MotivationRepository
 from services.topic_expansion_service import TopicExpansionService
@@ -443,13 +444,34 @@ class MotivationSystem:
                     for topic_score in topics_needing_research:
                         try:
                             topic_name = topic_score.topic_name
-                            logger.info(f"🎯 Researching motivated topic: {topic_name} for user {user_id}")
                             
                             # Get full topic data from lookup map
                             topic = topic_lookup.get(topic_name)
                             if not topic:
-                                logger.warning(f"Topic {topic_name} not found for user {user_id}")
+                                logger.debug(f"Topic '{topic_name}' missing from active topics lookup; skipping")
                                 continue
+                            
+                            # Re-check if topic is still active (user may have deactivated it during research cycle)
+                            async with SessionLocal() as check_session:
+                                from models.topic import ResearchTopic
+                                check_query = select(ResearchTopic).where(
+                                    and_(
+                                        ResearchTopic.id == topic.id,
+                                        ResearchTopic.user_id == user_uuid,
+                                        ResearchTopic.is_active_research.is_(True)
+                                    )
+                                )
+                                check_result = await check_session.execute(check_query)
+                                active_topic = check_result.scalar_one_or_none()
+                                
+                                if not active_topic:
+                                    logger.info(f"🎯 Topic '{topic_name}' was deactivated during research cycle; skipping")
+                                    continue
+                                
+                                # Update topic with fresh data
+                                topic = active_topic
+                            
+                            logger.info(f"🎯 Researching motivated topic: {topic_name} for user {user_id}")
                             
                             topic_data = {
                                 "topic_id": str(topic.id),
