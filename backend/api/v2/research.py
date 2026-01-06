@@ -96,3 +96,8 @@ async def delete_all_topic_findings(
 @router.post("/findings/{finding_id}/integrate", deprecated=True, description="Deprecated: Zep integration disabled")
 async def integrate_research_finding():
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# Note: Debug endpoints have been moved to backend/api/v2/admin/debug.py
+# All debug functionality (config override, motivation status, control endpoints, etc.)
+# should be accessed via /admin/debug/* endpoints instead of /research/debug/*

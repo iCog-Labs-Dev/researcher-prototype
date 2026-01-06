@@ -656,7 +656,7 @@ async def start_research_engine(request: Request):
             try:
                 logger.info("🔬 Re-initializing Autonomous Research Engine...")
                 request.app.state.autonomous_researcher = initialize_autonomous_researcher(
-                    profile_manager, research_manager, _motivation_config_override
+                    _motivation_config_override
                 )
                 request.app.state.autonomous_researcher.enable()
                 await request.app.state.autonomous_researcher.start()
@@ -722,7 +722,7 @@ async def restart_research_engine(request: Request):
             try:
                 logger.info("🔬 Initializing Autonomous Research Engine for restart...")
                 request.app.state.autonomous_researcher = initialize_autonomous_researcher(
-                    profile_manager, research_manager, _motivation_config_override
+                    _motivation_config_override
                 )
                 request.app.state.autonomous_researcher.enable()
                 await request.app.state.autonomous_researcher.start()
