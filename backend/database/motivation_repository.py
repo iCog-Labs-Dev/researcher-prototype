@@ -298,10 +298,6 @@ class MotivationRepository:
     
     async def create_default_config(
         self,
-        boredom_rate: float = 0.0002,
-        curiosity_decay: float = 0.0002,
-        tiredness_decay: float = 0.0002,
-        satisfaction_decay: float = 0.0002,
         global_threshold: float = 2.0,
         topic_threshold: float = 0.5,
         engagement_weight: float = 0.3,
@@ -313,10 +309,6 @@ class MotivationRepository:
     ) -> MotivationConfig:
         """Create default motivation configuration."""
         config = MotivationConfig(
-            boredom_rate=boredom_rate,
-            curiosity_decay=curiosity_decay,
-            tiredness_decay=tiredness_decay,
-            satisfaction_decay=satisfaction_decay,
             global_threshold=global_threshold,
             topic_threshold=topic_threshold,
             engagement_weight=engagement_weight,

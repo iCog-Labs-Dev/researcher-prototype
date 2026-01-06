@@ -101,11 +101,7 @@ def sample_topics():
 @pytest.fixture
 def motivation_config_override():
     """Sample motivation configuration override."""
-    return {
-        "boredom_rate": 0.8,
-        "curiosity_decay": 0.6,
-        "tiredness_decay": 0.3
-    }
+    return {}
 
 
 class TestAutonomousResearcherInitialization:

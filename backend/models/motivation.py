@@ -65,13 +65,7 @@ class MotivationConfig(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     
-    # Global motivation parameters
-    boredom_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0.0002)
-    curiosity_decay: Mapped[float] = mapped_column(Float, nullable=False, default=0.0002)
-    tiredness_decay: Mapped[float] = mapped_column(Float, nullable=False, default=0.0002)
-    satisfaction_decay: Mapped[float] = mapped_column(Float, nullable=False, default=0.0002)
-    
-    # Thresholds
+    # Global thresholds
     global_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=2.0)
     topic_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
     
