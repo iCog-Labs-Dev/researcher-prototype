@@ -231,7 +231,6 @@ class TopicService:
         
         # For newly enabled topics, set high motivation score (1.0) since they've never been researched
         # This ensures they're immediately eligible for research
-        # For disabled topics, reset motivation score to 0 to prevent them from being picked up
         motivation_score = None
         if enable:
             # Check if this is a new topic (never researched)
@@ -240,11 +239,10 @@ class TopicService:
                 motivation_score = 1.0  # High priority for new topics
             logger.info(f"✅ Enabled research for topic '{topic.name}' (user: {user_id})")
         else:
-            # When disabling, reset motivation score to 0 to ensure it's not picked up by research cycle
-            motivation_score = 0.0
             logger.info(f"🛑 Disabled research for topic '{topic.name}' (user: {user_id})")
         
         # Update TopicScore directly in the same transaction (don't use repository.update which commits)
+        # The is_active_research flag alone is sufficient - get_topics_needing_research filters by it
         existing_score = await motivation_repo.get_topic_score(user_id, topic.name)
         if existing_score:
             # Update existing TopicScore in the same transaction
@@ -252,7 +250,7 @@ class TopicService:
             if motivation_score is not None:
                 existing_score.motivation_score = motivation_score
             session.add(existing_score)
-            logger.info(f"📊 Updated TopicScore for '{topic.name}': is_active_research={enable}, motivation_score={motivation_score}")
+            logger.info(f"📊 Updated TopicScore for '{topic.name}': is_active_research={enable}")
         else:
             # Create new TopicScore if it doesn't exist
             if not topic_id:
@@ -274,7 +272,7 @@ class TopicService:
                 meta_data={}
             )
             session.add(new_score)
-            logger.info(f"📊 Created TopicScore for '{topic.name}': is_active_research={enable}, motivation_score={motivation_score or 0.0}")
+            logger.info(f"📊 Created TopicScore for '{topic.name}': is_active_research={enable}")
 
         await session.commit()
         
