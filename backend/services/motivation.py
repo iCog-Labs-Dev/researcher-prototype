@@ -9,14 +9,11 @@ from typing import List, Dict, Any, Optional, Union
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import update, func, select, and_
+from sqlalchemy import update, func, select, and_, distinct
 import sqlalchemy as sa
 from db import SessionLocal
 from services.logging_config import get_logger
 from database.motivation_repository import MotivationRepository
-from storage.profile_manager import ProfileManager
-from storage.research_manager import ResearchManager
-from services.personalization_manager import PersonalizationManager
 from services.topic_expansion_service import TopicExpansionService
 from services.topic import TopicService
 from services.research import ResearchService
@@ -41,16 +38,10 @@ class MotivationSystem:
     def __init__(
         self, 
         session: AsyncSession,
-        profile_manager: ProfileManager,
-        research_manager: ResearchManager,
-        personalization_manager: Optional[PersonalizationManager] = None
     ):
         """Initialize the enhanced motivation system."""
         self.session = session
         self.db_service = MotivationRepository(session)
-        self.profile_manager = profile_manager
-        self.research_manager = research_manager
-        self.personalization_manager = personalization_manager
         
         # Research loop state
         self.is_running = False
@@ -58,14 +49,15 @@ class MotivationSystem:
         self.check_interval = config.MOTIVATION_CHECK_INTERVAL
         
         # Research parameters
+        self.max_topics_per_user = config.RESEARCH_MAX_TOPICS_PER_USER
         self.quality_threshold = config.RESEARCH_QUALITY_THRESHOLD
         
         # Initialize topic expansion service
         try:
             from dependencies import zep_manager as _zep_manager_singleton
-            self.topic_expansion_service = TopicExpansionService(_zep_manager_singleton, self.research_manager)
+            self.topic_expansion_service = TopicExpansionService(_zep_manager_singleton, None)
         except Exception:
-            self.topic_expansion_service = TopicExpansionService(None, self.research_manager)
+            self.topic_expansion_service = TopicExpansionService(None, None)
         
         # Concurrency control
         self._expansion_semaphore = asyncio.Semaphore(max(1, config.EXPANSION_MAX_PARALLEL))
@@ -381,10 +373,7 @@ class MotivationSystem:
     async def _get_topic_success_rate(self, user_id: str, topic_id: uuid.UUID) -> float:
         """Calculate research success rate from user engagement patterns."""
         try:
-            if not self.personalization_manager:
-                return 0.5  # Default neutral success rate
-            
-            # Use engagement as proxy for success rate
+            # Use engagement as proxy for success rate (database-backed)
             engagement_score = await self._get_topic_engagement_score(user_id, topic_id)
             success_rate = 0.3 + (engagement_score * 0.4)  # Range: 0.3-0.7
             
@@ -396,54 +385,69 @@ class MotivationSystem:
 
     async def _conduct_research_cycle(self) -> Dict[str, Any]:
         """Conduct a complete research cycle for all users with motivated topics."""
-
-        # need attention:
-        # result of get_topics_needing_research is empty
-        # need only analyze async_get_active_research_topics
-        # and only run run_langgraph_research
-        """
         try:
-            _, active_topics = await self.topic_service.async_get_active_research_topics()
-            if not active_topics:
-                logger.info("🎯 No active research topics found in database")
+            # Get all unique users from TopicScore table
+            user_ids_result = await self.session.execute(
+                select(distinct(TopicScore.user_id)).where(TopicScore.is_active_research == True)
+            )
+            user_ids = [row[0] for row in user_ids_result.all()]
+            
+            if not user_ids:
+                logger.info("🎯 No users with active research topics found")
                 return {
                     "topics_researched": 0,
                     "findings_stored": 0,
                     "average_quality": 0.0,
                 }
-
-            # Build lookup map: (user_id, topic_name) -> ResearchTopic
-            topic_lookup: Dict[tuple, Any] = {}
-            unique_users: set = set()
-            for topic in active_topics:
-                topic_lookup[(topic.user_id, topic.name)] = topic
-                unique_users.add(topic.user_id)
-
-            logger.info(f"🎯 Processing {len(active_topics)} active topics across {len(unique_users)} users...")
+            
+            logger.info(f"🎯 Scanning {len(user_ids)} users for motivated research topics...")
+            
+            # Get researcher instance once before the loop
+            from services.autonomous_research_engine import get_autonomous_researcher
+            researcher = get_autonomous_researcher()
+            if not researcher:
+                logger.warning("Autonomous researcher not initialized; skipping research cycle")
+                return {
+                    "topics_researched": 0,
+                    "findings_stored": 0,
+                    "average_quality": 0.0,
+                }
             
             total_topics_researched = 0
             total_findings_stored = 0
             quality_scores: List[float] = []
             
-            for user_uuid in unique_users:
-                user_id = str(user_uuid)
+            for user_uuid in user_ids:
                 try:
+                    user_id = str(user_uuid)
+                    
+                    # Get topics needing research based on motivation scores
                     topics_needing_research = await self.db_service.get_topics_needing_research(
                         user_uuid,
                         threshold=self._config.topic_threshold,
-                        limit=None,  # No limit - already limited by MAX_ACTIVE_RESEARCH_TOPICS_PER_USER
+                        limit=self.max_topics_per_user
                     )
-
+                    
                     if not topics_needing_research:
                         continue
-
+                    
                     logger.info(f"🎯 User {user_id} has {len(topics_needing_research)} motivated topics")
+                    
+                    # Fetch all active topics for this user once before the loop
+                    topics = await self.topic_service.get_active_research_topics_by_user_id(
+                        self.session,
+                        user_uuid
+                    )
+                    # Build lookup map: topic_name -> ResearchTopic
+                    topic_lookup = {t.name: t for t in topics}
                     
                     for topic_score in topics_needing_research:
                         try:
                             topic_name = topic_score.topic_name
-                            research_topic = topic_lookup.get((user_uuid, topic_name))
-                            if not research_topic:
+                            
+                            # Get full topic data from lookup map
+                            topic = topic_lookup.get(topic_name)
+                            if not topic:
                                 logger.debug(f"Topic '{topic_name}' missing from active topics lookup; skipping")
                                 continue
                             
@@ -452,7 +456,7 @@ class MotivationSystem:
                                 from models.topic import ResearchTopic
                                 check_query = select(ResearchTopic).where(
                                     and_(
-                                        ResearchTopic.id == research_topic.id,
+                                        ResearchTopic.id == topic.id,
                                         ResearchTopic.user_id == user_uuid,
                                         ResearchTopic.is_active_research.is_(True)
                                     )
@@ -464,25 +468,20 @@ class MotivationSystem:
                                     logger.info(f"🎯 Topic '{topic_name}' was deactivated during research cycle; skipping")
                                     continue
                                 
-                                # Update research_topic with fresh data
-                                research_topic = active_topic
+                                # Update topic with fresh data
+                                topic = active_topic
                             
                             logger.info(f"🎯 Researching motivated topic: {topic_name} for user {user_id}")
-
+                            
                             topic_data = {
-                                "topic_id": str(research_topic.id),
-                                "topic_name": research_topic.name,
-                                "description": research_topic.description,
-                                "last_researched": research_topic.last_researched.astimezone(timezone.utc).strftime("%Y-%m-%d") if research_topic.last_researched else None,
-                                "is_active_research": research_topic.is_active_research,
+                                "topic_id": str(topic.id),
+                                "topic_name": topic.name,
+                                "description": topic.description,
+                                "last_researched": topic.last_researched.astimezone(timezone.utc).strftime("%Y-%m-%d") if topic.last_researched else None,
+                                "is_active_research": topic.is_active_research,
                             }
                             
                             # Research the topic via research engine instance
-                            from services.autonomous_research_engine import get_autonomous_researcher
-                            researcher = get_autonomous_researcher()
-                            if not researcher:
-                                logger.warning("Autonomous researcher not initialized; skipping research")
-                                continue
                             result = await researcher.run_langgraph_research(user_id, topic_data)
                             
                             total_topics_researched += 1
@@ -494,20 +493,14 @@ class MotivationSystem:
                             # Update last_researched timestamp
                             await self.db_service.create_or_update_topic_score(
                                 user_id=user_uuid,
-                                topic_id=research_topic.id,
+                                topic_id=topic.id,
                                 topic_name=topic_name,
                                 last_researched=time.time()
                             )
 
                             # --- Topic expansion wiring ---
                             try:
-                                from services.autonomous_research_engine import get_autonomous_researcher
-                                researcher = get_autonomous_researcher()
-                                if not researcher:
-                                    logger.warning("Autonomous researcher not initialized; skipping expansions")
-                                    child_runs = []
-                                else:
-                                    child_runs = await researcher.process_expansions_for_root(user_id, topic_data)
+                                child_runs = await researcher.process_expansions_for_root(user_id, topic_data)
                                 if child_runs:
                                     for cr in child_runs:
                                         child = cr.get("topic", {})
@@ -541,8 +534,7 @@ class MotivationSystem:
                         except Exception as e:
                             logger.error(f"🎯 Error researching topic {topic_name}: {str(e)}")
                             continue
-                    
-                
+                            
                 except Exception as e:
                     logger.error(f"🎯 Error processing user {user_id}: {str(e)}")
                     continue
@@ -559,10 +551,17 @@ class MotivationSystem:
             
             # Update expansion lifecycle for all processed users
             try:
-                for user_uuid in unique_users:
+                for user_uuid in user_ids:
                     await self._update_expansion_lifecycle(str(user_uuid))
             except Exception as e:
                 logger.error(f"Lifecycle update failed: {str(e)}")
+            
+            # Update motivation scores for all researched topics (after research is complete)
+            try:
+                await self.update_scores()
+                logger.info("🎯 Updated motivation scores after research cycle")
+            except Exception as e:
+                logger.error(f"Error updating motivation scores: {str(e)}")
             
             return {
                 "topics_researched": total_topics_researched,
@@ -572,94 +571,6 @@ class MotivationSystem:
             
         except Exception as e:
             logger.error(f"🎯 Error in research cycle: {str(e)}", exc_info=True)
-            return {
-                "topics_researched": 0,
-                "findings_stored": 0,
-                "average_quality": 0.0,
-            }
-        """
-
-        from services.autonomous_research_engine import get_autonomous_researcher
-        researcher = get_autonomous_researcher()
-
-        try:
-            _, active_topics = await self.topic_service.async_get_active_research_topics()
-            if not active_topics or not researcher:
-                if not active_topics:
-                    logger.info("🔬 No active research topics found")
-                if not researcher:
-                    logger.warning("Autonomous researcher not initialized; skipping research")
-
-                return {
-                    "topics_researched": 0,
-                    "findings_stored": 0,
-                    "average_quality": 0.0,
-                }
-
-            logger.info(f"🔬 Processing {len(active_topics)} active research topics...")
-
-            total_topics_researched = 0
-            total_findings_stored = 0
-            quality_scores: List[float] = []
-            processed_users: set = set()
-
-            for topic in active_topics:
-                try:
-                    user_id = str(topic.user_id)
-                    processed_users.add(user_id)
-                    root_name = topic.name
-                    logger.info(f"🔬 Researching topic: {root_name} for user {user_id}")
-
-                    topic_payload = {
-                        "topic_id": str(topic.id),
-                        "topic_name": topic.name,
-                        "description": topic.description,
-                        "last_researched": topic.last_researched.astimezone(timezone.utc).strftime("%Y-%m-%d") if topic.last_researched else None,
-                        "is_active_research": topic.is_active_research,
-                    }
-
-                    result = await researcher.run_langgraph_research(user_id, topic_payload)
-
-                    if result:
-                        total_topics_researched += 1
-                        if result.get("stored", False):
-                            total_findings_stored += 1
-                        if result.get("quality_score"):
-                            quality_scores.append(result.get("quality_score"))
-
-                    await asyncio.sleep(config.RESEARCH_TOPIC_DELAY)
-
-                except Exception as e:
-                    logger.error(
-                        f"🔬 Error researching topic {topic.name} for user {topic.user_id}: {str(e)}"
-                    )
-                    continue
-
-            logger.info(
-                f"🔬 LangGraph research cycle completed: {total_topics_researched} topics researched, {total_findings_stored} findings stored"
-            )
-
-            avg_quality = sum(quality_scores) / len(quality_scores) if quality_scores else 0.0
-
-            try:
-                await self.research_service.async_cleanup_old_research_findings(config.RESEARCH_FINDINGS_RETENTION_DAYS)
-            except Exception as cleanup_error:
-                logger.debug(f"Error cleaning up old findings: {cleanup_error}")
-
-            try:
-                for user_id in processed_users:
-                    await self._update_expansion_lifecycle(user_id)
-            except Exception as e:
-                logger.error(f"Lifecycle update failed: {str(e)}")
-
-            return {
-                "topics_researched": total_topics_researched,
-                "findings_stored": total_findings_stored,
-                "average_quality": avg_quality,
-            }
-
-        except Exception as e:
-            logger.error(f"🔬 Error in research cycle: {str(e)}", exc_info=True)
             return {
                 "topics_researched": 0,
                 "findings_stored": 0,
@@ -684,9 +595,6 @@ class MotivationSystem:
     async def _update_expansion_lifecycle(self, user_id: str) -> None:
         """Evaluate and update lifecycle state for expansion topics for a user."""
         try:
-            topics_data = self.research_manager.get_user_topics(user_id)
-            if not topics_data:
-                return
             now_ts = time.time()
             promoted = paused = retired = 0
             changed = False
@@ -697,88 +605,96 @@ class MotivationSystem:
             backoff_days = config.EXPANSION_BACKOFF_DAYS
             retire_ttl_days = config.EXPANSION_RETIRE_TTL_DAYS
 
-            # Fetch active topics from database once per user
             user_uuid = uuid.UUID(user_id)
-            _, active_topics = await self.topic_service.async_get_active_research_topics(user_id=user_uuid)
-            # Create a lookup map by topic name
-            topics_by_name = {t.name: t for t in active_topics}
+            # Fetch topic scores for this user and filter to expansion topics using meta_data
+            topic_scores = await self.db_service.get_user_topic_scores(user_uuid, active_only=False, limit=None, order_by_motivation=False)
 
-            for sid, session_topics in topics_data.get('sessions', {}).items():
-                for topic in session_topics:
-                    if not topic.get('is_expansion', False):
-                        continue
-                    name = topic.get('topic_name')
-                    depth = int(topic.get('expansion_depth', 0) or 0)
-                    
-                    # Look up topic from database
-                    topic_obj = topics_by_name.get(name)
-                    
+            for ts in topic_scores:
+                meta = ts.meta_data or {}
+                if not meta.get('is_expansion', False):
+                    continue
+                name = ts.topic_name
+                depth = int(meta.get('expansion_depth', 0) or 0)
+                
+                # Compute engagement and recent average quality from DB-backed findings
+                engagement = 0.0
+                try:
+                    engagement = await self._get_topic_engagement_score(user_id, ts.topic_id)
+                except Exception:
                     engagement = 0.0
-                    try:
-                        if topic_obj:
-                            engagement = await self._get_topic_engagement_score(user_id, topic_obj.id)
-                    except Exception:
-                        engagement = 0.0
-                    avg_quality = await self.get_recent_average_quality(user_id, topic_obj.id, window_days) if topic_obj else 0.0
+                avg_quality = await self.get_recent_average_quality(user_id, ts.topic_id, window_days)
 
-                    status = topic.get('expansion_status', 'active')
-                    last_eval = float(topic.get('last_evaluated_at', 0) or 0)
-                    backoff_until = float(topic.get('last_backoff_until', 0) or 0)
+                status = meta.get('expansion_status', 'active')
+                last_eval = float(meta.get('last_evaluated_at', 0) or 0)
+                backoff_until = float(meta.get('last_backoff_until', 0) or 0)
 
-                    decision_debug = f"topic='{name}' depth={depth} engagement={engagement:.2f} avg_q={avg_quality:.2f} status={status}"
+                decision_debug = f"topic='{name}' depth={depth} engagement={engagement:.2f} avg_q={avg_quality:.2f} status={status}"
 
-                    # Promote to allow children
-                    if engagement >= promote_thr and avg_quality >= min_quality:
-                        if not topic.get('child_expansion_enabled', False) or status != 'active':
-                            topic['child_expansion_enabled'] = True
-                            topic['expansion_status'] = 'active'
-                            changed = True
-                            promoted += 1
-                            logger.debug(f"Lifecycle promote: {decision_debug}")
-                        topic['last_evaluated_at'] = now_ts
-                        continue
-
-                    # Assess interactions in window via findings read/bookmark/integration
-                    any_interaction = False
-                    try:
-                        if topic_obj:
-                            success, findings = await self.research_service.async_get_findings(user_id, str(topic_obj.id))
-                            if success:
-                                window_start = now_ts - window_days * 24 * 3600
-                                any_interaction = any(
-                                    (f.read or f.bookmarked or f.integrated) and f.created_at and f.created_at.timestamp() >= window_start
-                                    for f in findings
-                                )
-                    except Exception:
-                        any_interaction = False
-
-                    # Retire after TTL if still cold (check before pausing again)
-                    if status == 'paused' and last_eval and (now_ts - last_eval) >= retire_ttl_days * 24 * 3600:
-                        if engagement < retire_thr and not any_interaction:
-                            topic['expansion_status'] = 'retired'
-                            topic['last_evaluated_at'] = now_ts
-                            changed = True
-                            retired += 1
-                            logger.debug(f"Lifecycle retire: {decision_debug}")
-                            continue
-
-                    # Pause on cold engagement and no interactions in window
-                    if engagement < retire_thr and not any_interaction:
-                        topic['is_active_research'] = False
-                        topic['child_expansion_enabled'] = False
-                        topic['expansion_status'] = 'paused'
-                        topic['last_backoff_until'] = now_ts + backoff_days * 24 * 3600
-                        topic['last_evaluated_at'] = now_ts
+                # Promote to allow children
+                if engagement >= promote_thr and avg_quality >= min_quality:
+                    if not meta.get('child_expansion_enabled', False) or status != 'active':
+                        meta['child_expansion_enabled'] = True
+                        meta['expansion_status'] = 'active'
                         changed = True
-                        paused += 1
-                        logger.debug(f"Lifecycle pause: {decision_debug}")
+                        promoted += 1
+                        logger.debug(f"Lifecycle promote: {decision_debug}")
+                    meta['last_evaluated_at'] = now_ts
+                    if changed:
+                        await self.db_service.update_topic_score(
+                            user_uuid,
+                            ts.topic_name,
+                            meta_data=meta,
+                        )
+                    continue
+
+                # Assess interactions in window via findings read/bookmark/integration
+                any_interaction = False
+                try:
+                    success, findings = await self.research_service.async_get_findings(user_id, str(ts.topic_id))
+                    if success:
+                        window_start = now_ts - window_days * 24 * 3600
+                        any_interaction = any(
+                            (f.read or f.bookmarked or f.integrated) and f.created_at and f.created_at.timestamp() >= window_start
+                            for f in findings
+                        )
+                except Exception:
+                    any_interaction = False
+
+                # Retire after TTL if still cold (check before pausing again)
+                if status == 'paused' and last_eval and (now_ts - last_eval) >= retire_ttl_days * 24 * 3600:
+                    if engagement < retire_thr and not any_interaction:
+                        meta['expansion_status'] = 'retired'
+                        meta['last_evaluated_at'] = now_ts
+                        changed = True
+                        retired += 1
+                        logger.debug(f"Lifecycle retire: {decision_debug}")
+                        await self.db_service.update_topic_score(
+                            user_uuid,
+                            ts.topic_name,
+                            meta_data=meta,
+                        )
                         continue
 
-                    # No action
-                    topic['last_evaluated_at'] = now_ts
+                # Pause on cold engagement and no interactions in window
+                if engagement < retire_thr and not any_interaction:
+                    meta['is_active_research'] = False
+                    meta['child_expansion_enabled'] = False
+                    meta['expansion_status'] = 'paused'
+                    meta['last_backoff_until'] = now_ts + backoff_days * 24 * 3600
+                    meta['last_evaluated_at'] = now_ts
+                    changed = True
+                    paused += 1
+                    logger.debug(f"Lifecycle pause: {decision_debug}")
+                    await self.db_service.update_topic_score(
+                        user_uuid,
+                        ts.topic_name,
+                        meta_data=meta,
+                    )
+                    continue
 
-            if changed:
-                self.research_manager.save_user_topics(user_id, topics_data)
+                # No action
+                meta['last_evaluated_at'] = now_ts
+
             logger.info(f"Lifecycle update for {user_id}: promoted={promoted}, paused={paused}, retired={retired}")
 
         except Exception as e:

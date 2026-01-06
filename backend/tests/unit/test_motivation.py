@@ -52,12 +52,10 @@ async def mock_research_manager():
 
 
 @pytest.fixture
-async def motivation_system(mock_session, mock_profile_manager, mock_research_manager):
+async def motivation_system(mock_session):
     """Create motivation system with mocked dependencies."""
     return MotivationSystem(
         session=mock_session,
-        profile_manager=mock_profile_manager,
-        research_manager=mock_research_manager
     )
 
 
@@ -398,10 +396,7 @@ async def test_research_topic_with_langgraph_invokes_research_workflow():
             }
         })
         from services.autonomous_research_engine import initialize_autonomous_researcher
-        pm = MagicMock()
-        pm.storage = MagicMock()
-        rm = MagicMock()
-        researcher = initialize_autonomous_researcher(pm, rm)
+        researcher = initialize_autonomous_researcher()
         result = await researcher.run_langgraph_research(user_id, topic)
         assert result["success"] is True
         assert result["stored"] is True

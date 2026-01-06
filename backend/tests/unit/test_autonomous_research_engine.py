@@ -49,7 +49,7 @@ def mock_research_graph():
 
 
 @pytest.fixture
-def autonomous_researcher(mock_profile_manager, mock_research_manager):
+def autonomous_researcher():
     """Create an AutonomousResearcher with mocked dependencies."""
     with patch('services.autonomous_research_engine.research_graph') as mock_graph, \
          patch('services.autonomous_research_engine.TopicExpansionService') as mock_expansion:
@@ -71,7 +71,7 @@ def autonomous_researcher(mock_profile_manager, mock_research_manager):
         mock_expansion_instance.generate_candidates.return_value = []
         mock_expansion.return_value = mock_expansion_instance
         
-        researcher = AutonomousResearcher(mock_profile_manager, mock_research_manager)
+        researcher = AutonomousResearcher()
         researcher.research_graph = mock_graph
         researcher.topic_expansion_service = mock_expansion_instance
         return researcher
@@ -111,24 +111,20 @@ def motivation_config_override():
 class TestAutonomousResearcherInitialization:
     """Test AutonomousResearcher initialization and configuration."""
 
-    def test_init_default_config(self, mock_profile_manager, mock_research_manager):
+    def test_init_default_config(self):
         """Test initialization with default configuration."""
         with patch('services.autonomous_research_engine.research_graph'):
-            researcher = AutonomousResearcher(mock_profile_manager, mock_research_manager)
+            researcher = AutonomousResearcher()
             
-            assert researcher.profile_manager == mock_profile_manager
-            assert researcher.research_manager == mock_research_manager
             assert researcher.is_running is False
             # Motivation now lives in motivation_system and is initialized on start
             assert getattr(researcher, 'motivation_system', None) is None
             assert isinstance(researcher.enabled, bool)
 
-    def test_init_with_motivation_override(self, mock_profile_manager, mock_research_manager, motivation_config_override):
-        """Override is accepted by initializer without touching legacy drives."""
+    def test_init_with_motivation_override(self, motivation_config_override):
+        """Override is accepted by initializer."""
         with patch('services.autonomous_research_engine.research_graph'):
             researcher = initialize_autonomous_researcher(
-                mock_profile_manager,
-                mock_research_manager,
                 motivation_config_override,
             )
             assert isinstance(researcher, AutonomousResearcher)
@@ -478,30 +474,28 @@ class TestResearchCycleIntegration:
 class TestGlobalFunctions:
     """Test global initialization and accessor functions."""
 
-    def test_initialize_autonomous_researcher(self, mock_profile_manager, mock_research_manager):
+    def test_initialize_autonomous_researcher(self):
         """Test global initialization function."""
         with patch('services.autonomous_research_engine.research_graph'):
-            researcher = initialize_autonomous_researcher(mock_profile_manager, mock_research_manager)
+            researcher = initialize_autonomous_researcher()
             
             assert isinstance(researcher, AutonomousResearcher)
-            assert researcher.profile_manager == mock_profile_manager
-            assert researcher.research_manager == mock_research_manager
 
-    def test_get_autonomous_researcher(self, mock_profile_manager, mock_research_manager):
+    def test_get_autonomous_researcher(self):
         """Test global accessor function."""
         with patch('services.autonomous_research_engine.research_graph'):
             # Initialize first
-            researcher = initialize_autonomous_researcher(mock_profile_manager, mock_research_manager)
+            researcher = initialize_autonomous_researcher()
             
             # Get should return the same instance
             retrieved = get_autonomous_researcher()
             assert retrieved is researcher
 
-    def test_initialize_with_motivation_override(self, mock_profile_manager, mock_research_manager, motivation_config_override):
+    def test_initialize_with_motivation_override(self, motivation_config_override):
         """Test initialization with motivation configuration override."""
         with patch('services.autonomous_research_engine.research_graph'):
             researcher = initialize_autonomous_researcher(
-                mock_profile_manager, mock_research_manager, motivation_config_override
+                motivation_config_override
             )
             assert isinstance(researcher, AutonomousResearcher)
 
