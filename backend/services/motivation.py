@@ -9,8 +9,9 @@ from typing import List, Dict, Any, Optional, Union
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import update, func, select
+from sqlalchemy import update, func, select, and_
 import sqlalchemy as sa
+from db import SessionLocal
 from services.logging_config import get_logger
 from database.motivation_repository import MotivationRepository
 from storage.profile_manager import ProfileManager
@@ -445,6 +446,27 @@ class MotivationSystem:
                             if not research_topic:
                                 logger.debug(f"Topic '{topic_name}' missing from active topics lookup; skipping")
                                 continue
+                            
+                            # Re-check if topic is still active (user may have deactivated it during research cycle)
+                            async with SessionLocal() as check_session:
+                                from models.topic import ResearchTopic
+                                check_query = select(ResearchTopic).where(
+                                    and_(
+                                        ResearchTopic.id == research_topic.id,
+                                        ResearchTopic.user_id == user_uuid,
+                                        ResearchTopic.is_active_research.is_(True)
+                                    )
+                                )
+                                check_result = await check_session.execute(check_query)
+                                active_topic = check_result.scalar_one_or_none()
+                                
+                                if not active_topic:
+                                    logger.info(f"🎯 Topic '{topic_name}' was deactivated during research cycle; skipping")
+                                    continue
+                                
+                                # Update research_topic with fresh data
+                                research_topic = active_topic
+                            
                             logger.info(f"🎯 Researching motivated topic: {topic_name} for user {user_id}")
 
                             topic_data = {

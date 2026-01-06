@@ -137,6 +137,10 @@ const ConversationTopics = ({ isCollapsed, onToggleCollapse, onTopicUpdate }) =>
             : t
         )
       );
+      
+      // Refresh data to ensure UI is in sync with backend state
+      // This is important because the research cycle may be running
+      setTimeout(() => fetchTopics(), 500);
     } catch (error) {
       console.error('Error disabling research:', error);
       // Refresh topics to get correct state

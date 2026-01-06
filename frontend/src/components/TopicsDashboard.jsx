@@ -464,6 +464,10 @@ const formatDate = (dateString) => {
         )
       );
       setActiveTopicsCount(prev => prev - 1);
+      
+      // Refresh data to ensure UI is in sync with backend state
+      // This is important because the research cycle may be running
+      setTimeout(() => loadData(), 500);
     } catch (error) {
       console.error('Error disabling research:', error);
       setError('Failed to disable research. Please try again.');
