@@ -473,8 +473,9 @@ const formatDate = (dateString) => {
 
       setError(errorMessage);
 
-      // Refresh to get correct state
-      loadData();
+      // Delay refresh slightly so error modal can display first
+      // This ensures users can see the error message before the UI refreshes
+      setTimeout(() => loadData(), 200);
     }
   };
 
@@ -537,8 +538,9 @@ const formatDate = (dateString) => {
         }
       }
       setError(errorMessage);
-      // Refresh topics to get correct state
-      loadData();
+      // Delay refresh slightly so error modal can display first
+      // This ensures users can see the error message before the UI refreshes
+      setTimeout(() => loadData(), 200);
     }
   };
 
