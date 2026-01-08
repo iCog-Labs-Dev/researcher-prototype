@@ -403,72 +403,14 @@ async def clear_config_override_alias():
 
 @router.get("/research/debug/motivation")
 async def get_motivation_status(request: Request):
-    """Debug endpoint to check motivation system status."""
-    try:
-        if hasattr(request.app.state, "autonomous_researcher") and request.app.state.autonomous_researcher:
-            researcher = request.app.state.autonomous_researcher
-            motivation = researcher.motivation
-
-            # Only tick if the research engine is actually running
-            # This ensures drives only evolve when the engine is active
-            if researcher.is_running:
-                motivation.tick()
-
-            return {
-                "motivation_system": {
-                    "boredom": round(motivation.boredom, 4),
-                    "curiosity": round(motivation.curiosity, 4),
-                    "tiredness": round(motivation.tiredness, 4),
-                    "satisfaction": round(motivation.satisfaction, 4),
-                    "impetus": round(motivation.impetus(), 4),
-                    "threshold": motivation.drives.threshold,
-                    "should_research": motivation.should_research(),
-                    "time_since_last_tick": round(time.time() - motivation.last_tick, 2),
-                },
-                "research_engine": {
-                    "enabled": researcher.enabled,
-                    "running": researcher.is_running,
-                    "check_interval": researcher.check_interval,
-                },
-                "drive_rates": {
-                    "boredom_rate": motivation.drives.boredom_rate,
-                    "curiosity_decay": motivation.drives.curiosity_decay,
-                    "tiredness_decay": motivation.drives.tiredness_decay,
-                    "satisfaction_decay": motivation.drives.satisfaction_decay,
-                },
-            }
-        else:
-            return {"error": "Autonomous researcher not available"}
-
-    except Exception as e:
-        logger.error(f"Error getting motivation status: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error getting motivation status: {str(e)}")
+    """Deprecated legacy endpoint (removed user-level motivation drives)."""
+    raise HTTPException(status_code=410, detail="Legacy motivation drives removed")
 
 
 @router.post("/research/debug/trigger-user-activity")
 async def trigger_user_activity(request: Request):
     """Debug endpoint to simulate user activity (increases curiosity)."""
-    try:
-        if hasattr(request.app.state, "autonomous_researcher") and request.app.state.autonomous_researcher:
-            researcher = request.app.state.autonomous_researcher
-            researcher.motivation.on_user_activity()
-
-            return {
-                "success": True,
-                "message": "User activity triggered",
-                "new_motivation_state": {
-                    "boredom": round(researcher.motivation.boredom, 4),
-                    "curiosity": round(researcher.motivation.curiosity, 4),
-                    "impetus": round(researcher.motivation.impetus(), 4),
-                    "should_research": researcher.motivation.should_research(),
-                },
-            }
-        else:
-            raise HTTPException(status_code=503, detail="Autonomous researcher not available")
-
-    except Exception as e:
-        logger.error(f"Error triggering user activity: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error triggering user activity: {str(e)}")
+    raise HTTPException(status_code=410, detail="Legacy motivation drives removed")
 
 
 @router.post("/research/debug/adjust-drives")
@@ -480,105 +422,13 @@ async def adjust_motivation_drives(
     satisfaction: Optional[float] = None,
 ):
     """Debug endpoint to manually set motivation drive values for testing."""
-    try:
-        if hasattr(request.app.state, "autonomous_researcher") and request.app.state.autonomous_researcher:
-            researcher = request.app.state.autonomous_researcher
-            motivation = researcher.motivation
-
-            old_values = {
-                "boredom": motivation.boredom,
-                "curiosity": motivation.curiosity,
-                "tiredness": motivation.tiredness,
-                "satisfaction": motivation.satisfaction,
-            }
-
-            # Update provided values
-            if boredom is not None:
-                motivation.boredom = max(0.0, min(1.0, boredom))
-            if curiosity is not None:
-                motivation.curiosity = max(0.0, min(1.0, curiosity))
-            if tiredness is not None:
-                motivation.tiredness = max(0.0, min(1.0, tiredness))
-            if satisfaction is not None:
-                motivation.satisfaction = max(0.0, min(1.0, satisfaction))
-
-            new_values = {
-                "boredom": motivation.boredom,
-                "curiosity": motivation.curiosity,
-                "tiredness": motivation.tiredness,
-                "satisfaction": motivation.satisfaction,
-            }
-
-            return {
-                "success": True,
-                "message": "Motivation drives adjusted",
-                "old_values": old_values,
-                "new_values": new_values,
-                "impetus": round(motivation.impetus(), 4),
-                "should_research": motivation.should_research(),
-            }
-        else:
-            raise HTTPException(status_code=503, detail="Autonomous researcher not available")
-
-    except Exception as e:
-        logger.error(f"Error adjusting motivation drives: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error adjusting drives: {str(e)}")
+    raise HTTPException(status_code=410, detail="Legacy motivation drives removed")
 
 
 @router.post("/research/debug/update-config")
 async def update_motivation_config(request: Request, config: MotivationConfigUpdate):
     """Debug endpoint to update motivation system configuration parameters."""
-    try:
-        if hasattr(request.app.state, "autonomous_researcher") and request.app.state.autonomous_researcher:
-            researcher = request.app.state.autonomous_researcher
-            motivation = researcher.motivation
-            drives_config = motivation.drives
-
-            # Check if this is a complete config replacement (all parameters provided)
-            all_params_provided = all(
-                getattr(config, param) is not None
-                for param in ["threshold", "boredom_rate", "curiosity_decay", "tiredness_decay", "satisfaction_decay"]
-            )
-
-            if all_params_provided:
-                # Complete replacement - clear override and set new values
-                global _motivation_config_override
-                _motivation_config_override = {}
-
-            # Update provided values
-            if config.threshold is not None:
-                value = max(0.1, min(10.0, config.threshold))
-                drives_config.threshold = value
-                _motivation_config_override["threshold"] = value
-            if config.boredom_rate is not None:
-                value = max(0.0, min(0.1, config.boredom_rate))
-                drives_config.boredom_rate = value
-                _motivation_config_override["boredom_rate"] = value
-            if config.curiosity_decay is not None:
-                value = max(0.0, min(0.1, config.curiosity_decay))
-                drives_config.curiosity_decay = value
-                _motivation_config_override["curiosity_decay"] = value
-            if config.tiredness_decay is not None:
-                value = max(0.0, min(0.1, config.tiredness_decay))
-                drives_config.tiredness_decay = value
-                _motivation_config_override["tiredness_decay"] = value
-            if config.satisfaction_decay is not None:
-                value = max(0.0, min(0.1, config.satisfaction_decay))
-                drives_config.satisfaction_decay = value
-                _motivation_config_override["satisfaction_decay"] = value
-
-            return {
-                "success": True,
-                "message": "Motivation configuration updated",
-                "impetus": round(motivation.impetus(), 4),
-                "should_research": motivation.should_research(),
-            }
-        else:
-            raise HTTPException(status_code=503, detail="Autonomous researcher not available")
-
-    except Exception as e:
-        logger.error(f"Error updating motivation config: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error updating config: {str(e)}")
+    raise HTTPException(status_code=410, detail="Legacy motivation drives removed")
 
 
 @router.post("/research/debug/simulate-research-completion")

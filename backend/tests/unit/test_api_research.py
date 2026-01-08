@@ -274,41 +274,24 @@ class TestMotivationConfigUpdate:
     def test_motivation_config_model_creation(self):
         """Test creating MotivationConfigUpdate with all fields."""
         config = MotivationConfigUpdate(
-            threshold=0.5,
-            boredom_rate=0.1,
-            curiosity_decay=0.05,
-            tiredness_decay=0.02,
-            satisfaction_decay=0.03
+            threshold=0.5
         )
         
         assert config.threshold == 0.5
-        assert config.boredom_rate == 0.1
-        assert config.curiosity_decay == 0.05
-        assert config.tiredness_decay == 0.02
-        assert config.satisfaction_decay == 0.03
 
     def test_motivation_config_model_partial(self):
         """Test creating MotivationConfigUpdate with some fields."""
         config = MotivationConfigUpdate(
-            threshold=0.8,
-            boredom_rate=0.15
+            threshold=0.8
         )
         
         assert config.threshold == 0.8
-        assert config.boredom_rate == 0.15
-        assert config.curiosity_decay is None
-        assert config.tiredness_decay is None
-        assert config.satisfaction_decay is None
 
     def test_motivation_config_model_empty(self):
         """Test creating empty MotivationConfigUpdate."""
         config = MotivationConfigUpdate()
         
         assert config.threshold is None
-        assert config.boredom_rate is None
-        assert config.curiosity_decay is None
-        assert config.tiredness_decay is None
-        assert config.satisfaction_decay is None
 
 
 class TestResearchControlEndpoints:

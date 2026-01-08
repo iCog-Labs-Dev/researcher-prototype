@@ -184,10 +184,6 @@ class CustomTopicRequest(BaseModel):
 
 class MotivationConfigUpdate(BaseModel):
     threshold: Optional[float] = None
-    boredom_rate: Optional[float] = None
-    curiosity_decay: Optional[float] = None
-    tiredness_decay: Optional[float] = None
-    satisfaction_decay: Optional[float] = None
 
 
 class BookmarkUpdate(BaseModel):
