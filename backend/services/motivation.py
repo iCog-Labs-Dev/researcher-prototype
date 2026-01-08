@@ -169,6 +169,8 @@ class MotivationSystem:
             if not self._config:
                 return
             
+            logger.debug(f"🎯 Starting score update with config: threshold={self._config.topic_threshold}, engagement_weight={self._config.engagement_weight}, quality_weight={self._config.quality_weight}, staleness_scale={self._config.staleness_scale}")
+            
             # Optimized: Single query to update all topic scores at once
             
             # Compute engagement and success via DB aggregates from research_findings
@@ -230,6 +232,9 @@ class MotivationSystem:
             updated_count = result.rowcount
             logger.debug(f"🎯 Updated motivation scores for {updated_count} topics")
             
+            # Log detailed scores for each topic after update
+            await self._log_topic_scores_detail()
+            
         except Exception as e:
             try:
                 await self.session.rollback()
@@ -250,11 +255,14 @@ class MotivationSystem:
             
             _, active_topics = await self.topic_service.async_get_active_research_topics()
             if not active_topics:
+                logger.debug("🎯 No active research topics found")
                 return False
 
             unique_users: set = set()
             for topic in active_topics:
                 unique_users.add(topic.user_id)
+            
+            logger.debug(f"🎯 Checking research needs for {len(unique_users)} users with threshold={self._config.topic_threshold}")
 
             for user_uuid in unique_users:
                 try:
@@ -266,12 +274,15 @@ class MotivationSystem:
 
                     if topics_needing_research:
                         logger.debug(f"🎯 Found {len(topics_needing_research)} topics needing research for user {user_uuid}")
+                        for topic in topics_needing_research:
+                            logger.debug(f"🎯   - Topic '{topic.topic_name}': motivation={topic.motivation_score:.4f} (threshold={self._config.topic_threshold})")
                         return True
 
                 except Exception as e:
                     logger.error(f"Error checking research need for user {user_uuid}: {str(e)}")
                     continue
             
+            logger.debug("🎯 No topics currently need research")
             return False
             
         except Exception as e:
@@ -285,10 +296,12 @@ class MotivationSystem:
     ) -> float:
         """Calculate motivation score for a specific topic."""
         try:
+            topic_name = topic.get('topic_name', 'unknown')
             last_researched = topic.get('last_researched', 0)
             
             # NEW TOPICS GET PRIORITY: Never researched topics should be researched immediately
             if last_researched == 0:
+                logger.debug(f"🎯 Topic '{topic_name}': NEVER RESEARCHED - returning score=1.0 (auto-research)")
                 return 1.0  # Always above any reasonable threshold
             
             # For previously researched topics, calculate based on multiple factors
@@ -324,6 +337,14 @@ class MotivationSystem:
                 success_rate * self._config.quality_weight
             )
             
+            logger.debug(
+                f"🎯 Topic '{topic_name}' motivation calculation:\n"
+                f"   - Staleness: {staleness_time:.0f}s * {staleness_coefficient} * {self._config.staleness_scale} = {staleness_pressure:.4f}\n"
+                f"   - Engagement: {engagement_score:.4f} * {self._config.engagement_weight} = {engagement_score * self._config.engagement_weight:.4f}\n"
+                f"   - Success: {success_rate:.4f} * {self._config.quality_weight} = {success_rate * self._config.quality_weight:.4f}\n"
+                f"   - TOTAL MOTIVATION: {motivation_score:.4f}"
+            )
+            
             return motivation_score
             
         except Exception as e:
@@ -336,6 +357,7 @@ class MotivationSystem:
             # Get all findings for this user and topic from DB
             success, all_findings = await self.research_service.async_get_findings(user_id, str(topic_id))
             if not success or not all_findings:
+                logger.debug(f"🎯 Topic {topic_id}: No findings found, engagement=0.0")
                 return 0.0
             
             total_findings = len(all_findings)
@@ -363,8 +385,19 @@ class MotivationSystem:
             integration_bonus = min(integrated_findings * config.ENGAGEMENT_INTEGRATION_BONUS_RATE, config.ENGAGEMENT_INTEGRATION_BONUS_MAX)
 
             total_score = read_percentage + recent_bonus + volume_bonus + bookmark_bonus + integration_bonus
+            final_score = min(total_score, config.ENGAGEMENT_SCORE_MAX)
             
-            return min(total_score, config.ENGAGEMENT_SCORE_MAX)
+            logger.debug(
+                f"🎯 Topic {topic_id} engagement breakdown:\n"
+                f"   - Findings: {total_findings} total, {read_findings} read ({read_percentage:.2%})\n"
+                f"   - Recent reads (7d): {recent_reads} → bonus={recent_bonus:.4f}\n"
+                f"   - Volume bonus: {total_findings} * {config.ENGAGEMENT_VOLUME_BONUS_RATE} = {volume_bonus:.4f}\n"
+                f"   - Bookmarks: {bookmarked_findings} → bonus={bookmark_bonus:.4f}\n"
+                f"   - Integrations: {integrated_findings} → bonus={integration_bonus:.4f}\n"
+                f"   - TOTAL ENGAGEMENT: {final_score:.4f} (capped at {config.ENGAGEMENT_SCORE_MAX})"
+            )
+            
+            return final_score
             
         except Exception as e:
             logger.debug(f"Error calculating engagement score for topic {topic_id}: {str(e)}")
@@ -429,9 +462,12 @@ class MotivationSystem:
                     )
                     
                     if not topics_needing_research:
+                        logger.debug(f"🎯 User {user_id}: No topics above threshold ({self._config.topic_threshold})")
                         continue
                     
                     logger.info(f"🎯 User {user_id} has {len(topics_needing_research)} motivated topics")
+                    for ts in topics_needing_research:
+                        logger.info(f"🎯   → '{ts.topic_name}': motivation={ts.motivation_score:.4f}, staleness={ts.staleness_pressure:.4f}, engagement={ts.engagement_score:.4f}, success={ts.success_rate:.4f}, last_researched={ts.last_researched}")
                     
                     # Fetch all active topics for this user once before the loop
                     topics = await self.topic_service.get_active_research_topics_by_user_id(
@@ -444,6 +480,8 @@ class MotivationSystem:
                     for topic_score in topics_needing_research:
                         try:
                             topic_name = topic_score.topic_name
+                            
+                            logger.debug(f"🎯 Processing topic '{topic_name}' with motivation={topic_score.motivation_score:.4f}")
                             
                             # Get full topic data from lookup map
                             topic = topic_lookup.get(topic_name)
@@ -471,7 +509,14 @@ class MotivationSystem:
                                 # Update topic with fresh data
                                 topic = active_topic
                             
-                            logger.info(f"🎯 Researching motivated topic: {topic_name} for user {user_id}")
+                            # Log current state before research
+                            last_researched_str = topic.last_researched.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S") if topic.last_researched else "NEVER"
+                            logger.info(f"🎯 STARTING RESEARCH for '{topic_name}' (user={user_id})")
+                            logger.info(f"🎯   - Last researched: {last_researched_str}")
+                            logger.info(f"🎯   - Current motivation: {topic_score.motivation_score:.4f}")
+                            logger.info(f"🎯   - Staleness pressure: {topic_score.staleness_pressure:.4f}")
+                            logger.info(f"🎯   - Engagement score: {topic_score.engagement_score:.4f}")
+                            logger.info(f"🎯   - Success rate: {topic_score.success_rate:.4f}")
                             
                             topic_data = {
                                 "topic_id": str(topic.id),
@@ -491,11 +536,13 @@ class MotivationSystem:
                                 quality_scores.append(result.get("quality_score"))
                             
                             # Update last_researched timestamp
+                            new_timestamp = time.time()
+                            logger.info(f"🎯 COMPLETED RESEARCH for '{topic_name}' - updating last_researched to {new_timestamp}")
                             await self.db_service.create_or_update_topic_score(
                                 user_id=user_uuid,
                                 topic_id=topic.id,
                                 topic_name=topic_name,
-                                last_researched=time.time()
+                                last_researched=new_timestamp
                             )
 
                             # --- Topic expansion wiring ---
@@ -707,7 +754,7 @@ class MotivationSystem:
         try:
             # Update topic engagement metrics based on research quality
             # This could be expanded to update success rates, etc.
-            logger.debug(f"🎯 Research completed with quality score: {quality_score:.2f}")
+            logger.info(f"🎯 Research cycle completed with average quality score: {quality_score:.2f}")
             
             # Future: Could update global motivation state based on research success
             # For now, we rely on per-topic scoring
@@ -739,5 +786,35 @@ class MotivationSystem:
                 "engagement_based_motivation"
             ]
         }
+    
+    async def _log_topic_scores_detail(self) -> None:
+        """Log detailed scores for all active topics (debug helper)."""
+        try:
+            # Get all active topic scores
+            result = await self.session.execute(
+                select(TopicScore)
+                .where(TopicScore.is_active_research == True)
+                .order_by(TopicScore.motivation_score.desc())
+            )
+            topic_scores = result.scalars().all()
+            
+            if not topic_scores:
+                logger.debug("🎯 No active topic scores to log")
+                return
+            
+            logger.debug(f"🎯 ===== TOPIC SCORES SUMMARY ({len(topic_scores)} active topics) =====")
+            for ts in topic_scores:
+                last_researched_ago = "NEVER" if not ts.last_researched else f"{(time.time() - ts.last_researched):.0f}s ago"
+                above_threshold = "✓" if ts.motivation_score >= self._config.topic_threshold else "✗"
+                logger.debug(
+                    f"🎯 {above_threshold} '{ts.topic_name}' (user={ts.user_id}):\n"
+                    f"     motivation={ts.motivation_score:.4f} (threshold={self._config.topic_threshold})\n"
+                    f"     staleness={ts.staleness_pressure:.4f}, engagement={ts.engagement_score:.4f}, success={ts.success_rate:.4f}\n"
+                    f"     last_researched={last_researched_ago}, findings={ts.total_findings} (read={ts.read_findings}, bookmarked={ts.bookmarked_findings}, integrated={ts.integrated_findings})"
+                )
+            logger.debug("🎯 ===== END TOPIC SCORES SUMMARY =====")
+            
+        except Exception as e:
+            logger.debug(f"Error logging topic scores detail: {str(e)}")
 
 
