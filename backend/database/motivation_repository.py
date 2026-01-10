@@ -10,6 +10,7 @@ from sqlalchemy import select, update, delete, and_, or_, func
 from sqlalchemy.orm import selectinload
 
 from models.motivation import TopicScore, MotivationConfig
+from models.topic import ResearchTopic
 from .base_repository import BaseRepository
 from services.logging_config import get_logger
 
@@ -343,7 +344,7 @@ class MotivationRepository:
         threshold: float = 0.5,
         limit: Optional[int] = None
     ) -> List[TopicScore]:
-        """Get topics that need research based on motivation score."""
+        """Get topics that need research based on motivation score. Includes all active topics (including child topics if user manually activated them)."""
         query = select(TopicScore).where(
             and_(
                 TopicScore.user_id == user_id,

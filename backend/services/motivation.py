@@ -516,14 +516,57 @@ class MotivationSystem:
                                             quality_scores.append(child_res.get("quality_score"))
 
                                         # Update last_researched for child
+                                        # Auto-deactivate only newly created child topics (those created via expansion just now)
+                                        # If user manually activated a previously auto-deactivated child topic, keep it active
                                         child_topic_id = child.get("topic_id")
                                         if child_topic_id:
-                                            await self.db_service.create_or_update_topic_score(
-                                                user_id=user_uuid,
-                                                topic_id=uuid.UUID(str(child_topic_id)),
-                                                topic_name=child_name,
-                                                last_researched=time.time()
+                                            child_topic_uuid = uuid.UUID(str(child_topic_id))
+                                            
+                                            from models.topic import ResearchTopic
+                                            from datetime import datetime, timezone, timedelta
+                                            
+                                            # Get the child topic to check when it was created
+                                            topic_query = select(ResearchTopic).where(
+                                                ResearchTopic.id == child_topic_uuid
                                             )
+                                            topic_result = await self.session.execute(topic_query)
+                                            child_topic = topic_result.scalar_one_or_none()
+                                            
+                                            # Get TopicScore
+                                            topic_score_query = select(TopicScore).where(
+                                                and_(
+                                                    TopicScore.topic_id == child_topic_uuid,
+                                                    TopicScore.user_id == user_uuid
+                                                )
+                                            )
+                                            score_result = await self.session.execute(topic_score_query)
+                                            child_score = score_result.scalar_one_or_none()
+                                            
+                                            # Check if this child topic was just created (within last 5 minutes)
+                                            # This indicates it was created via expansion just now, not a pre-existing manually activated one
+                                            is_newly_created = False
+                                            if child_topic and child_topic.created_at:
+                                                time_since_creation = datetime.now(timezone.utc) - child_topic.created_at
+                                                is_newly_created = time_since_creation < timedelta(minutes=5)
+                                            
+                                            # Always update last_researched timestamp
+                                            if child_score:
+                                                child_score.last_researched = time.time()
+                                                self.session.add(child_score)
+                                            
+                                            # Only auto-deactivate if this was a newly created child topic via expansion
+                                            # This prevents auto-deactivating child topics that users manually reactivated
+                                            if is_newly_created and child_topic:
+                                                child_topic.is_active_research = False
+                                                self.session.add(child_topic)
+                                                if child_score:
+                                                    child_score.is_active_research = False
+                                                logger.info(f"🔄 Auto-deactivated newly created child topic '{child_name}' after expansion research (can be manually reactivated if desired)")
+                                            elif child_topic:
+                                                logger.info(f"ℹ️ Child topic '{child_name}' appears to be manually activated; keeping it active")
+                                            
+                                            # Commit updates
+                                            await self.session.commit()
 
                             except Exception as ex:
                                 logger.debug(f"Expansion wiring failed for {topic_name}: {ex}")
