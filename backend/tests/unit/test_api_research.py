@@ -8,7 +8,8 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from api.research import router, MotivationConfigUpdate
+from api.research import router
+from schemas.schemas import MotivationConfigUpdate
 from app import app
 from dependencies import get_or_create_user_id
 

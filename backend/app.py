@@ -22,17 +22,6 @@ from services.prompt_cache import PromptCache
 logger = configure_logging()
 
 # Now import other modules that might use logging
-from pydantic import BaseModel
-
-
-class MotivationConfigUpdate(BaseModel):
-    threshold: Optional[float] = None
-    boredom_rate: Optional[float] = None
-    curiosity_decay: Optional[float] = None
-    tiredness_decay: Optional[float] = None
-    satisfaction_decay: Optional[float] = None
-
-
 from dependencies import (
     zep_manager,
     _motivation_config_override,

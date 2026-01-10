@@ -19,13 +19,7 @@ router = APIRouter()
 logger = get_logger(__name__)
 
 
-class MotivationConfigUpdate(BaseModel):
-    threshold: Optional[float] = None
-    boredom_rate: Optional[float] = None
-    curiosity_decay: Optional[float] = None
-    tiredness_decay: Optional[float] = None
-    satisfaction_decay: Optional[float] = None
-
+from schemas.schemas import MotivationConfigUpdate
 
 class BookmarkUpdate(BaseModel):
     bookmarked: bool

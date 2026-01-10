@@ -9,11 +9,6 @@ class BookmarkUpdateInOut(BaseModel):
     bookmarked: bool
 
 
-class MotivationConfigUpdate(BaseModel):
-    """Partial update for motivation config."""
-    threshold: Optional[float] = None
-
-
 class ExpansionIn(BaseModel):
     """Generate adjacent topics."""
     root_topic: Dict[str, Any]
