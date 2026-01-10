@@ -46,6 +46,8 @@ async def get_topic_suggestions(
             conversation_context=topic.conversation_context,
             is_active_research=topic.is_active_research,
             suggested_at=topic.created_at,
+            is_child=topic.is_child,
+            parent_id=topic.parent_id,
         ))
 
     return TopicSuggestionsByChatOut(
@@ -76,6 +78,8 @@ async def get_all_topic_suggestions(
             conversation_context=topic.conversation_context,
             is_active_research=topic.is_active_research,
             suggested_at=topic.created_at,
+            is_child=topic.is_child,
+            parent_id=topic.parent_id,
         ))
 
     return TopicSuggestionsOut(
@@ -169,6 +173,8 @@ async def get_top_session_topics(
             conversation_context=t.conversation_context,
             is_active_research=t.is_active_research,
             suggested_at=t.created_at,
+            is_child=t.is_child,
+            parent_id=t.parent_id,
         ))
 
     return TopTopicsOut(
@@ -255,6 +261,8 @@ async def get_active_research_topics(
             suggested_at=topic.created_at,
             last_researched=topic.last_researched,
             research_count=topic.research_count,
+            is_child=topic.is_child,
+            parent_id=topic.parent_id,
         ))
 
     return ResearchTopicsByUserOut(

@@ -392,6 +392,15 @@ class AutonomousResearcher:
                     "last_evaluated_at": time.time(),
                 }
 
+                # Get parent topic ID from root_topic
+                parent_topic_id = None
+                root_topic_id = root_topic.get("topic_id")
+                if root_topic_id:
+                    try:
+                        parent_topic_id = uuid.UUID(str(root_topic_id))
+                    except (ValueError, TypeError):
+                        logger.warning(f"Invalid parent topic ID format: {root_topic_id}")
+
                 # Create topic in database using TopicService
                 try:
                     # Try to create topic with research enabled - async_create_topic will check limit internally
@@ -404,6 +413,8 @@ class AutonomousResearcher:
                             is_active_research=True,
                             conversation_context="",
                             strict=True,
+                            is_child=True,
+                            parent_id=parent_topic_id,
                         )
                         enable_research = True
                     except CommonError:
@@ -416,9 +427,18 @@ class AutonomousResearcher:
                             is_active_research=False,
                             conversation_context="",
                             strict=True,
+                            is_child=True,
+                            parent_id=parent_topic_id,
                         )
                         enable_research = False
                         extra_meta["expansion_status"] = "inactive"
+                    
+                    # Log successful child topic creation
+                    logger.info(
+                        f"✅ Created expansion child topic '{cand.name}' (ID: {topic.id}, is_child: {topic.is_child}, "
+                        f"parent_id: {topic.parent_id}, is_active_research: {topic.is_active_research}) "
+                        f"for user {user_id}"
+                    )
                     
                     # Convert ResearchTopic to dict format expected by run_langgraph_research
                     topic_dict = {
