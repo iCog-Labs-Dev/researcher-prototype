@@ -52,6 +52,7 @@ const TopicsDashboard = () => {
     groupBy: 'parent', // none | parent
   });
   const [expandedTopics, setExpandedTopics] = useState(new Set());
+  const [expandedParents, setExpandedParents] = useState(new Set());
 
   // Helper function to format dates
 const formatDate = (dateString) => {
@@ -183,52 +184,67 @@ const formatDate = (dateString) => {
         }
       }
       // Auto expansions only filter
-      if (filters.autoOnly && !topic.is_expansion) {
+      if (filters.autoOnly && !topic.is_child) {
         return false;
       }
+      
+      return true;
+    });
 
+    // Filter out children if their parent is not expanded
+    filtered = filtered.filter(topic => {
+      if (topic.is_child && topic.parent_id) {
+        const parentExists = topics.some(t => t.topic_id === topic.parent_id);
+        return parentExists && expandedParents.has(topic.parent_id);
+      }
       return true;
     });
 
     // When grouping by parent, arrange topics so each parent is followed by its children
     if (filters.groupBy === 'parent') {
-      // Map by name for quick lookup
-      const byName = new Map(filtered.map(t => [t.name, t]));
+      // Map by topic_id for quick lookup
+      const byId = new Map(filtered.map(t => [t.topic_id, t]));
 
-      // Build children adjacency map
+      // Build children adjacency map using parent_id
       const childrenMap = new Map();
       filtered.forEach(t => {
-        const parentName = (t && t.is_expansion && t.origin && t.origin.parent_topic) ? t.origin.parent_topic : null;
-        if (parentName) {
-          const arr = childrenMap.get(parentName) || [];
+        if (t.is_child && t.parent_id) {
+          const arr = childrenMap.get(t.parent_id) || [];
           arr.push(t);
-          childrenMap.set(parentName, arr);
+          childrenMap.set(t.parent_id, arr);
         }
       });
 
       // Sort children lists using the base sorter
       childrenMap.forEach(arr => arr.sort(baseSorter));
 
-      // Identify roots: items that are not expansions or whose parent is not present
-      const roots = filtered.filter(t => !t.is_expansion || !byName.has(t.origin?.parent_topic));
+      // Identify roots: items that are not children or whose parent is not present
+      const roots = filtered.filter(t => !t.is_child || !t.parent_id || !byId.has(t.parent_id));
       roots.sort(baseSorter);
 
       const ordered = [];
       const pushed = new Set();
+      
       const visit = (node) => {
-        if (!node) return;
-        if (!pushed.has(node.topic_id)) {
-          ordered.push(node);
-          pushed.add(node.topic_id);
+        if (!node || pushed.has(node.topic_id)) return;
+        
+        ordered.push(node);
+        pushed.add(node.topic_id);
+        
+        // Only add children if parent is expanded (already filtered above, but double-check)
+        const children = childrenMap.get(node.topic_id) || [];
+        if (children.length > 0 && expandedParents.has(node.topic_id)) {
+          children.forEach(child => visit(child));
         }
-        const children = childrenMap.get(node.name) || [];
-        children.forEach(visit);
       };
+      
       roots.forEach(visit);
 
       // Append any orphans not visited (cycles or missing roots)
-      filtered.sort(baseSorter).forEach(t => {
-        if (!pushed.has(t.topic_id)) ordered.push(t);
+      filtered.forEach(t => {
+        if (!pushed.has(t.topic_id)) {
+          ordered.push(t);
+        }
       });
 
       return ordered;
@@ -236,7 +252,7 @@ const formatDate = (dateString) => {
 
     // Default flat sorting
     return filtered.sort(baseSorter);
-  }, [topics, filters, baseSorter]);
+  }, [topics, filters, expandedParents, baseSorter]);
 
   // Handle topic selection
   const handleTopicSelect = (sessionId, topicIndex, selected) => {
@@ -555,6 +571,17 @@ const formatDate = (dateString) => {
     setExpandedTopics(newExpandedTopics);
   };
 
+  // Toggle parent expansion to show/hide children
+  const toggleParent = (topicId) => {
+    const newExpandedParents = new Set(expandedParents);
+    if (newExpandedParents.has(topicId)) {
+      newExpandedParents.delete(topicId);
+    } else {
+      newExpandedParents.add(topicId);
+    }
+    setExpandedParents(newExpandedParents);
+  };
+
   if (loading && topics.length === 0) {
     return (
       <div className="topics-dashboard">
@@ -619,20 +646,47 @@ const formatDate = (dateString) => {
               const topicKey = `${topic.session_id}-${index}`;
               const isSelected = selectedTopics.has(topicKey);
               const isExpanded = expandedTopics.has(topicKey);
-              const depth = topic && topic.is_expansion ? (parseInt(topic.expansion_depth || 1, 10) || 1) : 0;
+              // Calculate depth based on parent_id chain (simplified - just check if it's a child)
+              const depth = topic && topic.is_child ? 1 : 0;
+              
+              // Find parent topic if this is a child
+              const parentTopic = topic.is_child && topic.parent_id 
+                ? topics.find(t => t.topic_id === topic.parent_id)
+                : null;
+              
+              // Check if this is a parent (has children)
+              const hasChildren = topics.some(t => t.parent_id === topic.topic_id);
 
               return (
                 <div
                   key={topicKey}
-                  className={`topic-item ${isSelected ? 'selected' : ''} ${topic.is_active_research ? 'active-research' : ''} ${depth > 0 ? 'child-topic' : 'root-topic'} depth-${depth}`}
-                  style={{ '--depth-indent': `${Math.min(depth, 6) * 16}px` }}
+                  className={`topic-item ${isSelected ? 'selected' : ''} ${topic.is_active_research ? 'active-research' : ''} ${depth > 0 ? 'child-topic' : 'root-topic'} ${hasChildren ? 'has-children' : ''} depth-${depth}`}
+                  style={{ '--depth-indent': `${Math.min(depth, 6) * 24}px` }}
                 >
                   <div
                     className="topic-header"
                     onClick={() => toggleTopic(topicKey)}
                   >
+                    {/* Visual tree connector for child topics */}
+                    {topic.is_child && (
+                      <div className="topic-tree-connector">
+                        <div className="tree-line-vertical"></div>
+                        <div className="tree-line-horizontal"></div>
+                      </div>
+                    )}
+                    
                     <div className="topic-info">
                       <div className="topic-title-row">
+                        {topic.is_child && (
+                          <span className="child-indicator" aria-label="Child topic">
+                            ↳
+                          </span>
+                        )}
+                        {hasChildren && !topic.is_child && (
+                          <span className="parent-indicator" aria-label="Parent topic">
+                            📁
+                          </span>
+                        )}
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -643,9 +697,32 @@ const formatDate = (dateString) => {
                           className="topic-checkbox"
                         />
                         <h3 className="topic-name">{topic.name}</h3>
-                        {topic.is_expansion && (
-                          <span className="auto-badge" aria-label="Auto expansion">Auto</span>
+                        {topic.is_child && (
+                          <span className="auto-badge" aria-label="Auto expansion">
+                            <span className="badge-icon">🔗</span>
+                            <span className="badge-text">Child</span>
+                          </span>
                         )}
+                        {hasChildren && !topic.is_child && (() => {
+                          const childCount = topics.filter(t => t.parent_id === topic.topic_id).length;
+                          return (
+                            <span 
+                              className="parent-badge" 
+                              aria-label={`Has ${childCount} child topic${childCount !== 1 ? 's' : ''}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleParent(topic.topic_id);
+                              }}
+                              title={`${expandedParents.has(topic.topic_id) ? 'Hide' : 'Show'} ${childCount} child topic${childCount !== 1 ? 's' : ''}`}
+                            >
+                              <span className="badge-icon">📚</span>
+                              <span className="badge-text">
+                                {childCount} {childCount === 1 ? 'child' : 'children'} topic{childCount !== 1 ? 's' : ''}
+                              </span>
+                              <span className="badge-expand-icon">{expandedParents.has(topic.topic_id) ? '▼' : '▶'}</span>
+                            </span>
+                          );
+                        })()}
                         {topic.is_active_research && (
                           <span className="research-status-badge">
                             <span className="badge-icon">🔬</span>
@@ -671,16 +748,6 @@ const formatDate = (dateString) => {
                             Session: {topic.session_id.substring(0, 8)}...
                           </span>
                         )}
-                        {topic.is_expansion && topic.origin && topic.origin.parent_topic && (
-                          <span className="parent-tag" aria-label={"Parent topic: " + topic.origin.parent_topic}>
-                            Parent: {topic.origin.parent_topic}
-                          </span>
-                        )}
-                        {topic.is_expansion && topic.origin && (
-                          <span className="expansion-hint">
-                            {topic.origin.method}{topic.origin.similarity != null ? ' · ' + Number(topic.origin.similarity).toFixed(2) : ''}
-                          </span>
-                        )}
                       </div>
                     </div>
                     <div className="topic-toggle">
@@ -696,14 +763,6 @@ const formatDate = (dateString) => {
                         <h4>Description</h4>
                         <p>{topic.description}</p>
                       </div>
-                      {topic.is_expansion && topic.origin && topic.origin.parent_topic && (
-                        <div className="parent-line">
-                          Expanded from: <strong>{topic.origin.parent_topic}</strong> (depth {topic.expansion_depth})
-                          {topic.origin.rationale && (
-                            <p className="expansion-hint">{topic.origin.rationale}</p>
-                          )}
-                        </div>
-                      )}
 
                       {topic.conversation_context && (
                         <div className="topic-context">
