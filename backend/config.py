@@ -65,7 +65,7 @@ EXPANSION_LLM_TEMPERATURE = 0.2             # Temperature for expansion LLM call
 EXPANSION_LLM_SUGGESTION_LIMIT = 3          # Maximum topics to generate per expansion
 
 # Expansion lifecycle and depth management
-EXPANSION_MAX_DEPTH = _clamp_int(int(os.getenv("EXPANSION_MAX_DEPTH", "2")), 1, 10)
+EXPANSION_MAX_DEPTH = _clamp_int(int(os.getenv("EXPANSION_MAX_DEPTH", "3")), 1, 10)
 
 # Topic expansion breadth control - prevent topic explosion
 EXPANSION_MAX_TOTAL_TOPICS_PER_USER = _clamp_int(int(os.getenv("EXPANSION_MAX_TOTAL_TOPICS_PER_USER", "10")), 1, 100)

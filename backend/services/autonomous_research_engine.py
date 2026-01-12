@@ -361,6 +361,16 @@ class AutonomousResearcher:
             except Exception:
                 topic_expansion_service = TopicExpansionService(None, None)  # type: ignore[arg-type]
 
+            # Check depth limit before generating candidates
+            parent_depth = int(root_topic.get('expansion_depth', 0) or 0)
+            max_depth = getattr(config, 'EXPANSION_MAX_DEPTH', 3)
+            if parent_depth >= max_depth:
+                logger.info(
+                    f"⏹️ Skipping expansion for topic '{root_topic.get('topic_name')}': "
+                    f"depth {parent_depth} >= max depth {max_depth}"
+                )
+                return results
+
             # Generate candidates
             candidates = await topic_expansion_service.generate_candidates(user_id, root_topic)
             if not candidates:
@@ -372,8 +382,7 @@ class AutonomousResearcher:
 
             for cand in selected:
                 # Build child metadata
-                parent_depth = int(root_topic.get('expansion_depth', 0) or 0)
-                child_depth = min(parent_depth + 1, getattr(config, 'EXPANSION_MAX_DEPTH', 2))
+                child_depth = parent_depth + 1
                 desc = getattr(cand, 'description', None) or (
                     f"Research into {cand.name.lower()} and its relationship to {root_topic.get('topic_name','').lower()}"
                 )
