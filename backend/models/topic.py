@@ -38,6 +38,7 @@ class ResearchTopic(Base):
         nullable=True,
         index=True
     )
+    researched_once: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     __table_args__ = (
         UniqueConstraint("user_id", "name", name="uq_research_topics_user_name"),

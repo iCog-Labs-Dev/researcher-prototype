@@ -516,16 +516,15 @@ class MotivationSystem:
                                             quality_scores.append(child_res.get("quality_score"))
 
                                         # Update last_researched for child
-                                        # Auto-deactivate only newly created child topics (those created via expansion just now)
+                                        # Auto-deactivate only child topics that haven't been researched before
                                         # If user manually activated a previously auto-deactivated child topic, keep it active
                                         child_topic_id = child.get("topic_id")
                                         if child_topic_id:
                                             child_topic_uuid = uuid.UUID(str(child_topic_id))
                                             
                                             from models.topic import ResearchTopic
-                                            from datetime import datetime, timezone, timedelta
                                             
-                                            # Get the child topic to check when it was created
+                                            # Get the child topic
                                             topic_query = select(ResearchTopic).where(
                                                 ResearchTopic.id == child_topic_uuid
                                             )
@@ -542,28 +541,27 @@ class MotivationSystem:
                                             score_result = await self.session.execute(topic_score_query)
                                             child_score = score_result.scalar_one_or_none()
                                             
-                                            # Check if this child topic was just created (within last 5 minutes)
-                                            # This indicates it was created via expansion just now, not a pre-existing manually activated one
-                                            is_newly_created = False
-                                            if child_topic and child_topic.created_at:
-                                                time_since_creation = datetime.now(timezone.utc) - child_topic.created_at
-                                                is_newly_created = time_since_creation < timedelta(minutes=5)
-                                            
                                             # Always update last_researched timestamp
                                             if child_score:
                                                 child_score.last_researched = time.time()
                                                 self.session.add(child_score)
                                             
-                                            # Only auto-deactivate if this was a newly created child topic via expansion
+                                            # Mark as researched_once and auto-deactivate if this is the first research
                                             # This prevents auto-deactivating child topics that users manually reactivated
-                                            if is_newly_created and child_topic:
-                                                child_topic.is_active_research = False
-                                                self.session.add(child_topic)
-                                                if child_score:
-                                                    child_score.is_active_research = False
-                                                logger.info(f"🔄 Auto-deactivated newly created child topic '{child_name}' after expansion research (can be manually reactivated if desired)")
-                                            elif child_topic:
-                                                logger.info(f"ℹ️ Child topic '{child_name}' appears to be manually activated; keeping it active")
+                                            if child_topic:
+                                                # Check if this is the first research (researched_once is False)
+                                                if not child_topic.researched_once:
+                                                    # Mark as researched
+                                                    child_topic.researched_once = True
+                                                    self.session.add(child_topic)
+                                                    
+                                                    # Auto-deactivate after first research
+                                                    child_topic.is_active_research = False
+                                                    if child_score:
+                                                        child_score.is_active_research = False
+                                                    logger.info(f"🔄 Auto-deactivated child topic '{child_name}' after first expansion research (can be manually reactivated if desired)")
+                                                else:
+                                                    logger.info(f"ℹ️ Child topic '{child_name}' has been researched before; keeping current active state")
                                             
                                             # Commit updates
                                             await self.session.commit()
