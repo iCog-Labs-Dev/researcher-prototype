@@ -84,6 +84,8 @@ class TopicService:
         is_active_research: bool,
         conversation_context: str = "",
         strict: bool = False,
+        is_child: bool = False,
+        parent_id: uuid.UUID | None = None,
     ) -> ResearchTopic:
         async with SessionLocal.begin() as session:
             user_uuid = uuid.UUID(user_id)
@@ -100,6 +102,8 @@ class TopicService:
                 is_active_research=is_active_research,
                 conversation_context=conversation_context,
                 strict=strict,
+                is_child=is_child,
+                parent_id=parent_id,
             )
 
         return topic
@@ -462,6 +466,8 @@ class TopicService:
         conversation_context: str = "",
         is_active_research: bool = False,
         strict: bool = False,
+        is_child: bool = False,
+        parent_id: uuid.UUID | None = None,
     ) -> Optional[ResearchTopic]:
         norm_name = name.strip()
 
@@ -473,6 +479,8 @@ class TopicService:
             confidence_score=confidence_score,
             conversation_context=conversation_context,
             is_active_research=is_active_research,
+            is_child=is_child,
+            parent_id=parent_id,
         ).on_conflict_do_nothing(
             constraint="uq_research_topics_user_name"
         ).returning(ResearchTopic)
@@ -506,3 +514,50 @@ class TopicService:
 
         if count >= MAX_ACTIVE_RESEARCH_TOPICS_PER_USER:
             raise CommonError(f"You have reached the maximum limit of {MAX_ACTIVE_RESEARCH_TOPICS_PER_USER} active research topics. Please disable some existing topics before adding new ones.")
+
+    async def get_children_by_parent_id(
+        self,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        parent_id: uuid.UUID,
+    ) -> list[ResearchTopic]:
+        """Get all child topics for a given parent topic."""
+        query = select(ResearchTopic).where(
+            and_(
+                ResearchTopic.user_id == user_id,
+                ResearchTopic.parent_id == parent_id
+            )
+        ).order_by(ResearchTopic.created_at.asc())
+
+        res = await session.execute(query)
+        return list(res.scalars().all())
+
+    async def get_parent_by_topic_id(
+        self,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        topic_id: uuid.UUID,
+    ) -> Optional[ResearchTopic]:
+        """Get the parent topic for a given child topic."""
+        # First get the topic to find its parent_id
+        topic_query = select(ResearchTopic).where(
+            and_(
+                ResearchTopic.id == topic_id,
+                ResearchTopic.user_id == user_id
+            )
+        )
+        topic_res = await session.execute(topic_query)
+        topic = topic_res.scalar_one_or_none()
+
+        if not topic or not topic.parent_id:
+            return None
+
+        # Get the parent topic
+        parent_query = select(ResearchTopic).where(
+            and_(
+                ResearchTopic.id == topic.parent_id,
+                ResearchTopic.user_id == user_id
+            )
+        )
+        parent_res = await session.execute(parent_query)
+        return parent_res.scalar_one_or_none()

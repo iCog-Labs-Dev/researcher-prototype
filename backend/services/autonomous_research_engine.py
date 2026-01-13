@@ -349,6 +349,42 @@ class AutonomousResearcher:
             )
             return {"success": False, "error": str(e), "stored": False}
 
+    async def _calculate_topic_depth(self, topic_id: str, user_id: str) -> int:
+        """Calculate topic depth by traversing parent chain. Returns 0 for root topics."""
+        try:
+            topic_uuid = uuid.UUID(str(topic_id))
+        except (ValueError, TypeError):
+            return 0
+        
+        depth = 0
+        current_id = topic_uuid
+        visited = set()
+        
+        try:
+            async with SessionLocal() as session:
+                from sqlalchemy import select
+                from models.topic import ResearchTopic
+                
+                for _ in range(20):
+                    if current_id in visited:
+                        break
+                    visited.add(current_id)
+                    
+                    query = select(ResearchTopic).where(ResearchTopic.id == current_id)
+                    result = await session.execute(query)
+                    topic = result.scalar_one_or_none()
+                    
+                    if not topic or not topic.parent_id:
+                        break
+                    
+                    depth += 1
+                    current_id = topic.parent_id
+                
+                return depth
+        except Exception as e:
+            logger.warning(f"Error calculating depth for topic {topic_id}: {e}")
+            return 0
+
     # Reusable helper to generate and process expansions for a root topic (instance method)
     async def process_expansions_for_root(self, user_id: str, root_topic: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Generate expansion candidates for a root topic, create child topics respecting breadth limits, and research active children."""
@@ -361,6 +397,25 @@ class AutonomousResearcher:
             except Exception:
                 topic_expansion_service = TopicExpansionService(None, None)  # type: ignore[arg-type]
 
+            stored_depth = root_topic.get('expansion_depth')
+            if stored_depth is not None:
+                parent_depth = int(stored_depth)
+            else:
+                topic_id = root_topic.get('topic_id')
+                if topic_id:
+                    parent_depth = await self._calculate_topic_depth(topic_id, user_id)
+                else:
+                    parent_depth = 0
+            
+            max_depth = config.EXPANSION_MAX_DEPTH
+            if parent_depth >= max_depth:
+                topic_name = root_topic.get('topic_name', 'unknown')
+                logger.info(
+                    f"⏹️ Skipping expansion for topic '{topic_name}': "
+                    f"depth {parent_depth} >= max depth {max_depth}"
+                )
+                return results
+
             # Generate candidates
             candidates = await topic_expansion_service.generate_candidates(user_id, root_topic)
             if not candidates:
@@ -372,8 +427,7 @@ class AutonomousResearcher:
 
             for cand in selected:
                 # Build child metadata
-                parent_depth = int(root_topic.get('expansion_depth', 0) or 0)
-                child_depth = min(parent_depth + 1, getattr(config, 'EXPANSION_MAX_DEPTH', 2))
+                child_depth = parent_depth + 1
                 desc = getattr(cand, 'description', None) or (
                     f"Research into {cand.name.lower()} and its relationship to {root_topic.get('topic_name','').lower()}"
                 )
@@ -392,6 +446,15 @@ class AutonomousResearcher:
                     "last_evaluated_at": time.time(),
                 }
 
+                # Get parent topic ID from root_topic
+                parent_topic_id = None
+                root_topic_id = root_topic.get("topic_id")
+                if root_topic_id:
+                    try:
+                        parent_topic_id = uuid.UUID(str(root_topic_id))
+                    except (ValueError, TypeError):
+                        logger.warning(f"Invalid parent topic ID format: {root_topic_id}")
+
                 # Create topic in database using TopicService
                 try:
                     # Try to create topic with research enabled - async_create_topic will check limit internally
@@ -404,6 +467,8 @@ class AutonomousResearcher:
                             is_active_research=True,
                             conversation_context="",
                             strict=True,
+                            is_child=True,
+                            parent_id=parent_topic_id,
                         )
                         enable_research = True
                     except CommonError:
@@ -416,9 +481,18 @@ class AutonomousResearcher:
                             is_active_research=False,
                             conversation_context="",
                             strict=True,
+                            is_child=True,
+                            parent_id=parent_topic_id,
                         )
                         enable_research = False
                         extra_meta["expansion_status"] = "inactive"
+                    
+                    # Log successful child topic creation
+                    logger.info(
+                        f"✅ Created expansion child topic '{cand.name}' (ID: {topic.id}, is_child: {topic.is_child}, "
+                        f"parent_id: {topic.parent_id}, is_active_research: {topic.is_active_research}) "
+                        f"for user {user_id}"
+                    )
                     
                     # Convert ResearchTopic to dict format expected by run_langgraph_research
                     topic_dict = {

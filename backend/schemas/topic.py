@@ -40,6 +40,8 @@ class TopicSuggestionItem(BaseModel):
     suggested_at: datetime
     last_researched: Optional[datetime] = None
     research_count: Optional[int] = None
+    is_child: Optional[bool] = None
+    parent_id: Optional[UUID] = None
 
 
 class TopicSuggestionsByChatOut(BaseModel):
