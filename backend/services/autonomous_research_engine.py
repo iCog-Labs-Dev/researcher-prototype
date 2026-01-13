@@ -349,6 +349,42 @@ class AutonomousResearcher:
             )
             return {"success": False, "error": str(e), "stored": False}
 
+    async def _calculate_topic_depth(self, topic_id: str, user_id: str) -> int:
+        """Calculate topic depth by traversing parent chain. Returns 0 for root topics."""
+        try:
+            topic_uuid = uuid.UUID(str(topic_id))
+        except (ValueError, TypeError):
+            return 0
+        
+        depth = 0
+        current_id = topic_uuid
+        visited = set()
+        
+        try:
+            async with SessionLocal() as session:
+                from sqlalchemy import select
+                from models.topic import ResearchTopic
+                
+                for _ in range(20):
+                    if current_id in visited:
+                        break
+                    visited.add(current_id)
+                    
+                    query = select(ResearchTopic).where(ResearchTopic.id == current_id)
+                    result = await session.execute(query)
+                    topic = result.scalar_one_or_none()
+                    
+                    if not topic or not topic.parent_id:
+                        break
+                    
+                    depth += 1
+                    current_id = topic.parent_id
+                
+                return depth
+        except Exception as e:
+            logger.warning(f"Error calculating depth for topic {topic_id}: {e}")
+            return 0
+
     # Reusable helper to generate and process expansions for a root topic (instance method)
     async def process_expansions_for_root(self, user_id: str, root_topic: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Generate expansion candidates for a root topic, create child topics respecting breadth limits, and research active children."""
@@ -361,12 +397,21 @@ class AutonomousResearcher:
             except Exception:
                 topic_expansion_service = TopicExpansionService(None, None)  # type: ignore[arg-type]
 
-            # Check depth limit before generating candidates
-            parent_depth = int(root_topic.get('expansion_depth', 0) or 0)
-            max_depth = getattr(config, 'EXPANSION_MAX_DEPTH', 3)
+            stored_depth = root_topic.get('expansion_depth')
+            if stored_depth is not None:
+                parent_depth = int(stored_depth)
+            else:
+                topic_id = root_topic.get('topic_id')
+                if topic_id:
+                    parent_depth = await self._calculate_topic_depth(topic_id, user_id)
+                else:
+                    parent_depth = 0
+            
+            max_depth = config.EXPANSION_MAX_DEPTH
             if parent_depth >= max_depth:
+                topic_name = root_topic.get('topic_name', 'unknown')
                 logger.info(
-                    f"⏹️ Skipping expansion for topic '{root_topic.get('topic_name')}': "
+                    f"⏹️ Skipping expansion for topic '{topic_name}': "
                     f"depth {parent_depth} >= max depth {max_depth}"
                 )
                 return results
