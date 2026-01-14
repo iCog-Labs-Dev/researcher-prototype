@@ -228,6 +228,8 @@ class MotivationSystem:
                 .where(TopicScore.user_id == findings_agg.c.user_id)
                 .where(TopicScore.topic_name == findings_agg.c.topic_name)
             )
+
+            await self.session.commit()  # Ensure changes are saved
             
             updated_count = result.rowcount
             logger.debug(f"🎯 Updated motivation scores for {updated_count} topics")
