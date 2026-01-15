@@ -158,7 +158,6 @@ DEEP_ANALYSIS_SYNTHESIS_TEMPERATURE = float(os.getenv("DEEP_ANALYSIS_SYNTHESIS_T
 
 # Motivation system configuration
 MOTIVATION_CHECK_INTERVAL = int(os.getenv("MOTIVATION_CHECK_INTERVAL", "60"))
-MOTIVATION_THRESHOLD = float(os.getenv("MOTIVATION_THRESHOLD", "2.0"))  # Conservative default
 
 # Topic-level motivation parameters
 TOPIC_MOTIVATION_THRESHOLD = float(os.getenv("TOPIC_MOTIVATION_THRESHOLD", "0.5"))
