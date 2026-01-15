@@ -866,10 +866,17 @@ class MotivationSystem:
                 
                 above_threshold = "✓" if ts.motivation_score >= self._config.topic_threshold else "✗"
                 
+                # Safe get values with defaults for None
+                staleness_pressure = ts.staleness_pressure or 0.0
+                engagement_score = ts.engagement_score or 0.0
+                success_rate = ts.success_rate or 0.0
+                staleness_coefficient = ts.staleness_coefficient or 1.0
+                motivation_score = ts.motivation_score or 0.0
+                
                 # Calculate weighted contributions
-                staleness_contribution = ts.staleness_pressure
-                engagement_contribution = ts.engagement_score * self._config.engagement_weight
-                quality_contribution = ts.success_rate * self._config.quality_weight
+                staleness_contribution = staleness_pressure
+                engagement_contribution = engagement_score * self._config.engagement_weight
+                quality_contribution = success_rate * self._config.quality_weight
                 
                 # Engagement breakdown (calculate actual components)
                 read_pct = 0.0
@@ -883,14 +890,14 @@ class MotivationSystem:
                 logger.debug(
                     f"🎯 {above_threshold} '{ts.topic_name}' (user={ts.user_id}):\n"
                     f"     ━━━ FINAL SCORE ━━━\n"
-                    f"     motivation={ts.motivation_score:.4f} (threshold={self._config.topic_threshold})\n"
+                    f"     motivation={motivation_score:.4f} (threshold={self._config.topic_threshold})\n"
                     f"     \n"
                     f"     ━━━ SCORE BREAKDOWN ━━━\n"
-                    f"     staleness_pressure:    {ts.staleness_pressure:.4f} × 1.0 = {staleness_contribution:.4f}\n"
-                    f"       ↳ time_ago={seconds_ago:.0f}s × coeff={ts.staleness_coefficient} × scale={self._config.staleness_scale}\n"
-                    f"     engagement_score:      {ts.engagement_score:.4f} × {self._config.engagement_weight} = {engagement_contribution:.4f}\n"
+                    f"     staleness_pressure:    {staleness_pressure:.4f} × 1.0 = {staleness_contribution:.4f}\n"
+                    f"       ↳ time_ago={seconds_ago:.0f}s × coeff={staleness_coefficient} × scale={self._config.staleness_scale}\n"
+                    f"     engagement_score:      {engagement_score:.4f} × {self._config.engagement_weight} = {engagement_contribution:.4f}\n"
                     f"       ↳ read_pct={read_pct:.2%} + vol_bonus={volume_bonus:.3f} + bookmark={bookmark_bonus:.3f} + integration={integration_bonus:.3f}\n"
-                    f"     success_rate:          {ts.success_rate:.4f} × {self._config.quality_weight} = {quality_contribution:.4f}\n"
+                    f"     success_rate:          {success_rate:.4f} × {self._config.quality_weight} = {quality_contribution:.4f}\n"
                     f"     \n"
                     f"     ━━━ METADATA ━━━\n"
                     f"     last_researched: {last_researched_str}\n"
