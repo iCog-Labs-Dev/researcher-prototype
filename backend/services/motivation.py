@@ -845,15 +845,57 @@ class MotivationSystem:
                 logger.debug("🎯 No active topic scores to log")
                 return
             
+            # Log configuration being used
+            logger.debug(
+                f"🎯 ===== MOTIVATION CONFIG =====\n"
+                f"     Threshold: {self._config.topic_threshold}\n"
+                f"     Weights: engagement={self._config.engagement_weight}, quality={self._config.quality_weight}\n"
+                f"     Staleness scale: {self._config.staleness_scale}"
+            )
+            
             logger.debug(f"🎯 ===== TOPIC SCORES SUMMARY ({len(topic_scores)} active topics) =====")
             for ts in topic_scores:
-                last_researched_ago = "NEVER" if not ts.last_researched else f"{(time.time() - ts.last_researched):.0f}s ago"
+                # Time calculations
+                if ts.last_researched:
+                    seconds_ago = time.time() - ts.last_researched
+                    hours_ago = seconds_ago / 3600
+                    last_researched_str = f"{seconds_ago:.0f}s ago ({hours_ago:.1f}h)"
+                else:
+                    seconds_ago = 0
+                    last_researched_str = "NEVER"
+                
                 above_threshold = "✓" if ts.motivation_score >= self._config.topic_threshold else "✗"
+                
+                # Calculate weighted contributions
+                staleness_contribution = ts.staleness_pressure
+                engagement_contribution = ts.engagement_score * self._config.engagement_weight
+                quality_contribution = ts.success_rate * self._config.quality_weight
+                
+                # Engagement breakdown (calculate actual components)
+                read_pct = 0.0
+                if ts.total_findings > 0:
+                    read_pct = ts.read_findings / ts.total_findings
+                
+                volume_bonus = min(ts.total_findings * config.ENGAGEMENT_VOLUME_BONUS_RATE, config.ENGAGEMENT_VOLUME_BONUS_MAX)
+                bookmark_bonus = min(ts.bookmarked_findings * config.ENGAGEMENT_BOOKMARK_BONUS_RATE, config.ENGAGEMENT_BOOKMARK_BONUS_MAX)
+                integration_bonus = min(ts.integrated_findings * config.ENGAGEMENT_INTEGRATION_BONUS_RATE, config.ENGAGEMENT_INTEGRATION_BONUS_MAX)
+                
                 logger.debug(
                     f"🎯 {above_threshold} '{ts.topic_name}' (user={ts.user_id}):\n"
+                    f"     ━━━ FINAL SCORE ━━━\n"
                     f"     motivation={ts.motivation_score:.4f} (threshold={self._config.topic_threshold})\n"
-                    f"     staleness={ts.staleness_pressure:.4f} (coeff={ts.staleness_coefficient}), engagement={ts.engagement_score:.4f}, success={ts.success_rate:.4f}\n"
-                    f"     last_researched={last_researched_ago}, findings={ts.total_findings} (read={ts.read_findings}, bookmarked={ts.bookmarked_findings}, integrated={ts.integrated_findings})"
+                    f"     \n"
+                    f"     ━━━ SCORE BREAKDOWN ━━━\n"
+                    f"     staleness_pressure:    {ts.staleness_pressure:.4f} × 1.0 = {staleness_contribution:.4f}\n"
+                    f"       ↳ time_ago={seconds_ago:.0f}s × coeff={ts.staleness_coefficient} × scale={self._config.staleness_scale}\n"
+                    f"     engagement_score:      {ts.engagement_score:.4f} × {self._config.engagement_weight} = {engagement_contribution:.4f}\n"
+                    f"       ↳ read_pct={read_pct:.2%} + vol_bonus={volume_bonus:.3f} + bookmark={bookmark_bonus:.3f} + integration={integration_bonus:.3f}\n"
+                    f"     success_rate:          {ts.success_rate:.4f} × {self._config.quality_weight} = {quality_contribution:.4f}\n"
+                    f"     \n"
+                    f"     ━━━ METADATA ━━━\n"
+                    f"     last_researched: {last_researched_str}\n"
+                    f"     findings: {ts.total_findings} total (read={ts.read_findings}, bookmarked={ts.bookmarked_findings}, integrated={ts.integrated_findings})\n"
+                    f"     avg_quality: {ts.average_quality:.3f if ts.average_quality else 'N/A'}"
                 )
             logger.debug("🎯 ===== END TOPIC SCORES SUMMARY =====")
             
