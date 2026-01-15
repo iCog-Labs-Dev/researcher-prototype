@@ -74,20 +74,25 @@ topic_score = staleness_pressure + (engagement_score × weight) + (quality_score
 The engagement score heavily weights actual user interaction with research results:
 
 ```
-engagement_score = (read_findings / total_findings) + recent_reads_bonus + volume_bonus
+engagement_score = read_percentage + recent_reads_bonus + volume_bonus + bookmark_bonus + integration_bonus
 ```
 
+**Components** (capped at `ENGAGEMENT_SCORE_MAX = 2.0`):
 - **read_percentage**: Core metric - what % of research findings the user actually reads
-- **recent_reads_bonus**: Extra weight for findings read in the last 7 days (up to +0.5)  
+- **recent_reads_bonus**: Extra weight for findings *created* (not read) in the last 7 days (up to +0.5)  
 - **volume_bonus**: Bonus for users who accumulate many research findings (up to +0.3)
+- **bookmark_bonus**: Bonus for bookmarked findings (0.15 per bookmark, up to +0.45)
+- **integration_bonus**: Bonus for integrated findings (0.2 per integration, up to +0.6)
+
+**Note**: Engagement scores do NOT decay over time. They are recalculated fresh from current finding states each motivation cycle.
 
 #### Staleness Pressure Calculation
 ```
 staleness_pressure = time_since_last_research × staleness_coefficient × TOPIC_STALENESS_SCALE
 ```
 
-- **staleness_coefficient**: LLM-assessed per-topic urgency (0.1=stable, 2.0=breaking news)
-- **time_since_last_research**: Hours since topic was last researched  
+- **staleness_coefficient**: LLM-assessed per-topic urgency coefficient (0.1=stable, 2.0=breaking news), set once during topic extraction and stored statically
+- **time_since_last_research**: Seconds since topic was last researched  
 - **TOPIC_STALENESS_SCALE**: Configurable time-to-pressure conversion (default: 0.0001)
 
 
@@ -102,7 +107,7 @@ stateDiagram-v2
     NoTopics --> Idle : "wait for next cycle"
     Researching --> Idle : "research complete<br/>engagement data updated"
     
-    note right of Idle : "• Topic staleness increases<br/>• Engagement scores decay"
+    note right of Idle : "• Topic staleness increases<br/>• Engagement scores reflect user interactions"
     note right of TopicEval : "• Evaluate each topic's<br/>  staleness + engagement + quality<br/>• Sort by priority"
     note right of Researching : "• Research highest priority topics<br/>• Update engagement data"
 ```

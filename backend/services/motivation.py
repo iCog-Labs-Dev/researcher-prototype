@@ -852,7 +852,7 @@ class MotivationSystem:
                 logger.debug(
                     f"🎯 {above_threshold} '{ts.topic_name}' (user={ts.user_id}):\n"
                     f"     motivation={ts.motivation_score:.4f} (threshold={self._config.topic_threshold})\n"
-                    f"     staleness={ts.staleness_pressure:.4f}, engagement={ts.engagement_score:.4f}, success={ts.success_rate:.4f}\n"
+                    f"     staleness={ts.staleness_pressure:.4f} (coeff={ts.staleness_coefficient}), engagement={ts.engagement_score:.4f}, success={ts.success_rate:.4f}\n"
                     f"     last_researched={last_researched_ago}, findings={ts.total_findings} (read={ts.read_findings}, bookmarked={ts.bookmarked_findings}, integrated={ts.integrated_findings})"
                 )
             logger.debug("🎯 ===== END TOPIC SCORES SUMMARY =====")
