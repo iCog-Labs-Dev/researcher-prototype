@@ -887,6 +887,12 @@ class MotivationSystem:
                 bookmark_bonus = min(ts.bookmarked_findings * config.ENGAGEMENT_BOOKMARK_BONUS_RATE, config.ENGAGEMENT_BOOKMARK_BONUS_MAX)
                 integration_bonus = min(ts.integrated_findings * config.ENGAGEMENT_INTEGRATION_BONUS_RATE, config.ENGAGEMENT_INTEGRATION_BONUS_MAX)
                 
+                # Format average quality safely
+                if ts.average_quality is not None:
+                    avg_quality_str = f"{ts.average_quality:.3f}"
+                else:
+                    avg_quality_str = "N/A"
+
                 logger.debug(
                     f"🎯 {above_threshold} '{ts.topic_name}' (user={ts.user_id}):\n"
                     f"     ━━━ FINAL SCORE ━━━\n"
@@ -902,7 +908,7 @@ class MotivationSystem:
                     f"     ━━━ METADATA ━━━\n"
                     f"     last_researched: {last_researched_str}\n"
                     f"     findings: {ts.total_findings} total (read={ts.read_findings}, bookmarked={ts.bookmarked_findings}, integrated={ts.integrated_findings})\n"
-                    f"     avg_quality: {ts.average_quality:.3f if ts.average_quality else 'N/A'}"
+                    f"     avg_quality: {avg_quality_str}"
                 )
             logger.debug("🎯 ===== END TOPIC SCORES SUMMARY =====")
             
