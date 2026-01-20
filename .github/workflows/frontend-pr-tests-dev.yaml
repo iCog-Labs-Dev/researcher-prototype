@@ -4,8 +4,8 @@ on:
   pull_request:
     branches:
       - dev
-    paths:
-      - 'frontend/**'
+#    paths:
+#      - 'frontend/**'
 jobs:
   frontend-tests:
     runs-on: ubuntu-latest
