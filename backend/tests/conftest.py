@@ -1,13 +1,20 @@
 import os
 import sys
+
+# Set test environment variables BEFORE any imports that use config
+os.environ["LANGCHAIN_TRACING_V2"] = "false"
+# Use localhost PostgreSQL for tests
+os.environ.setdefault("DB_HOST", "localhost")
+os.environ.setdefault("DB_PORT", "5432")
+os.environ.setdefault("DB_NAME", "qwestor_test")
+os.environ.setdefault("DB_USER", "qwestor")
+os.environ.setdefault("DB_PASSWORD", "qwestor")
+
 import pytest
 import asyncio
 from fastapi.testclient import TestClient
 from langchain_core.messages import HumanMessage, AIMessage
 from unittest.mock import Mock, AsyncMock
-
-# Disable LangSmith tracing during tests to prevent cleanup warnings
-os.environ["LANGCHAIN_TRACING_V2"] = "false"
 
 # Add the parent directory to the path so we can import from backend
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

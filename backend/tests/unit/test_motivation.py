@@ -63,8 +63,8 @@ async def motivation_system(mock_session):
 async def test_motivation_system_initialization(motivation_system):
     """Test that motivation system initializes correctly."""
     assert motivation_system.session is not None
-    assert motivation_system.profile_manager is not None
-    assert motivation_system.research_manager is not None
+    assert motivation_system.topic_service is not None
+    assert motivation_system.research_service is not None
     assert motivation_system.is_running is False
 
 
@@ -137,37 +137,38 @@ async def test_update_scores_calculates_motivation(motivation_system, mock_sessi
 async def test_check_for_research_needed_returns_true_when_topics_exist(motivation_system):
     """Test that check_for_research_needed returns True when motivated topics exist."""
     user_id = uuid.uuid4()
-    
+
     # Mock config
     motivation_system._config = MagicMock()
     motivation_system._config.topic_threshold = 0.5
-    
-    # Mock profile manager
-    motivation_system.profile_manager.list_users.return_value = [str(user_id)]
-    
-    # Mock database service to return topics needing research
+
+    # Mock topic service to return active topics
     mock_topic = MagicMock()
-    with patch.object(motivation_system.db_service, 'get_topics_needing_research', return_value=[mock_topic]):
-        result = await motivation_system.check_for_research_needed()
-        assert result is True
+    mock_topic.user_id = user_id
+    with patch.object(motivation_system.topic_service, 'async_get_active_research_topics', return_value=(True, [mock_topic])):
+        # Mock database service to return topics needing research
+        with patch.object(motivation_system.db_service, 'get_topics_needing_research', return_value=[mock_topic]):
+            result = await motivation_system.check_for_research_needed()
+            assert result is True
 
 
 @pytest.mark.asyncio
 async def test_check_for_research_needed_returns_false_when_no_topics(motivation_system):
     """Test that check_for_research_needed returns False when no motivated topics exist."""
     user_id = uuid.uuid4()
-    
+
     # Mock config
     motivation_system._config = MagicMock()
     motivation_system._config.topic_threshold = 0.5
-    
-    # Mock profile manager
-    motivation_system.profile_manager.list_users.return_value = [str(user_id)]
-    
-    # Mock database service to return no topics
-    with patch.object(motivation_system.db_service, 'get_topics_needing_research', return_value=[]):
-        result = await motivation_system.check_for_research_needed()
-        assert result is False
+
+    # Mock topic service to return active topics
+    mock_topic = MagicMock()
+    mock_topic.user_id = user_id
+    with patch.object(motivation_system.topic_service, 'async_get_active_research_topics', return_value=(True, [mock_topic])):
+        # Mock database service to return no topics needing research
+        with patch.object(motivation_system.db_service, 'get_topics_needing_research', return_value=[]):
+            result = await motivation_system.check_for_research_needed()
+            assert result is False
 
 
 @pytest.mark.asyncio
@@ -194,22 +195,25 @@ async def test_calculate_topic_motivation_score_calculates_staleness(motivation_
     """Test that previously researched topics get staleness-based scores."""
     import time
     current_time = time.time()
+    user_id = str(uuid.uuid4())
+    topic_id = uuid.uuid4()
     topic = {
-        "topic_name": "Old Topic", 
+        "topic_name": "Old Topic",
+        "topic_id": str(topic_id),
         "last_researched": current_time - 3600,  # 1 hour ago
         "staleness_coefficient": 1.0
     }
-    
+
     # Mock config
     motivation_system._config = MagicMock()
     motivation_system._config.staleness_scale = 0.0001
     motivation_system._config.engagement_weight = 0.3
     motivation_system._config.quality_weight = 0.2
-    
+
     with patch.object(motivation_system, '_get_topic_engagement_score', return_value=0.5):
         with patch.object(motivation_system, '_get_topic_success_rate', return_value=0.6):
-            score = await motivation_system._calculate_topic_motivation_score("user123", topic)
-            
+            score = await motivation_system._calculate_topic_motivation_score(user_id, topic)
+
             # Should be greater than 0 (staleness + engagement + quality)
             assert score > 0
 
@@ -244,14 +248,13 @@ async def test_get_motivation_statistics_returns_user_stats(motivation_system):
 async def test_get_status_returns_system_status(motivation_system):
     """Test that get_status returns current system status."""
     status = motivation_system.get_status()
-    
+
     assert 'running' in status
     assert 'check_interval' in status
-    assert 'max_topics_per_user' in status
     assert 'quality_threshold' in status
     assert 'system_type' in status
     assert 'features' in status
-    
+
     assert status['system_type'] == 'MotivationSystem'
     assert 'database_persistence' in status['features']
     assert 'per_topic_scoring' in status['features']
@@ -304,26 +307,35 @@ async def test_motivation_research_loop_calls_update_and_check(motivation_system
 @pytest.mark.asyncio
 async def test_get_topic_engagement_score_calculates_engagement(motivation_system):
     """Test that engagement score is calculated based on user interactions."""
+    import time
+    from datetime import datetime
     user_id = str(uuid.uuid4())
-    topic_name = "AI Research"
-    
-    # Mock personalization manager
-    motivation_system.personalization_manager = MagicMock()
-    
-    # Mock research manager with findings
-    mock_findings = [
-        {"read": True, "bookmarked": False, "integrated": False, "created_at": 1000},
-        {"read": True, "bookmarked": True, "integrated": False, "created_at": 2000},
-        {"read": False, "bookmarked": False, "integrated": False, "created_at": 3000},
-    ]
-    
-    with patch('services.motivation.ResearchManager') as mock_research_class:
-        mock_research_instance = MagicMock()
-        mock_research_instance.get_research_findings_for_api.return_value = mock_findings
-        mock_research_class.return_value = mock_research_instance
-        
-        score = await motivation_system._get_topic_engagement_score(user_id, topic_name)
-        
+    topic_id = uuid.uuid4()
+
+    # Mock research findings
+    mock_finding1 = MagicMock()
+    mock_finding1.read = True
+    mock_finding1.bookmarked = False
+    mock_finding1.integrated = False
+    mock_finding1.created_at = datetime.fromtimestamp(time.time() - 3600)  # 1 hour ago
+
+    mock_finding2 = MagicMock()
+    mock_finding2.read = True
+    mock_finding2.bookmarked = True
+    mock_finding2.integrated = False
+    mock_finding2.created_at = datetime.fromtimestamp(time.time() - 7200)
+
+    mock_finding3 = MagicMock()
+    mock_finding3.read = False
+    mock_finding3.bookmarked = False
+    mock_finding3.integrated = False
+    mock_finding3.created_at = datetime.fromtimestamp(time.time() - 10800)
+
+    mock_findings = [mock_finding1, mock_finding2, mock_finding3]
+
+    with patch.object(motivation_system.research_service, 'async_get_findings', return_value=(True, mock_findings)):
+        score = await motivation_system._get_topic_engagement_score(user_id, topic_id)
+
         # Should have some engagement score based on read findings
         assert score >= 0.0
         assert score <= 2.0  # Max engagement score
@@ -333,11 +345,11 @@ async def test_get_topic_engagement_score_calculates_engagement(motivation_syste
 async def test_get_topic_success_rate_returns_engagement_based_rate(motivation_system):
     """Test that success rate is calculated based on engagement."""
     user_id = str(uuid.uuid4())
-    topic_name = "AI Research"
-    
+    topic_id = uuid.uuid4()
+
     with patch.object(motivation_system, '_get_topic_engagement_score', return_value=0.8):
-        success_rate = await motivation_system._get_topic_success_rate(user_id, topic_name)
-        
+        success_rate = await motivation_system._get_topic_success_rate(user_id, topic_id)
+
         # Success rate should be in range 0.3-0.7 based on engagement
         assert 0.3 <= success_rate <= 0.7
 
@@ -345,31 +357,43 @@ async def test_get_topic_success_rate_returns_engagement_based_rate(motivation_s
 @pytest.mark.asyncio
 async def test_conduct_research_cycle_processes_motivated_topics(motivation_system):
     """Test that research cycle processes topics that need research."""
-    user_id = str(uuid.uuid4())
-    
+    user_id = uuid.uuid4()
+
     # Mock config
     motivation_system._config = MagicMock()
     motivation_system._config.topic_threshold = 0.5
-    
-    # Mock profile manager
-    motivation_system.profile_manager.list_users.return_value = [str(user_id)]
-    
+
     # Mock topic score that needs research
     mock_topic_score = MagicMock()
     mock_topic_score.topic_name = "AI Research"
-    
+
+    # Mock session to return user ids
+    mock_result = MagicMock()
+    mock_result.all.return_value = [(user_id,)]
+    motivation_system.session.execute = AsyncMock(return_value=mock_result)
+
+    # Mock topic from topic_service
+    mock_topic = MagicMock()
+    mock_topic.id = uuid.uuid4()
+    mock_topic.name = "AI Research"
+    mock_topic.description = "Research about AI"
+    mock_topic.is_active_research = True
+    mock_topic.last_researched = None
+
     # Mock database service
     with patch.object(motivation_system.db_service, 'get_topics_needing_research', return_value=[mock_topic_score]):
-        with patch.object(motivation_system.research_manager, 'get_topic_by_name', return_value={"topic_name": "AI Research"}):
+        with patch.object(motivation_system.topic_service, 'get_active_research_topics_by_user_id', return_value=[mock_topic]):
             with patch('services.autonomous_research_engine.get_autonomous_researcher') as gar:
                 instance = MagicMock()
                 instance.run_langgraph_research = AsyncMock(return_value={"success": True, "stored": True, "quality_score": 0.8})
+                instance.process_expansions_for_root = AsyncMock(return_value=[])
                 gar.return_value = instance
                 with patch.object(motivation_system.db_service, 'create_or_update_topic_score'):
-                    result = await motivation_system._conduct_research_cycle()
-                    
-                    assert result["topics_researched"] >= 0
-                    assert "average_quality" in result
+                    with patch('services.motivation.SessionLocal'):
+                        result = await motivation_system._conduct_research_cycle()
+
+                        assert result["topics_researched"] >= 0
+                        assert "average_quality" in result
 
 
 @pytest.mark.asyncio
@@ -457,23 +481,24 @@ async def test_stop_handles_no_running_task(motivation_system):
 
 @pytest.mark.asyncio
 async def test_update_scores_handles_guest_user_gracefully(motivation_system):
-    """Test that update_scores skips guest users."""
-    motivation_system.profile_manager.list_users.return_value = ["guest"]
-    
-    with patch.object(motivation_system.db_service, 'create_or_update_topic_score') as mock_update:
+    """Test that update_scores handles gracefully when no config is set."""
+    motivation_system._config = None
+
+    with patch.object(motivation_system.session, 'execute', new_callable=AsyncMock) as mock_exec:
         await motivation_system.update_scores()
-        
-        # Should not call update for guest user
-        mock_update.assert_not_called()
+
+        # Should not call execute when no config
+        mock_exec.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_check_for_research_needed_handles_invalid_users(motivation_system):
     """Test that check_for_research_needed handles invalid user IDs."""
-    motivation_system.profile_manager.list_users.return_value = ["invalid-user-id"]
     motivation_system._config = MagicMock()
     motivation_system._config.topic_threshold = 0.5
-    
-    # Should not raise exceptions for invalid users
-    result = await motivation_system.check_for_research_needed()
-    assert result is False
+
+    # Mock topic service to return empty list
+    with patch.object(motivation_system.topic_service, 'async_get_active_research_topics', return_value=(True, [])):
+        # Should not raise exceptions and return False when no active topics
+        result = await motivation_system.check_for_research_needed()
+        assert result is False

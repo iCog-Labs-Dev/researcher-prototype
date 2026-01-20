@@ -1,0 +1,59 @@
+name: Backend Test
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+      - ci-dev
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: qwestor
+          POSTGRES_PASSWORD: qwestor
+          POSTGRES_DB: qwestor_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: qwestor_test
+      DB_USER: qwestor
+      DB_PASSWORD: qwestor
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install all dependencies and tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Run Codespell check
+        run: codespell --skip "*.json,*.txt,*.pdf" || true
+
+      - name: Run Pytest tests
+        run: bash backend/run_tests.sh

@@ -377,43 +377,58 @@ class TestResearchControlEndpoints:
 class TestResearchTriggerEndpoints:
     """Test research trigger endpoints."""
 
-    def test_trigger_research_for_user_success(self, research_client, mock_research_manager):
+    def test_trigger_research_for_user_success(self, research_client):
         """Test successfully triggering research for a user."""
-        mock_request = Mock()
-        mock_researcher = Mock()
-        mock_request.app.state.autonomous_researcher = mock_researcher
-        
-        # Mock successful research trigger - the real engine returns different data
-        mock_researcher.trigger_research_for_user.return_value = {
-            "success": True,
-            "topics_researched": 0,  # Real engine returns 0 since no real topics processed
-            "total_findings": 0,
-            "message": "Manual research trigger completed"
-        }
+        import uuid
+        from unittest.mock import AsyncMock
+        user_id = str(uuid.uuid4())
 
-        with patch('api.research.Request', return_value=mock_request):
-            response = research_client.post("/api/research/trigger/test_user")
-        
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is True
-        # Accept actual returned values instead of expected mock values
-        assert "topics_researched" in data
-        # The API returns "findings_stored" not "total_findings"
-        assert "findings_stored" in data
+        # Mock the autonomous researcher on app state
+        mock_researcher = MagicMock()
+        # Use AsyncMock since trigger_research_for_user is async
+        mock_researcher.trigger_research_for_user = AsyncMock(return_value={
+            "success": True,
+            "topics_researched": 0,
+            "findings_stored": 0,
+            "message": "Manual research trigger completed"
+        })
+
+        # Set the mock on app state before making request
+        original_researcher = getattr(research_client.app.state, 'autonomous_researcher', None)
+        research_client.app.state.autonomous_researcher = mock_researcher
+
+        try:
+            response = research_client.post(f"/api/research/trigger/{user_id}")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert "topics_researched" in data
+            assert "findings_stored" in data
+        finally:
+            # Restore original state
+            if original_researcher:
+                research_client.app.state.autonomous_researcher = original_researcher
 
     def test_trigger_research_for_user_not_initialized(self, research_client):
-        """Test triggering research when engine not initialized.""" 
-        mock_request = Mock()
-        mock_request.app.state = Mock(spec=[])  # No autonomous_researcher
+        """Test triggering research when engine not initialized."""
+        import uuid
+        user_id = str(uuid.uuid4())
 
-        with patch('api.research.Request', return_value=mock_request):
-            response = research_client.post("/api/research/trigger/test_user")
-        
-        # Since the real engine exists, this will succeed instead of failing
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is True
+        # Remove the autonomous researcher from app state
+        original_researcher = getattr(research_client.app.state, 'autonomous_researcher', None)
+        if hasattr(research_client.app.state, 'autonomous_researcher'):
+            delattr(research_client.app.state, 'autonomous_researcher')
+
+        try:
+            response = research_client.post(f"/api/research/trigger/{user_id}")
+
+            # Should return 503 when researcher not available
+            assert response.status_code == 503
+        finally:
+            # Restore original state
+            if original_researcher:
+                research_client.app.state.autonomous_researcher = original_researcher
 
 
 class TestAdvancedDebugEndpoints:
@@ -434,13 +449,29 @@ class TestAdvancedDebugEndpoints:
 
     def test_trigger_user_activity_success(self, research_client):
         """Trigger endpoint queues research for a user."""
-        with patch('services.autonomous_research_engine.get_autonomous_researcher') as gar:
-            inst = Mock()
-            inst.trigger_research_for_user.return_value = {"success": True, "topics_researched": 0}
-            gar.return_value = inst
-            response = research_client.post("/api/research/trigger/test_user")
-        assert response.status_code == 200
-        assert response.json()["success"] is True
+        import uuid
+        from unittest.mock import AsyncMock
+        user_id = str(uuid.uuid4())
+
+        # Mock the autonomous researcher on app state
+        mock_researcher = MagicMock()
+        # Use AsyncMock since trigger_research_for_user is async
+        mock_researcher.trigger_research_for_user = AsyncMock(return_value={
+            "success": True,
+            "topics_researched": 0,
+            "findings_stored": 0
+        })
+
+        original_researcher = getattr(research_client.app.state, 'autonomous_researcher', None)
+        research_client.app.state.autonomous_researcher = mock_researcher
+
+        try:
+            response = research_client.post(f"/api/research/trigger/{user_id}")
+            assert response.status_code == 200
+            assert response.json()["success"] is True
+        finally:
+            if original_researcher:
+                research_client.app.state.autonomous_researcher = original_researcher
 
     def test_adjust_motivation_drives_success(self, research_client):
         """Config override endpoint is reachable and returns structure."""
