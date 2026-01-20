@@ -78,6 +78,33 @@ async def chat(
 
     await chat_service.save_history(chat_id, user_message, assistant_message)
 
+    # Store conversation in ZEP for knowledge graph
+    async def _store_conversation_with_error_handling():
+        """Wrapper to ensure ZEP storage errors are logged."""
+        try:
+            from dependencies import zep_manager
+            
+            logger.debug(f"Starting ZEP storage for user {user_id}, thread {str(chat_id)}")
+            success = await zep_manager.store_conversation_turn(
+                user_id=user_id,
+                user_message=user_message,
+                ai_response=assistant_message,
+                thread_id=str(chat_id),
+            )
+            if not success:
+                logger.warning(f"ZEP storage returned False for user {user_id}, thread {str(chat_id)}")
+        except Exception as e:
+            logger.error(
+                f"Failed to store conversation in Zep for user {user_id}: {str(e)}", 
+                exc_info=True
+            )
+    
+    # Create background task for ZEP storage
+    try:
+        asyncio.create_task(_store_conversation_with_error_handling())
+    except Exception as e:
+        logger.error(f"Failed to create ZEP storage task: {str(e)}", exc_info=True)
+
     topic_service = TopicService()
     asyncio.create_task(
         topic_service.async_extract_and_store_topics(
