@@ -2,10 +2,10 @@ name: Backend Test
 
 on:
   push:
-    branches:
-      - main
-      - dev
-      - ci-dev
+#    branches:
+#      - main
+#      - dev
+#      - ci-dev
   workflow_dispatch:
 
 concurrency:
