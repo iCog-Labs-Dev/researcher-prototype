@@ -326,24 +326,31 @@ class ZepManager:
             return False
         
         try:
+            logger.debug(f"Starting conversation storage for thread {thread_id}, user {user_id}")
+            
             # Ensure the thread exists before attempting to add messages
+            logger.debug(f"Ensuring thread {thread_id} exists...")
             await self.create_thread(thread_id, user_id)
 
             # Add user message
+            logger.debug(f"Adding user message ({len(user_message)} chars)...")
             user_success = await self.add_message(thread_id, user_message, "user")
             if not user_success:
+                logger.error(f"Failed to add user message to thread {thread_id}")
                 return False
             
             # Add assistant response
+            logger.debug(f"Adding assistant message ({len(ai_response)} chars)...")
             assistant_success = await self.add_message(thread_id, ai_response, "assistant")
             if not assistant_success:
+                logger.error(f"Failed to add assistant message to thread {thread_id}")
                 return False
             
             logger.info(f"💾 Stored conversation turn for user {user_id} in thread {thread_id}")
             return True
             
         except Exception as e:
-            logger.error(f"Failed to store conversation in Zep: {str(e)}")
+            logger.error(f"Failed to store conversation in Zep: {str(e)}", exc_info=True)
             return False
     
     async def get_memory_context(self, thread_id: str) -> Optional[str]:
@@ -436,16 +443,18 @@ class ZepManager:
         try:
             message = Message(role=role, content=content)
             
+            logger.debug(f"Sending {role} message to thread {thread_id} ({len(content)} chars)...")
+            
             await self.client.thread.add_messages(
                 thread_id=thread_id,
                 messages=[message]
             )
             
-            logger.debug(f"Added {role} message to thread {thread_id} ({len(content)} chars)")
+            logger.info(f"✅ Added {role} message to thread {thread_id} ({len(content)} chars)")
             return True
             
         except Exception as e:
-            logger.error(f"Failed to add message to thread {thread_id}: {str(e)}")
+            logger.error(f"❌ Failed to add {role} message to thread {thread_id}: {str(e)}", exc_info=True)
             return False
     
     async def _send_via_graph_api(self, thread_id: str, content: str, role: str) -> bool:

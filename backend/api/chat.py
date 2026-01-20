@@ -58,17 +58,31 @@ async def chat(request: ChatRequest, user_id: str = Depends(get_or_create_user_i
 
         if len(request.messages) > 0:
             user_message = request.messages[-1].content
-            try:
-                asyncio.create_task(
-                    zep_manager.store_conversation_turn(
+            
+            # Create async wrapper to properly handle errors in background task
+            async def _store_conversation_with_error_handling():
+                """Wrapper to ensure ZEP storage errors are logged."""
+                try:
+                    logger.debug(f"Starting ZEP storage for user {user_id}, thread {result.get('thread_id')}")
+                    success = await zep_manager.store_conversation_turn(
                         user_id=user_id,
                         user_message=user_message,
                         ai_response=assistant_message.content,
                         thread_id=result.get("thread_id"),
                     )
-                )
+                    if not success:
+                        logger.warning(f"ZEP storage returned False for user {user_id}, thread {result.get('thread_id')}")
+                except Exception as e:
+                    logger.error(
+                        f"Failed to store conversation in Zep for user {user_id}: {str(e)}", 
+                        exc_info=True
+                    )
+            
+            # Create background task with error handling
+            try:
+                asyncio.create_task(_store_conversation_with_error_handling())
             except Exception as e:
-                logger.warning(f"Failed to store conversation in Zep: {str(e)}")
+                logger.error(f"Failed to create ZEP storage task: {str(e)}", exc_info=True)
 
         if result.get("thread_id") and len(request.messages) > 0:
             try:
