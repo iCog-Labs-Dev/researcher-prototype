@@ -10,6 +10,7 @@ import config
 from .base import ChatState
 from llm_models import MultiSourceAnalysis
 from services.prompt_cache import PromptCache
+from utils.error_handling import handle_node_error
 from services.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -96,21 +97,6 @@ async def research_source_selector_node(state: ChatState) -> ChatState:
         logger.info(f"🔬 Research Source Selector: ✅ Selected sources: {selected_sources}")
         
     except Exception as e:
-        error_message = f"Error selecting research sources: {str(e)}"
-        logger.error(f"🔬 Research Source Selector: ❌ {error_message}")
-        
-        # Fallback to balanced source selection
-        fallback_sources = ["search", "academic_search"]
-        state["workflow_context"]["selected_sources"] = fallback_sources
-        state["selected_sources"] = fallback_sources  # Also set top-level for downstream components
-        state["intent"] = "search"
-        
-        state["module_results"]["research_source_selector"] = {
-            "success": False,
-            "error": error_message,
-            "fallback_sources": fallback_sources
-        }
-        
-        logger.info(f"🔬 Research Source Selector: Using fallback sources: {fallback_sources}")
+        return handle_node_error(e, state, "research_source_selector_node")
     
     return state

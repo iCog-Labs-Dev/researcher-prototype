@@ -10,6 +10,7 @@ import config
 from .base import ChatState
 from llm_models import EvidenceSummary
 from utils.helpers import get_current_datetime_str, get_last_user_message
+from utils.error_handling import handle_node_error
 from services.prompt_cache import PromptCache
 from services.status_manager import queue_status  # noqa: F401
 from services.logging_config import get_logger
@@ -137,6 +138,6 @@ async def evidence_summarizer_node(state: ChatState) -> ChatState:
                 logger.info(f"📝 Evidence Summarizer: ⚠️ No summary generated for {source_human_name}")
                 
         except Exception as e:
-            logger.error(f"📝 Evidence Summarizer: Error summarizing {source_human_name}: {str(e)}")
+            return handle_node_error(e, state, f"evidence_summarizer_node:{source_human_name}")
 
     return state

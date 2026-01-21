@@ -10,6 +10,7 @@ from .base import ChatState
 from config import SEARCH_RESULTS_LIMIT
 from llm_models import RelevanceSelection
 from utils.helpers import get_current_datetime_str
+from utils.error_handling import handle_node_error
 from services.prompt_cache import PromptCache
 from services.status_manager import queue_status  # noqa: F401
 from services.logging_config import get_logger
@@ -91,7 +92,7 @@ async def search_results_reviewer_node(state: ChatState) -> ChatState:
                     state["module_results"][key]["no_relevant_items"] = True
                     logger.info(f"🧹 Results Reviewer: ⚠️ No highly relevant items for {source_human_name} (fallback mode)")
             except Exception as e:
-                logger.error(f"🧹 Results Reviewer: Error reviewing {source_human_name}: {str(e)}")
+                return handle_node_error(e, state, f"search_results_reviewer_node:{source_human_name}:fallback")
             continue
 
         # Build enumerated items view for structured selection
@@ -149,7 +150,7 @@ async def search_results_reviewer_node(state: ChatState) -> ChatState:
                 state["module_results"][key]["no_relevant_items"] = True
                 logger.info(f"🧹 Results Reviewer: ⚠️ No items selected for {source_human_name}")
         except Exception as e:
-            logger.error(f"🧹 Results Reviewer: Error obtaining structured selection for {source_human_name}: {str(e)}")
+            return handle_node_error(e, state, f"search_results_reviewer_node:{source_human_name}")
 
     return state
 

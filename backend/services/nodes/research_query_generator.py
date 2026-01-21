@@ -9,6 +9,7 @@ from langchain_openai import ChatOpenAI
 import config
 from .base import ChatState
 from utils.helpers import get_current_datetime_str
+from utils.error_handling import handle_node_error
 from services.prompt_cache import PromptCache
 from services.logging_config import get_logger
 
@@ -59,9 +60,8 @@ def research_query_generator_node(state: ChatState) -> ChatState:
         research_query = response.content.strip()
         
         if not research_query:
-            # Fallback to a simple query
-            research_query = f"Recent developments and new information about {topic_name}"
-            logger.warning(f"🔍 Research Query Generator: Empty response, using fallback query")
+            # Empty response is treated as an error in strict mode
+            raise ValueError("Empty response from LLM for research query generation")
         
         # Store the generated query in workflow context
         state["workflow_context"]["refined_search_query"] = research_query
@@ -81,21 +81,6 @@ def research_query_generator_node(state: ChatState) -> ChatState:
         }
         
     except Exception as e:
-        error_message = f"Error generating research query: {str(e)}"
-        logger.error(f"🔍 Research Query Generator: ❌ {error_message}")
-        
-        # Fallback to a simple query
-        fallback_query = f"Recent developments and new information about {topic_name}"
-        state["workflow_context"]["refined_search_query"] = fallback_query
-        
-        # Update the synthetic messages with the fallback query
-        if state.get("messages") and len(state["messages"]) > 1:
-            state["messages"][-1].content = fallback_query
-        
-        state["module_results"]["research_query_generator"] = {
-            "success": False,
-            "error": error_message,
-            "fallback_query": fallback_query
-        }
+        return handle_node_error(e, state, "research_query_generator_node")
     
     return state 

@@ -8,6 +8,7 @@ from langchain_core.messages import SystemMessage
 import config
 from .base import ChatState
 from utils.helpers import get_current_datetime_str, get_last_user_message
+from utils.error_handling import handle_node_error
 from llm_models import SearchOptimization
 from services.prompt_cache import PromptCache
 from services.status_manager import queue_status  # noqa: F401
@@ -137,16 +138,6 @@ def search_prompt_optimizer_node(state: ChatState) -> ChatState:
         )
 
     except Exception as e:
-        logger.error(
-            f"Error in search_prompt_optimizer_node (with context): {str(e)}. Using original query as fallback."
-        )
-        wc = state["workflow_context"]
-        wc["refined_search_query"] = last_user_message_content
-        wc["social_search_query"] = None
-        wc["academic_search_query"] = None
-        wc["search_recency_filter"] = None
-        wc["optimizer_search_mode"] = None
-        wc["optimizer_context_size"] = None
-        wc["optimizer_confidence"] = {}
+        return handle_node_error(e, state, "search_prompt_optimizer_node")
 
     return state

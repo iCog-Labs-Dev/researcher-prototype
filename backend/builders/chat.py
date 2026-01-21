@@ -14,6 +14,7 @@ from config import (
     LANGCHAIN_PROJECT
 )
 from utils.helpers import visualize_langgraph
+from utils.error_handling import check_error
 from services.logging_config import get_logger
 # Import all node functions
 from services.nodes.initializer import initializer_node
@@ -50,6 +51,9 @@ def create_chat_graph():
     # Define the intent router function
     def intent_router(state: ChatState) -> str:
         """Route based on intent: chat, search, or analysis."""
+        if state.get("error"):
+            return END
+            
         intent = state.get("intent", "chat")
         sources = state.get("selected_sources", [])
         logger.info(f"⚡ Flow: Intent routing to '{intent}' (sources: {sources})")
@@ -90,26 +94,55 @@ def create_chat_graph():
         {
             "chat": "integrator",
             "search": "search_prompt_optimizer",
-            "analysis": "analysis_task_refiner"
+            "analysis": "analysis_task_refiner",
+            END: END
         }
     )
     
     # After query optimization, coordinate parallel searches
-    builder.add_edge("search_prompt_optimizer", "source_coordinator")
+    builder.add_conditional_edges(
+        "search_prompt_optimizer",
+        check_error,
+        {"continue": "source_coordinator", END: END}
+    )
     
     # After parallel execution, run a relevance review step
     builder.add_edge("source_coordinator", "results_reviewer")
     # After reviewing, create evidence summaries with proper citations
-    builder.add_edge("results_reviewer", "evidence_summarizer")
-    builder.add_edge("evidence_summarizer", "integrator")
+    builder.add_conditional_edges(
+        "results_reviewer",
+        check_error,
+        {"continue": "evidence_summarizer", END: END}
+    )
+    builder.add_conditional_edges(
+        "evidence_summarizer",
+        check_error,
+        {"continue": "integrator", END: END}
+    )
     
     # Analysis path goes directly to integrator
-    builder.add_edge("analysis_task_refiner", "analyzer")
-    builder.add_edge("analyzer", "integrator")
+    builder.add_conditional_edges(
+        "analysis_task_refiner",
+        check_error,
+        {"continue": "analyzer", END: END}
+    )
+    builder.add_conditional_edges(
+        "analyzer",
+        check_error,
+        {"continue": "integrator", END: END}
+    )
     
     # Final processing
-    builder.add_edge("integrator", "response_renderer")
-    builder.add_edge("response_renderer", END)
+    builder.add_conditional_edges(
+        "integrator",
+        check_error,
+        {"continue": "response_renderer", END: END}
+    )
+    builder.add_conditional_edges(
+        "response_renderer",
+        check_error,
+        {"continue": END, END: END}
+    )
     
     # Compile the graph
     graph = builder.compile()

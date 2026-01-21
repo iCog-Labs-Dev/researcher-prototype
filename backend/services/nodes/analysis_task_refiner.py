@@ -8,6 +8,7 @@ from langchain_core.messages import SystemMessage
 import config
 from .base import ChatState
 from utils.helpers import get_current_datetime_str, get_last_user_message
+from utils.error_handling import handle_node_error
 from llm_models import AnalysisTask
 from services.prompt_cache import PromptCache
 from services.status_manager import queue_status  # noqa: F401
@@ -99,9 +100,6 @@ EXPECTED OUTPUT: {analysis_task.expected_output}
         logger.info(f"Refined analysis task with context: {refined_task}")
 
     except Exception as e:
-        logger.error(
-            f"Error in analysis_task_refiner_node (with context): {str(e)}. Using original request as fallback."
-        )
-        state["workflow_context"]["refined_analysis_task"] = last_user_message_content
+        return handle_node_error(e, state, "analysis_task_refiner_node")
 
     return state
