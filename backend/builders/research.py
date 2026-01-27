@@ -14,7 +14,7 @@ from config import (
 )
 from services.logging_config import get_logger
 from utils.helpers import visualize_langgraph
-from utils.error_handling import check_error
+from utils.error_handling import check_error, route_on_llm_error
 # Import research-specific nodes
 from services.nodes.research_initializer import research_initializer_node
 from services.nodes.research_query_generator import research_query_generator_node
@@ -78,29 +78,26 @@ def create_research_graph():
     # Define the research workflow
     builder.set_entry_point("research_initializer")
     
-    # Multi-source research workflow:
-    # Initialize -> Generate Query -> Select Sources -> Coordinate Multi-Source Search -> Integrate -> Process
+    # RInit -> RQGen; then LLM error? after RQGen, RSrcSel, ROpt (yes->END, no->next)
     builder.add_edge("research_initializer", "research_query_generator")
-    
-    # Conditional edges for error handling
     builder.add_conditional_edges(
         "research_query_generator",
-        check_error,
-        {"continue": "research_source_selector", END: END}
+        route_on_llm_error,
+        {"continue": "research_source_selector", END: END},
     )
     
     builder.add_conditional_edges(
         "research_source_selector",
-        check_error,
-        {"continue": "search_prompt_optimizer", END: END}
+        route_on_llm_error,
+        {"continue": "search_prompt_optimizer", END: END},
     )
     
     builder.add_conditional_edges(
         "search_prompt_optimizer",
-        check_error,
-        {"continue": "source_coordinator", END: END}
+        route_on_llm_error,
+        {"continue": "source_coordinator", END: END},
     )
-    
+    # RCoord -> RRev -> RSumm -> RInt -> RRend (RRev, RSumm, RInt use check_error; RRend is plain)
     builder.add_edge("source_coordinator", "search_results_reviewer")
     
     builder.add_conditional_edges(
@@ -120,12 +117,8 @@ def create_research_graph():
         check_error,
         {"continue": "response_renderer", END: END}
     )
-    
-    builder.add_conditional_edges(
-        "response_renderer",
-        check_error,
-        {"continue": "research_quality_assessor", END: END}
-    )
+
+    builder.add_edge("response_renderer", "research_quality_assessor")
     builder.add_edge("research_quality_assessor", "research_deduplication")
     builder.add_edge("research_deduplication", "research_storage")
     

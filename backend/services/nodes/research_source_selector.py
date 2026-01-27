@@ -10,7 +10,7 @@ import config
 from .base import ChatState
 from llm_models import MultiSourceAnalysis
 from services.prompt_cache import PromptCache
-from utils.error_handling import handle_node_error
+from utils.error_handling import is_llm_error
 from services.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -97,6 +97,18 @@ async def research_source_selector_node(state: ChatState) -> ChatState:
         logger.info(f"🔬 Research Source Selector: ✅ Selected sources: {selected_sources}")
         
     except Exception as e:
-        return handle_node_error(e, state, "research_source_selector_node")
-    
+        if is_llm_error(e):
+            logger.warning(f"🔬 Research Source Selector: LLM error, stopping research: {e}")
+            state["error_llm"] = str(e)
+            return state
+        logger.warning(f"🔬 Research Source Selector: Non-LLM error, using default sources: {e}")
+        fallback_sources = ["search", "academic_search"]
+        state["workflow_context"]["selected_sources"] = fallback_sources
+        state["selected_sources"] = fallback_sources
+        state["intent"] = "search"
+        state.setdefault("module_results", {})["research_source_selector"] = {
+            "success": True,
+            "selected_sources": fallback_sources,
+            "topic_name": topic_name,
+        }
     return state

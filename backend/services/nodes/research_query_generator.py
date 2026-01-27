@@ -9,7 +9,7 @@ from langchain_openai import ChatOpenAI
 import config
 from .base import ChatState
 from utils.helpers import get_current_datetime_str
-from utils.error_handling import handle_node_error
+from utils.error_handling import is_llm_error
 from services.prompt_cache import PromptCache
 from services.logging_config import get_logger
 
@@ -81,6 +81,16 @@ def research_query_generator_node(state: ChatState) -> ChatState:
         }
         
     except Exception as e:
-        return handle_node_error(e, state, "research_query_generator_node")
-    
-    return state 
+        if is_llm_error(e):
+            logger.warning(f"🔍 Research Query Generator: LLM error, stopping research: {e}")
+            state["error_llm"] = str(e)
+            return state
+        logger.warning(f"🔍 Research Query Generator: Non-LLM error, using topic as fallback query: {e}")
+        fallback_query = research_metadata.get("topic_name", "Unknown Topic") or topic_name
+        state["workflow_context"]["refined_search_query"] = fallback_query
+        state.setdefault("module_results", {})["research_query_generator"] = {
+            "success": True,
+            "query": fallback_query,
+            "topic_name": topic_name,
+        }
+    return state

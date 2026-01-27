@@ -9,6 +9,29 @@ from services.nodes.base import ChatState
 
 logger = get_logger(__name__)
 
+
+def is_llm_error(e: Exception) -> bool:
+    """True if the exception is an LLM/API infra failure (connection, rate limit, auth, timeout, server)."""
+    return isinstance(
+        e,
+        (
+            openai.APIError,
+            openai.APIConnectionError,
+            openai.APITimeoutError,
+            openai.RateLimitError,
+            openai.AuthenticationError,
+            openai.InternalServerError,
+        ),
+    ) or ("Timeout" in type(e).__name__ or "Connection" in type(e).__name__)
+
+
+def route_on_llm_error(state: ChatState):
+    """Research graph router: return END if state has error_llm, else 'continue' to next node."""
+    if state.get("error_llm"):
+        logger.warning(f"🚨 Research stopping due to LLM error: {state['error_llm']}")
+        return END
+    return "continue"
+
 def check_error(state: ChatState) -> str:
     """
     Check if the state has an error.

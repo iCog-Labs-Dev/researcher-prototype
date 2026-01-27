@@ -8,7 +8,7 @@ from langchain_core.messages import SystemMessage
 import config
 from .base import ChatState
 from utils.helpers import get_current_datetime_str, get_last_user_message
-from utils.error_handling import handle_node_error
+from utils.error_handling import handle_node_error, is_llm_error
 from llm_models import SearchOptimization
 from services.prompt_cache import PromptCache
 from services.status_manager import queue_status  # noqa: F401
@@ -139,7 +139,21 @@ def search_prompt_optimizer_node(state: ChatState) -> ChatState:
 
     except Exception as e:
         if state.get("workflow_context", {}).get("research_metadata"):
-            return handle_node_error(e, state, "search_prompt_optimizer_node")
+            if is_llm_error(e):
+                logger.warning(f"🔬 Search Optimizer: LLM error in research, stopping: {e}")
+                state["error_llm"] = str(e)
+                return state
+            logger.warning(f"🔬 Search Optimizer: Non-LLM error in research, using fallback query: {e}")
+            wc = state.setdefault("workflow_context", {})
+            fallback = wc.get("refined_search_query") or (wc.get("research_metadata") or {}).get("topic_name") or last_user_message_content or ""
+            wc["refined_search_query"] = fallback
+            wc["social_search_query"] = None
+            wc["academic_search_query"] = None
+            wc["search_recency_filter"] = None
+            wc["optimizer_search_mode"] = "balanced"
+            wc["optimizer_context_size"] = "medium"
+            wc["optimizer_confidence"] = {}
+            return state
         logger.warning(f"🔬 Search Optimizer: Exception, routing to integrator with fallback: {e}")
         state["error"] = f"Search optimizer failed: {str(e)}"
         state.setdefault("workflow_context", {})
