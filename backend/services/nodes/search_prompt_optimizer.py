@@ -138,6 +138,18 @@ def search_prompt_optimizer_node(state: ChatState) -> ChatState:
         )
 
     except Exception as e:
-        return handle_node_error(e, state, "search_prompt_optimizer_node")
+        if state.get("workflow_context", {}).get("research_metadata"):
+            return handle_node_error(e, state, "search_prompt_optimizer_node")
+        logger.warning(f"🔬 Search Optimizer: Exception, routing to integrator with fallback: {e}")
+        state["error"] = f"Search optimizer failed: {str(e)}"
+        state.setdefault("workflow_context", {})
+        state["workflow_context"]["refined_search_query"] = last_user_message_content or ""
+        state["workflow_context"]["social_search_query"] = None
+        state["workflow_context"]["academic_search_query"] = None
+        state["workflow_context"]["search_recency_filter"] = None
+        state["workflow_context"]["optimizer_search_mode"] = "balanced"
+        state["workflow_context"]["optimizer_context_size"] = "medium"
+        state["workflow_context"]["optimizer_confidence"] = {}
+        return state
 
     return state

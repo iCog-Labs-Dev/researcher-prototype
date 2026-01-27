@@ -9,7 +9,6 @@ from langchain_core.messages import HumanMessage, SystemMessage
 import config
 from .base import ChatState
 from utils.helpers import get_current_datetime_str, get_last_user_message
-from utils.error_handling import handle_node_error
 from llm_models import MultiSourceAnalysis
 from services.prompt_cache import PromptCache
 from services.status_manager import queue_status  # noqa: F401
@@ -124,6 +123,14 @@ async def multi_source_analyzer_node(state: ChatState) -> ChatState:
         logger.debug(f"Analysis reason: {reason}")
 
     except Exception as e:
-        return handle_node_error(e, state, "multi_source_analyzer_node")
+        logger.warning(f"🔍 Multi-Source Analyzer: Exception, falling back to chat: {e}")
+        state["intent"] = "chat"
+        state["selected_sources"] = []
+        state["routing_analysis"] = {
+            "intent": "chat",
+            "reason": "Fallback after analyzer exception",
+            "sources": [],
+        }
+        return state
 
     return state

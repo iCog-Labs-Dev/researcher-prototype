@@ -20,6 +20,10 @@ logger = get_logger(__name__)
 
 async def integrator_node(state: ChatState) -> ChatState:
     """Core thinking component that integrates all available context and generates a response."""
+    # Clear upstream error when we were routed here from a soft failure (SPOpt/Coord/Rev/ARef/An);
+    # we still attempt integration so the run can continue to the renderer.
+    if state.get("error"):
+        state["error"] = None
     logger.info("🧠 Integrator: Processing all contextual information")
     queue_status(state.get("thread_id"), "Integrating information...")
     await asyncio.sleep(0.1)  # Small delay to ensure status is visible
