@@ -14,7 +14,7 @@ from config import (
     LANGCHAIN_PROJECT
 )
 from utils.helpers import visualize_langgraph
-from utils.error_handling import check_error
+from utils.error_handling import check_error, route_on_error
 from services.logging_config import get_logger
 # Import all node functions
 from services.nodes.initializer import initializer_node
@@ -99,50 +99,40 @@ def create_chat_graph():
         }
     )
     
-    # After query optimization, coordinate parallel searches
+    # Search path: error from SPOpt/Coord/Rev → integrator (centralized route_on_error)
     builder.add_conditional_edges(
         "search_prompt_optimizer",
-        check_error,
-        {"continue": "source_coordinator", END: END}
+        route_on_error("source_coordinator", "integrator"),
+        {"integrator": "integrator", "source_coordinator": "source_coordinator"}
     )
-    
-    # After parallel execution, run a relevance review step
-    builder.add_edge("source_coordinator", "results_reviewer")
-    # After reviewing, create evidence summaries with proper citations
+    builder.add_conditional_edges(
+        "source_coordinator",
+        route_on_error("results_reviewer", "integrator"),
+        {"integrator": "integrator", "results_reviewer": "results_reviewer"}
+    )
     builder.add_conditional_edges(
         "results_reviewer",
-        check_error,
-        {"continue": "evidence_summarizer", END: END}
+        route_on_error("evidence_summarizer", "integrator"),
+        {"integrator": "integrator", "evidence_summarizer": "evidence_summarizer"}
     )
-    builder.add_conditional_edges(
-        "evidence_summarizer",
-        check_error,
-        {"continue": "integrator", END: END}
-    )
-    
-    # Analysis path goes directly to integrator
+    # Evidence summarizer always goes to integrator (no error→END per diagram)
+    builder.add_edge("evidence_summarizer", "integrator")
+
+    # Analysis path: error from ARef → integrator (centralized route_on_error); An → integrator always
     builder.add_conditional_edges(
         "analysis_task_refiner",
-        check_error,
-        {"continue": "analyzer", END: END}
+        route_on_error("analyzer", "integrator"),
+        {"integrator": "integrator", "analyzer": "analyzer"},
     )
-    builder.add_conditional_edges(
-        "analyzer",
-        check_error,
-        {"continue": "integrator", END: END}
-    )
-    
-    # Final processing
+    builder.add_edge("analyzer", "integrator")
+
+    # Final: only integrator error → END; renderer always → END
     builder.add_conditional_edges(
         "integrator",
         check_error,
-        {"continue": "response_renderer", END: END}
+        {"continue": "response_renderer", END: END},
     )
-    builder.add_conditional_edges(
-        "response_renderer",
-        check_error,
-        {"continue": END, END: END}
-    )
+    builder.add_edge("response_renderer", END)
     
     # Compile the graph
     graph = builder.compile()

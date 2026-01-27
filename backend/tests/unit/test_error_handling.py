@@ -1,7 +1,7 @@
 
 import pytest
 from services.nodes.base import ChatState
-from utils.error_handling import handle_node_error, check_error
+from utils.error_handling import handle_node_error, check_error, route_on_error
 from langgraph.graph import END
 import openai
 
@@ -36,3 +36,21 @@ def test_check_error_stop():
     state = ChatState(messages=[], error="Some error")
     result = check_error(state)
     assert result == END
+
+
+def test_route_on_error_success_continues():
+    router = route_on_error("source_coordinator", "integrator")
+    state = ChatState(messages=[], error=None)
+    assert router(state) == "source_coordinator"
+
+
+def test_route_on_error_failure_to_integrator():
+    router = route_on_error("source_coordinator", "integrator")
+    state = ChatState(messages=[], error="Something broke")
+    assert router(state) == "integrator"
+
+
+def test_route_on_error_default_ends():
+    router = route_on_error("next_node")
+    state = ChatState(messages=[], error="Fail")
+    assert router(state) is END

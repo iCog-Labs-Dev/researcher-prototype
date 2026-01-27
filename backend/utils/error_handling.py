@@ -1,7 +1,7 @@
 """
 Error handling utility for LangGraph nodes.
 """
-from typing import Optional
+from typing import Optional, Union, Any, Callable
 import openai
 from langgraph.graph import END
 from services.logging_config import get_logger
@@ -18,6 +18,29 @@ def check_error(state: ChatState) -> str:
         logger.warning(f"🚨 Graph stopping due to error: {state['error']}")
         return END
     return "continue"
+
+
+def route_on_error(
+    success_target: str, error_target: Union[str, Any] = END
+) -> Callable[[ChatState], Union[str, Any]]:
+    """
+    Return a router(state) for conditional edges: on error send to error_target,
+    otherwise to success_target. Use this when errors should route to a node
+    (e.g. integrator) instead of END.
+
+    Example: route_on_error("source_coordinator", "integrator") for SPOpt
+    so that failures skip to the integrator rather than stopping.
+    """
+    def router(state: ChatState) -> Union[str, Any]:
+        if state.get("error"):
+            if error_target is END:
+                logger.warning(f"🚨 Graph stopping due to error: {state['error']}")
+            else:
+                logger.debug(f"🚨 Routing to {error_target} due to error: {state['error']}")
+            return error_target
+        return success_target
+
+    return router
 
 def handle_node_error(e: Exception, state: ChatState, node_name: str) -> ChatState:
     """
