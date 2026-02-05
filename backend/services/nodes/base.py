@@ -39,3 +39,5 @@ class ChatState(TypedDict):
     memory_context: Annotated[Optional[str], "Memory context retrieved from Zep"]
     intent: Annotated[Optional[str], "The routing intent: chat, search, or analysis"]
     selected_sources: Annotated[Optional[List[str]], "Selected sources for search intent"]
+    error: Annotated[Optional[str], "Error message if the pipeline failed"]
+    error_llm: Annotated[Optional[str], "LLM/API error in research flow; routes to END when set"]

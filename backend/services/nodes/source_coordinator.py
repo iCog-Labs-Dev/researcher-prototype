@@ -89,6 +89,7 @@ async def source_coordinator_node(state: ChatState) -> ChatState:
         
     except Exception as e:
         logger.error(f"🎛️ Source Coordinator: ❌ Error in parallel execution: {str(e)}")
+        state["error"] = f"Source coordinator parallel execution failed: {str(e)}"
         # Ensure we have error results for all sources
         for source in valid_sources:
             result_key = _get_result_key(source)

@@ -24,6 +24,7 @@ from .source_coordinator import source_coordinator_node
 from .search_results_reviewer import search_results_reviewer_node
 from .evidence_summarizer import evidence_summarizer_node
 from utils.helpers import get_current_datetime_str, get_last_user_message
+from utils.error_handling import handle_node_error
 from services.status_manager import queue_status  # noqa: F401
 from services.logging_config import get_logger
 
@@ -193,15 +194,7 @@ async def analyzer_node(state: ChatState) -> ChatState:
         )
 
     except Exception as e:
-        logger.error(
-            f"🧩 Deep Analyzer: Research failed: {str(e)}",
-            exc_info=True
-        )
-        state["module_results"]["analyzer"] = {
-            "success": False,
-            "error": f"Deep research error: {str(e)}",
-            "task_processed": task_to_analyze
-        }
+        return handle_node_error(e, state, "analyzer_node")
 
     return state
 
@@ -264,11 +257,7 @@ Your decomposition should enable comprehensive understanding of the topic."""
         return response.sub_questions[:DEEP_ANALYSIS_MAX_SUB_QUESTIONS]
 
     except Exception as e:
-        logger.warning(
-            f"🧩 Deep Analyzer: Decomposition failed: {str(e)}, using original query"
-        )
-        # Fallback to original query
-        return [query]
+        raise e  # Propagate error to main handler
 
 
 async def _plan_research_sources(
@@ -351,18 +340,7 @@ Return format: Array of objects with sub_question, sources (array), and rational
         return validated_plans
 
     except Exception as e:
-        logger.warning(
-            f"🧩 Deep Analyzer: Research planning failed: {str(e)}, using fallback"
-        )
-        # Fallback: use search for all sub-questions
-        return [
-            {
-                "sub_question": q,
-                "sources": ["search"],
-                "rationale": "Fallback to web search"
-            }
-            for q in sub_questions
-        ]
+        raise e  # Propagate error to main handler
 
 
 async def _execute_research_plans(
@@ -602,11 +580,7 @@ Your response should feel like a thorough, well-researched explanation that a kn
         return response.content
 
     except Exception as e:
-        logger.error(f"🧩 Deep Analyzer: Synthesis failed: {str(e)}")
-        return (
-            f"Deep analysis of: {original_query}\n\n"
-            f"Unable to complete synthesis due to error: {str(e)}"
-        )
+        raise e  # Propagate error to main handler
 
 
 def _get_source_display_name(source_key: str) -> str:

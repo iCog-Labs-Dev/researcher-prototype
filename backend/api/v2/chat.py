@@ -76,7 +76,10 @@ async def chat(
 
     assistant_message = result["messages"][-1].content
 
-    await chat_service.save_history(chat_id, user_message, assistant_message)
+    try:
+        await chat_service.save_history(chat_id, user_message, assistant_message)
+    except CommonError as e:
+        logger.warning("Chat memory save failed, returning response anyway: %s", e)
 
     topic_service = TopicService()
     asyncio.create_task(

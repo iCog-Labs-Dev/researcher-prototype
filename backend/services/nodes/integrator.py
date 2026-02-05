@@ -10,6 +10,7 @@ from langchain_core.messages import SystemMessage
 import config
 from .base import ChatState
 from utils.helpers import get_current_datetime_str, get_last_user_message
+from utils.error_handling import handle_node_error
 from services.prompt_cache import PromptCache
 from services.status_manager import queue_status  # noqa: F401
 from services.logging_config import get_logger
@@ -19,6 +20,10 @@ logger = get_logger(__name__)
 
 async def integrator_node(state: ChatState) -> ChatState:
     """Core thinking component that integrates all available context and generates a response."""
+    # Clear upstream error when we were routed here from a soft failure (SPOpt/Coord/Rev/ARef/An);
+    # we still attempt integration so the run can continue to the renderer.
+    if state.get("error"):
+        state["error"] = None
     logger.info("🧠 Integrator: Processing all contextual information")
     queue_status(state.get("thread_id"), "Integrating information...")
     await asyncio.sleep(0.1)  # Small delay to ensure status is visible
@@ -390,9 +395,6 @@ When synthesizing, cross-reference information between sources and highlight are
         state["module_results"]["integrator"] = response.content
 
     except Exception as e:
-        logger.error(f"Error in integrator_node: {str(e)}", exc_info=True)
-        # Store the error in workflow context
-        state["workflow_context"]["integrator_error"] = str(e)
-        state["workflow_context"]["integrator_response"] = f"I encountered an error processing your request: {str(e)}"
+        return handle_node_error(e, state, "integrator_node")
 
     return state

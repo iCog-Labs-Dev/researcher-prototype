@@ -12,6 +12,7 @@ from .base import (
     user_service,
 )
 from utils.helpers import get_current_datetime_str
+from utils.error_handling import handle_node_error
 from llm_models import FormattedResponse
 from services.prompt_cache import PromptCache
 from services.status_manager import queue_status  # noqa: F401
@@ -170,8 +171,6 @@ async def response_renderer_node(state: ChatState) -> ChatState:
         state["messages"].append(assistant_message)
 
     except Exception as e:
-        logger.error(f"Error in response_renderer_node: {str(e)}", exc_info=True)
-        # If rendering fails, use the raw response as a fallback
-        state["messages"].append(AIMessage(content=raw_response))
+        return handle_node_error(e, state, "response_renderer_node")
 
     return state

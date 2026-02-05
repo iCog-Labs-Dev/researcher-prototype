@@ -536,16 +536,24 @@ class MotivationSystem:
                                 total_findings_stored += 1
                             if result and result.get("quality_score"):
                                 quality_scores.append(result.get("quality_score"))
-                            
-                            # Update last_researched timestamp
-                            new_timestamp = time.time()
-                            logger.info(f"🎯 COMPLETED RESEARCH for '{topic_name}' - updating last_researched to {new_timestamp}")
-                            await self.db_service.create_or_update_topic_score(
-                                user_id=user_uuid,
-                                topic_id=topic.id,
-                                topic_name=topic_name,
-                                last_researched=new_timestamp
-                            )
+
+                            # Only update last_researched when research succeeded
+                            if result and result.get("success"):
+                                new_timestamp = time.time()
+                                logger.info(
+                                    f"🎯 COMPLETED RESEARCH for '{topic_name}' - updating last_researched to {new_timestamp}"
+                                )
+                                await self.db_service.create_or_update_topic_score(
+                                    user_id=user_uuid,
+                                    topic_id=topic.id,
+                                    topic_name=topic_name,
+                                    last_researched=new_timestamp,
+                                )
+                            else:
+                                logger.info(
+                                    f"🎯 SKIPPING last_researched update for '{topic_name}' "
+                                    f"due to failed or aborted research: {result}"
+                                )
 
                             # --- Topic expansion wiring ---
                             try:
@@ -564,56 +572,63 @@ class MotivationSystem:
                                         if child_res and child_res.get("quality_score"):
                                             quality_scores.append(child_res.get("quality_score"))
 
-                                        # Update last_researched for child
-                                        # Auto-deactivate only child topics that haven't been researched before
-                                        # If user manually activated a previously auto-deactivated child topic, keep it active
-                                        child_topic_id = child.get("topic_id")
-                                        if child_topic_id:
-                                            child_topic_uuid = uuid.UUID(str(child_topic_id))
-                                            
-                                            from models.topic import ResearchTopic
-                                            
-                                            # Get the child topic
-                                            topic_query = select(ResearchTopic).where(
-                                                ResearchTopic.id == child_topic_uuid
-                                            )
-                                            topic_result = await self.session.execute(topic_query)
-                                            child_topic = topic_result.scalar_one_or_none()
-                                            
-                                            # Get TopicScore
-                                            topic_score_query = select(TopicScore).where(
-                                                and_(
-                                                    TopicScore.topic_id == child_topic_uuid,
-                                                    TopicScore.user_id == user_uuid
+                                        # Update last_researched and lifecycle for child
+                                        # Only treat the child as researched when its own research succeeded
+                                        if child_res and child_res.get("success"):
+                                            # Auto-deactivate only child topics that haven't been researched before
+                                            # If user manually activated a previously auto-deactivated child topic, keep it active
+                                            child_topic_id = child.get("topic_id")
+                                            if child_topic_id:
+                                                child_topic_uuid = uuid.UUID(str(child_topic_id))
+
+                                                from models.topic import ResearchTopic
+
+                                                # Get the child topic
+                                                topic_query = select(ResearchTopic).where(
+                                                    ResearchTopic.id == child_topic_uuid
                                                 )
-                                            )
-                                            score_result = await self.session.execute(topic_score_query)
-                                            child_score = score_result.scalar_one_or_none()
-                                            
-                                            # Always update last_researched timestamp
-                                            if child_score:
-                                                child_score.last_researched = time.time()
-                                                self.session.add(child_score)
-                                            
-                                            # Mark as researched_once and auto-deactivate if this is the first research
-                                            # This prevents auto-deactivating child topics that users manually reactivated
-                                            if child_topic:
-                                                # Check if this is the first research (researched_once is False)
-                                                if not child_topic.researched_once:
-                                                    # Mark as researched
-                                                    child_topic.researched_once = True
-                                                    self.session.add(child_topic)
-                                                    
-                                                    # Auto-deactivate after first research
-                                                    child_topic.is_active_research = False
-                                                    if child_score:
-                                                        child_score.is_active_research = False
-                                                    logger.info(f"🔄 Auto-deactivated child topic '{child_name}' after first expansion research (can be manually reactivated if desired)")
-                                                else:
-                                                    logger.info(f"ℹ️ Child topic '{child_name}' has been researched before; keeping current active state")
-                                            
-                                            # Commit updates
-                                            await self.session.commit()
+                                                topic_result = await self.session.execute(topic_query)
+                                                child_topic = topic_result.scalar_one_or_none()
+
+                                                # Get TopicScore
+                                                topic_score_query = select(TopicScore).where(
+                                                    and_(
+                                                        TopicScore.topic_id == child_topic_uuid,
+                                                        TopicScore.user_id == user_uuid,
+                                                    )
+                                                )
+                                                score_result = await self.session.execute(topic_score_query)
+                                                child_score = score_result.scalar_one_or_none()
+
+                                                # Update last_researched timestamp for child
+                                                if child_score:
+                                                    child_score.last_researched = time.time()
+                                                    self.session.add(child_score)
+
+                                                # Mark as researched_once and auto-deactivate if this is the first research
+                                                # This prevents auto-deactivating child topics that users manually reactivated
+                                                if child_topic:
+                                                    # Check if this is the first research (researched_once is False)
+                                                    if not child_topic.researched_once:
+                                                        # Mark as researched
+                                                        child_topic.researched_once = True
+                                                        self.session.add(child_topic)
+
+                                                        # Auto-deactivate after first research
+                                                        child_topic.is_active_research = False
+                                                        if child_score:
+                                                            child_score.is_active_research = False
+                                                        logger.info(
+                                                            f"🔄 Auto-deactivated child topic '{child_name}' after first expansion research "
+                                                            f"(can be manually reactivated if desired)"
+                                                        )
+                                                    else:
+                                                        logger.info(
+                                                            f"ℹ️ Child topic '{child_name}' has been researched before; keeping current active state"
+                                                        )
+
+                                                # Commit updates
+                                                await self.session.commit()
 
                             except Exception as ex:
                                 logger.debug(f"Expansion wiring failed for {topic_name}: {ex}")

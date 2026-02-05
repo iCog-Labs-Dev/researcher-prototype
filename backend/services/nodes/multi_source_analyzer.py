@@ -123,11 +123,14 @@ async def multi_source_analyzer_node(state: ChatState) -> ChatState:
         logger.debug(f"Analysis reason: {reason}")
 
     except Exception as e:
-        # Error handling with fallback to chat
-        logger.error(f"Error in multi_source_analyzer_node: {str(e)}")
+        logger.warning(f"🔍 Multi-Source Analyzer: Exception, falling back to chat: {e}")
         state["intent"] = "chat"
         state["selected_sources"] = []
-        state["routing_analysis"] = {"intent": "chat", "reason": f"Error: {str(e)}", "sources": []}
-        logger.info("🔍 Multi-Source Analyzer: Exception occurred, defaulting to chat")
+        state["routing_analysis"] = {
+            "intent": "chat",
+            "reason": "Fallback after analyzer exception",
+            "sources": [],
+        }
+        return state
 
     return state
