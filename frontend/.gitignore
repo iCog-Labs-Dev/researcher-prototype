@@ -17,6 +17,7 @@
 # environment variables
 .env
 .env.local
+.env.locale
 .env.development.local
 .env.test.local
 .env.production.local

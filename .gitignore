@@ -45,6 +45,7 @@ backend/*graph.png
 # Misc
 .DS_Store
 .env.local
+.env.locale
 .env.development.local
 .env.test.local
 .env.production.local
